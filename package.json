@@ -1,0 +1,26 @@
+{
+  "name": "zenith-legal-app",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:mobile": "npm run start -w @zenith/mobile",
+    "dev:admin": "npm run dev -w @zenith/admin",
+    "dev": "npm run dev:mobile",
+    "build": "npm run build -ws --if-present",
+    "lint": "npm run lint -ws --if-present",
+    "test": "npm run test -ws --if-present",
+    "typecheck": "npm run typecheck -ws --if-present",
+    "verify": "npm run lint && npm run typecheck && npm run test",
+    "prepare": "npm run build -w @zenith/shared"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "next": "^16.1.6"
+  }
+}

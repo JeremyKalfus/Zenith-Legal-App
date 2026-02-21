@@ -1,0 +1,41 @@
+# Node
+node_modules/
+.npm/
+
+# Expo / React Native
+.expo/
+.expo-shared/
+*.jks
+*.p8
+*.p12
+*.key
+
+# Next.js
+.next/
+out/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# macOS
+.DS_Store
+
+# Supabase
+.supabase/
+
+# Coverage and build artifacts
+coverage/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
