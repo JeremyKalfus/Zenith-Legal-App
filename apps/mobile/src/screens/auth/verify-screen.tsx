@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
 
 export function VerifyScreen() {
@@ -10,36 +11,40 @@ export function VerifyScreen() {
 
   if (!intakeDraft) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Missing intake data.</Text>
-      </View>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <View style={styles.container}>
+          <Text style={styles.title}>Missing intake data.</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Verify your identity</Text>
-      <Text style={styles.body}>
-        Use email magic link or SMS OTP. You only need one method.
-      </Text>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.container}>
+          <Text style={styles.title}>Verify your identity</Text>
+          <Text style={styles.body}>
+            Use email magic link or SMS OTP. You only need one method.
+          </Text>
 
-      <Pressable
-        style={styles.button}
-        disabled={busy}
-        onPress={async () => {
-          setBusy(true);
-          try {
-            await sendEmailMagicLink(intakeDraft.email);
-            setMessage('Magic link sent to your email. Open it on this device.');
-          } catch (error) {
-            setMessage((error as Error).message);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        <Text style={styles.buttonText}>Send email magic link</Text>
-      </Pressable>
+          <Pressable
+            style={styles.button}
+            disabled={busy}
+            onPress={async () => {
+              setBusy(true);
+              try {
+                await sendEmailMagicLink(intakeDraft.email);
+                setMessage('Magic link sent to your email. Open it on this device.');
+              } catch (error) {
+                setMessage((error as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <Text style={styles.buttonText}>Send email magic link</Text>
+          </Pressable>
 
       <Pressable
         style={styles.buttonSecondary}
@@ -84,8 +89,10 @@ export function VerifyScreen() {
         <Text style={styles.buttonText}>Verify SMS code</Text>
       </Pressable>
 
-      {message ? <Text style={styles.message}>{message}</Text> : null}
-    </View>
+          {message ? <Text style={styles.message}>{message}</Text> : null}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -119,6 +126,13 @@ const styles = StyleSheet.create({
   container: {
     gap: 8,
     padding: 16,
+  },
+  safeArea: {
+    backgroundColor: '#F8FAFC',
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 24,
   },
   input: {
     backgroundColor: '#ffffff',

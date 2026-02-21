@@ -6,7 +6,8 @@ import {
 } from '@zenith/shared';
 import { z } from 'zod';
 import { Controller, useForm } from 'react-hook-form';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
 
 type CandidateIntakeFormValues = z.input<typeof candidateIntakeSchema>;
@@ -59,175 +60,179 @@ export function IntakeScreen({ onContinue }: { onContinue: () => void }) {
   const selectedPractice = watch('practiceArea') ?? 'Antitrust';
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.h1}>Welcome to Zenith Legal</Text>
-      <Text style={styles.body}>
-        No password required. Share your intake details to start.
-      </Text>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.container}>
+          <Text style={styles.h1}>Welcome to Zenith Legal</Text>
+          <Text style={styles.body}>
+            No password required. Share your intake details to start.
+          </Text>
 
-      <Controller
-        control={control}
-        name="name"
-        render={({ field }) => (
-          <TextInput
-            placeholder="Full name"
-            style={styles.input}
-            onChangeText={field.onChange}
-            value={field.value}
-          />
-        )}
-      />
-      {errors.name ? <Text style={styles.error}>{errors.name.message}</Text> : null}
-
-      <Controller
-        control={control}
-        name="email"
-        render={({ field }) => (
-          <TextInput
-            autoCapitalize="none"
-            keyboardType="email-address"
-            placeholder="Email"
-            style={styles.input}
-            onChangeText={field.onChange}
-            value={field.value}
-          />
-        )}
-      />
-      {errors.email ? <Text style={styles.error}>{errors.email.message}</Text> : null}
-
-      <Controller
-        control={control}
-        name="mobile"
-        render={({ field }) => (
-          <TextInput
-            keyboardType="phone-pad"
-            placeholder="Mobile number"
-            style={styles.input}
-            onChangeText={field.onChange}
-            value={field.value}
-          />
-        )}
-      />
-      {errors.mobile ? <Text style={styles.error}>{errors.mobile.message}</Text> : null}
-
-      <Text style={styles.label}>Preferred Cities (optional)</Text>
-      <View style={styles.wrap}>
-        {CITY_OPTIONS.map((city) => {
-          const selected = selectedCities.includes(city);
-          return (
-            <MultiSelectOption
-              key={city}
-              label={city}
-              selected={selected}
-              onToggle={() => {
-                const next = selected
-                  ? selectedCities.filter((value) => value !== city)
-                  : [...selectedCities, city];
-                setValue('preferredCities', next, { shouldValidate: true });
-              }}
-            />
-          );
-        })}
-      </View>
-
-      {selectedCities.includes('Other') ? (
-        <Controller
-          control={control}
-          name="otherCityText"
-          render={({ field }) => (
-            <TextInput
-              placeholder="Specify city"
-              style={styles.input}
-              onChangeText={field.onChange}
-              value={field.value}
-            />
-          )}
-        />
-      ) : null}
-      {errors.otherCityText ? (
-        <Text style={styles.error}>{errors.otherCityText.message}</Text>
-      ) : null}
-
-      <Text style={styles.label}>Practice Area</Text>
-      <Controller
-        control={control}
-        name="practiceArea"
-        render={({ field }) => (
-          <View style={styles.wrap}>
-            {PRACTICE_AREAS.map((area) => (
-              <MultiSelectOption
-                key={area}
-                label={area}
-                selected={field.value === area}
-                onToggle={() => field.onChange(area)}
+          <Controller
+            control={control}
+            name="name"
+            render={({ field }) => (
+              <TextInput
+                placeholder="Full name"
+                style={styles.input}
+                onChangeText={field.onChange}
+                value={field.value}
               />
-            ))}
+            )}
+          />
+          {errors.name ? <Text style={styles.error}>{errors.name.message}</Text> : null}
+
+          <Controller
+            control={control}
+            name="email"
+            render={({ field }) => (
+              <TextInput
+                autoCapitalize="none"
+                keyboardType="email-address"
+                placeholder="Email"
+                style={styles.input}
+                onChangeText={field.onChange}
+                value={field.value}
+              />
+            )}
+          />
+          {errors.email ? <Text style={styles.error}>{errors.email.message}</Text> : null}
+
+          <Controller
+            control={control}
+            name="mobile"
+            render={({ field }) => (
+              <TextInput
+                keyboardType="phone-pad"
+                placeholder="Mobile number"
+                style={styles.input}
+                onChangeText={field.onChange}
+                value={field.value}
+              />
+            )}
+          />
+          {errors.mobile ? <Text style={styles.error}>{errors.mobile.message}</Text> : null}
+
+          <Text style={styles.label}>Preferred Cities (optional)</Text>
+          <View style={styles.wrap}>
+            {CITY_OPTIONS.map((city) => {
+              const selected = selectedCities.includes(city);
+              return (
+                <MultiSelectOption
+                  key={city}
+                  label={city}
+                  selected={selected}
+                  onToggle={() => {
+                    const next = selected
+                      ? selectedCities.filter((value) => value !== city)
+                      : [...selectedCities, city];
+                    setValue('preferredCities', next, { shouldValidate: true });
+                  }}
+                />
+              );
+            })}
           </View>
-        )}
-      />
-      {errors.practiceArea ? (
-        <Text style={styles.error}>{errors.practiceArea.message}</Text>
-      ) : null}
 
-      {selectedPractice === 'Other' ? (
-        <Controller
-          control={control}
-          name="otherPracticeText"
-          render={({ field }) => (
-            <TextInput
-              placeholder="Specify practice area"
-              style={styles.input}
-              onChangeText={field.onChange}
-              value={field.value}
+          {selectedCities.includes('Other') ? (
+            <Controller
+              control={control}
+              name="otherCityText"
+              render={({ field }) => (
+                <TextInput
+                  placeholder="Specify city"
+                  style={styles.input}
+                  onChangeText={field.onChange}
+                  value={field.value}
+                />
+              )}
             />
-          )}
-        />
-      ) : null}
-      {errors.otherPracticeText ? (
-        <Text style={styles.error}>{errors.otherPracticeText.message}</Text>
-      ) : null}
+          ) : null}
+          {errors.otherCityText ? (
+            <Text style={styles.error}>{errors.otherCityText.message}</Text>
+          ) : null}
 
-      <Controller
-        control={control}
-        name="acceptedPrivacyPolicy"
-        render={({ field }) => (
-          <Pressable onPress={() => field.onChange(!field.value)}>
-            <Text style={styles.checkbox}>
-              {field.value ? '☑' : '☐'} I accept the Privacy Policy
-            </Text>
+          <Text style={styles.label}>Practice Area</Text>
+          <Controller
+            control={control}
+            name="practiceArea"
+            render={({ field }) => (
+              <View style={styles.wrap}>
+                {PRACTICE_AREAS.map((area) => (
+                  <MultiSelectOption
+                    key={area}
+                    label={area}
+                    selected={field.value === area}
+                    onToggle={() => field.onChange(area)}
+                  />
+                ))}
+              </View>
+            )}
+          />
+          {errors.practiceArea ? (
+            <Text style={styles.error}>{errors.practiceArea.message}</Text>
+          ) : null}
+
+          {selectedPractice === 'Other' ? (
+            <Controller
+              control={control}
+              name="otherPracticeText"
+              render={({ field }) => (
+                <TextInput
+                  placeholder="Specify practice area"
+                  style={styles.input}
+                  onChangeText={field.onChange}
+                  value={field.value}
+                />
+              )}
+            />
+          ) : null}
+          {errors.otherPracticeText ? (
+            <Text style={styles.error}>{errors.otherPracticeText.message}</Text>
+          ) : null}
+
+          <Controller
+            control={control}
+            name="acceptedPrivacyPolicy"
+            render={({ field }) => (
+              <Pressable onPress={() => field.onChange(!field.value)}>
+                <Text style={styles.checkbox}>
+                  {field.value ? '☑' : '☐'} I accept the Privacy Policy
+                </Text>
+              </Pressable>
+            )}
+          />
+          {errors.acceptedPrivacyPolicy ? (
+            <Text style={styles.error}>{errors.acceptedPrivacyPolicy.message}</Text>
+          ) : null}
+
+          <Controller
+            control={control}
+            name="acceptedCommunicationConsent"
+            render={({ field }) => (
+              <Pressable onPress={() => field.onChange(!field.value)}>
+                <Text style={styles.checkbox}>
+                  {field.value ? '☑' : '☐'} I consent to app/email communications
+                </Text>
+              </Pressable>
+            )}
+          />
+          {errors.acceptedCommunicationConsent ? (
+            <Text style={styles.error}>{errors.acceptedCommunicationConsent.message}</Text>
+          ) : null}
+
+          <Pressable
+            style={styles.cta}
+            onPress={handleSubmit((values) => {
+              const parsed = candidateIntakeSchema.parse(values);
+              setIntakeDraft(parsed);
+              onContinue();
+            })}
+          >
+            <Text style={styles.ctaText}>Continue to verification</Text>
           </Pressable>
-        )}
-      />
-      {errors.acceptedPrivacyPolicy ? (
-        <Text style={styles.error}>{errors.acceptedPrivacyPolicy.message}</Text>
-      ) : null}
-
-      <Controller
-        control={control}
-        name="acceptedCommunicationConsent"
-        render={({ field }) => (
-          <Pressable onPress={() => field.onChange(!field.value)}>
-            <Text style={styles.checkbox}>
-              {field.value ? '☑' : '☐'} I consent to app/email communications
-            </Text>
-          </Pressable>
-        )}
-      />
-      {errors.acceptedCommunicationConsent ? (
-        <Text style={styles.error}>{errors.acceptedCommunicationConsent.message}</Text>
-      ) : null}
-
-      <Pressable
-        style={styles.cta}
-        onPress={handleSubmit((values) => {
-          const parsed = candidateIntakeSchema.parse(values);
-          setIntakeDraft(parsed);
-          onContinue();
-        })}
-      >
-        <Text style={styles.ctaText}>Continue to verification</Text>
-      </Pressable>
-    </View>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
@@ -243,6 +248,13 @@ const styles = StyleSheet.create({
   container: {
     gap: 10,
     padding: 16,
+  },
+  safeArea: {
+    backgroundColor: '#F8FAFC',
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 24,
   },
   cta: {
     alignItems: 'center',
