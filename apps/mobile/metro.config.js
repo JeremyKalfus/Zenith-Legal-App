@@ -16,5 +16,15 @@ config.resolver.nodeModulesPaths = [
 ];
 
 config.resolver.disableHierarchicalLookup = true;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === 'mime') {
+    return {
+      type: 'sourceFile',
+      filePath: path.resolve(projectRoot, 'src/shims/mime.ts'),
+    };
+  }
+
+  return context.resolveRequest(context, moduleName, platform);
+};
 
 module.exports = config;
