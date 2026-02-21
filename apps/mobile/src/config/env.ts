@@ -1,7 +1,9 @@
 export const env = {
-  supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? '',
-  supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? '',
-  streamApiKey: process.env.EXPO_PUBLIC_STREAM_API_KEY ?? '',
+  supabaseUrl:
+    process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://placeholder.supabase.co',
+  supabaseAnonKey:
+    process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'public-anon-key',
+  streamApiKey: process.env.EXPO_PUBLIC_STREAM_API_KEY ?? 'placeholder',
   supportPhone: process.env.EXPO_PUBLIC_RECRUITER_PHONE ?? '+12025550123',
   supportEmail: process.env.EXPO_PUBLIC_RECRUITER_EMAIL ?? 'recruiting@zenithlegal.com',
 };
