@@ -1,0 +1,140 @@
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useAuth } from '../../context/auth-context';
+
+export function VerifyScreen() {
+  const { intakeDraft, sendEmailMagicLink, sendSmsOtp, verifySmsOtp } = useAuth();
+  const [otp, setOtp] = useState('');
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  if (!intakeDraft) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Missing intake data.</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>Verify your identity</Text>
+      <Text style={styles.body}>
+        Use email magic link or SMS OTP. You only need one method.
+      </Text>
+
+      <Pressable
+        style={styles.button}
+        disabled={busy}
+        onPress={async () => {
+          setBusy(true);
+          try {
+            await sendEmailMagicLink(intakeDraft.email);
+            setMessage('Magic link sent to your email. Open it on this device.');
+          } catch (error) {
+            setMessage((error as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <Text style={styles.buttonText}>Send email magic link</Text>
+      </Pressable>
+
+      <Pressable
+        style={styles.buttonSecondary}
+        disabled={busy}
+        onPress={async () => {
+          setBusy(true);
+          try {
+            await sendSmsOtp(intakeDraft.mobile);
+            setMessage('SMS code sent. Enter it below.');
+          } catch (error) {
+            setMessage((error as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <Text style={styles.buttonTextSecondary}>Send SMS code</Text>
+      </Pressable>
+
+      <TextInput
+        style={styles.input}
+        value={otp}
+        onChangeText={setOtp}
+        keyboardType="number-pad"
+        placeholder="Enter SMS code"
+      />
+      <Pressable
+        style={styles.button}
+        disabled={busy || otp.length < 4}
+        onPress={async () => {
+          setBusy(true);
+          try {
+            await verifySmsOtp(intakeDraft.mobile, otp);
+            setMessage('Phone verified successfully.');
+          } catch (error) {
+            setMessage((error as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <Text style={styles.buttonText}>Verify SMS code</Text>
+      </Pressable>
+
+      {message ? <Text style={styles.message}>{message}</Text> : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  body: {
+    color: '#475569',
+    marginBottom: 16,
+  },
+  button: {
+    alignItems: 'center',
+    backgroundColor: '#0F766E',
+    borderRadius: 10,
+    marginBottom: 10,
+    padding: 12,
+  },
+  buttonSecondary: {
+    alignItems: 'center',
+    backgroundColor: '#E2E8F0',
+    borderRadius: 10,
+    marginBottom: 10,
+    padding: 12,
+  },
+  buttonText: {
+    color: '#ffffff',
+    fontWeight: '600',
+  },
+  buttonTextSecondary: {
+    color: '#0F172A',
+    fontWeight: '600',
+  },
+  container: {
+    gap: 8,
+    padding: 16,
+  },
+  input: {
+    backgroundColor: '#ffffff',
+    borderColor: '#CBD5E1',
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 10,
+    padding: 10,
+  },
+  message: {
+    color: '#0F172A',
+    marginTop: 8,
+  },
+  title: {
+    color: '#0F172A',
+    fontSize: 22,
+    fontWeight: '700',
+  },
+});
