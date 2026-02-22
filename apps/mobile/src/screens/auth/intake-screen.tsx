@@ -1,18 +1,19 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
   CITY_OPTIONS,
-  candidateIntakeSchema,
+  candidateRegistrationSchema,
   normalizePhoneNumber,
   sanitizePhoneInput,
   PRACTICE_AREAS,
 } from '@zenith/shared';
 import { z } from 'zod';
+import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
 
-type CandidateIntakeFormValues = z.input<typeof candidateIntakeSchema>;
+type CandidateRegistrationFormValues = z.input<typeof candidateRegistrationSchema>;
 
 function MultiSelectOption({
   label,
@@ -36,21 +37,21 @@ function MultiSelectOption({
 }
 
 export function IntakeScreen({
-  onContinue,
   onSignIn,
 }: {
-  onContinue: () => void;
   onSignIn: () => void;
 }) {
-  const { setIntakeDraft } = useAuth();
+  const { authConfigError, authNotice, clearAuthNotice, registerCandidateWithPassword } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
   const {
     control,
     handleSubmit,
     formState: { errors },
     watch,
     setValue,
-  } = useForm<CandidateIntakeFormValues>({
-    resolver: zodResolver(candidateIntakeSchema),
+  } = useForm<CandidateRegistrationFormValues>({
+    resolver: zodResolver(candidateRegistrationSchema),
     defaultValues: {
       name: '',
       email: '',
@@ -61,6 +62,8 @@ export function IntakeScreen({
       otherPracticeText: '',
       acceptedPrivacyPolicy: false,
       acceptedCommunicationConsent: false,
+      password: '',
+      confirmPassword: '',
     },
   });
 
@@ -73,8 +76,10 @@ export function IntakeScreen({
         <View style={styles.container}>
           <Text style={styles.h1}>Welcome to Zenith Legal</Text>
           <Text style={styles.body}>
-            No password required. Share your intake details to start.
+            Create your account and share your intake details to start.
           </Text>
+          {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
+          {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
 
           <Controller
             control={control}
@@ -238,16 +243,60 @@ export function IntakeScreen({
             <Text style={styles.error}>{errors.acceptedCommunicationConsent.message}</Text>
           ) : null}
 
+          <Controller
+            control={control}
+            name="password"
+            render={({ field }) => (
+              <TextInput
+                secureTextEntry
+                placeholder="Password"
+                style={styles.input}
+                onChangeText={field.onChange}
+                value={field.value}
+              />
+            )}
+          />
+          {errors.password ? <Text style={styles.error}>{errors.password.message}</Text> : null}
+
+          <Controller
+            control={control}
+            name="confirmPassword"
+            render={({ field }) => (
+              <TextInput
+                secureTextEntry
+                placeholder="Confirm password"
+                style={styles.input}
+                onChangeText={field.onChange}
+                value={field.value}
+              />
+            )}
+          />
+          {errors.confirmPassword ? (
+            <Text style={styles.error}>{errors.confirmPassword.message}</Text>
+          ) : null}
+
           <Pressable
-            style={styles.cta}
-            onPress={handleSubmit((values) => {
-              const parsed = candidateIntakeSchema.parse(values);
-              setIntakeDraft(parsed);
-              onContinue();
+            style={[styles.cta, busy ? styles.ctaDisabled : null]}
+            disabled={busy}
+            accessibilityState={{ disabled: busy }}
+            onPress={handleSubmit(async (values) => {
+              setBusy(true);
+              setMessage('');
+              clearAuthNotice();
+              try {
+                const parsed = candidateRegistrationSchema.parse(values);
+                await registerCandidateWithPassword(parsed);
+                setMessage('Account created. Signing you in...');
+              } catch (error) {
+                setMessage((error as Error).message);
+              } finally {
+                setBusy(false);
+              }
             })}
           >
-            <Text style={styles.ctaText}>Continue to verification</Text>
+            <Text style={styles.ctaText}>{busy ? 'Creating account...' : 'Create account'}</Text>
           </Pressable>
+          {message ? <Text style={styles.helper}>{message}</Text> : null}
           <Pressable style={styles.linkButton} onPress={onSignIn}>
             <Text style={styles.linkText}>Already have an account? Sign in</Text>
           </Pressable>
@@ -287,6 +336,9 @@ const styles = StyleSheet.create({
   ctaText: {
     color: '#ffffff',
     fontWeight: '600',
+  },
+  ctaDisabled: {
+    opacity: 0.65,
   },
   error: {
     color: '#B91C1C',

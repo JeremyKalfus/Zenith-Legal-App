@@ -94,6 +94,23 @@ export const candidateIntakeSchema = z
 
 export type CandidateIntake = z.infer<typeof candidateIntakeSchema>;
 
+export const candidateRegistrationSchema = candidateIntakeSchema
+  .extend({
+    password: trimmedString.min(6, 'Password must be at least 6 characters').max(256),
+    confirmPassword: trimmedString.min(1, 'Please confirm your password').max(256),
+  })
+  .superRefine((data, ctx) => {
+    if (data.password !== data.confirmPassword) {
+      ctx.addIssue({
+        path: ['confirmPassword'],
+        code: z.ZodIssueCode.custom,
+        message: 'Passwords do not match',
+      });
+    }
+  });
+
+export type CandidateRegistration = z.infer<typeof candidateRegistrationSchema>;
+
 export const appointmentModalitySchema = z.enum(['virtual', 'in_person']);
 export type AppointmentModality = z.infer<typeof appointmentModalitySchema>;
 

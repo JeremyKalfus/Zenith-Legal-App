@@ -5,25 +5,25 @@ import { useEffect, useMemo, useState } from 'react';
 import { CandidateTabs } from './candidate-tabs';
 import { StaffTabs } from './staff-tabs';
 import { IntakeScreen } from '../screens/auth/intake-screen';
-import { VerifyScreen } from '../screens/auth/verify-screen';
 import { SignInScreen } from '../screens/auth/sign-in-screen';
 import { useAuth } from '../context/auth-context';
 
 const Stack = createNativeStackNavigator();
 
 export function RootNavigator() {
-  const { isLoading, profile, session, persistDraftAfterVerification } = useAuth();
-  const [authStep, setAuthStep] = useState<'intake' | 'verify' | 'signin'>('intake');
+  const { isLoading, needsPasswordReset, profile, session } = useAuth();
+  const [authStep, setAuthStep] = useState<'intake' | 'signin'>('intake');
 
   useEffect(() => {
-    if (session?.user.id && !profile?.onboarding_complete) {
-      persistDraftAfterVerification().catch(() => {
-        // ignored on purpose; user can retry from profile refresh
-      });
+    if (needsPasswordReset) {
+      setAuthStep('signin');
     }
-  }, [persistDraftAfterVerification, profile?.onboarding_complete, session?.user.id]);
+  }, [needsPasswordReset]);
 
-  const isAuthenticated = useMemo(() => !!session?.user, [session?.user]);
+  const isAuthenticated = useMemo(
+    () => !!session?.user && !needsPasswordReset,
+    [needsPasswordReset, session?.user],
+  );
 
   if (isLoading) {
     return (
@@ -41,17 +41,14 @@ export function RootNavigator() {
             <Stack.Screen name="Intake">
               {() => (
                 <IntakeScreen
-                  onContinue={() => setAuthStep('verify')}
                   onSignIn={() => setAuthStep('signin')}
                 />
               )}
             </Stack.Screen>
-          ) : authStep === 'signin' ? (
+          ) : (
             <Stack.Screen name="SignIn">
               {() => <SignInScreen onBack={() => setAuthStep('intake')} />}
             </Stack.Screen>
-          ) : (
-            <Stack.Screen name="Verify" component={VerifyScreen} />
           )}
         </Stack.Navigator>
       ) : profile?.role === 'staff' ? (

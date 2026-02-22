@@ -1,6 +1,7 @@
 import {
   normalizePhoneNumber,
   PHONE_VALIDATION_MESSAGES,
+  type CandidateRegistration,
   type CandidateIntake,
 } from '@zenith/shared';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -26,6 +27,21 @@ type AuthMethods = {
 
 type OtpOptions = {
   shouldCreateUser?: boolean;
+};
+
+type PasswordAuthSessionPayload = {
+  access_token: string;
+  refresh_token: string;
+  expires_in?: number;
+  expires_at?: number;
+  token_type?: string;
+  user?: unknown;
+};
+
+type PublicFunctionError = {
+  ok?: false;
+  code?: string;
+  error?: string;
 };
 
 function extractErrorMessage(error: unknown): string {
@@ -62,6 +78,9 @@ function mapAuthErrorToUserMessage(error: unknown): string {
     message.includes('grant') ||
     message.includes('otp')
   ) {
+    if (message.includes('recovery')) {
+      return 'This password reset link is invalid or expired. Request a new reset link.';
+    }
     return 'This verification link is invalid or expired. Request a new magic link.';
   }
 
@@ -87,6 +106,92 @@ function mapSmsAuthErrorToUserMessage(error: unknown): string {
   return mapAuthErrorToUserMessage(error);
 }
 
+function mapPasswordAuthErrorToUserMessage(error: unknown): string {
+  const message = extractErrorMessage(error).toLowerCase();
+
+  if (message.includes('network request failed') || message.includes('failed to fetch')) {
+    return 'Cannot reach Supabase right now. Check your internet/VPN and retry.';
+  }
+  if (message.includes('invalid_identifier')) {
+    return PHONE_VALIDATION_MESSAGES.invalidMobileForAuth;
+  }
+  if (message.includes('invalid email/phone or password') || message.includes('invalid login credentials')) {
+    return 'Invalid email/phone or password.';
+  }
+  if (message.includes('password reset link sent')) {
+    return 'Password reset link sent to your email.';
+  }
+  if (message.includes('reset link is invalid') || message.includes('recovery')) {
+    return 'This password reset link is invalid or expired. Request a new reset link.';
+  }
+
+  return extractErrorMessage(error);
+}
+
+function mapRegistrationErrorToUserMessage(error: unknown): string {
+  const message = extractErrorMessage(error).toLowerCase();
+
+  if (message.includes('duplicate_email')) {
+    return 'An account with this email already exists. Sign in or reset your password.';
+  }
+  if (message.includes('duplicate_mobile')) {
+    return 'An account with this mobile number already exists. Sign in or reset your password.';
+  }
+
+  return mapPasswordAuthErrorToUserMessage(error);
+}
+
+function extractCallbackType(url: string | null | undefined): string | null {
+  if (!url) {
+    return null;
+  }
+
+  const match = url.match(/[?#&]type=([^&#]+)/i);
+  return match ? decodeURIComponent(match[1] ?? '') : null;
+}
+
+async function callPublicFunctionJson<TResponse>(
+  functionName: string,
+  payload: Record<string, unknown>,
+): Promise<TResponse> {
+  const response = await fetch(`${env.supabaseUrl}/functions/v1/${functionName}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: env.supabaseAnonKey,
+      Authorization: `Bearer ${env.supabaseAnonKey}`,
+      'x-client-info': 'zenith-legal-mobile',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const json = (await response.json().catch(() => ({}))) as TResponse & PublicFunctionError;
+  if (!response.ok) {
+    const errorCode = typeof json.code === 'string' ? json.code : 'request_failed';
+    const errorMessage = typeof json.error === 'string' ? json.error : `Request failed (${response.status})`;
+    throw new Error(`${errorCode}: ${errorMessage}`);
+  }
+
+  return json;
+}
+
+async function setSupabaseSessionFromPasswordAuth(
+  sessionPayload: PasswordAuthSessionPayload | null | undefined,
+): Promise<void> {
+  if (!sessionPayload?.access_token || !sessionPayload?.refresh_token) {
+    throw new Error('Invalid session returned from auth service');
+  }
+
+  const { error } = await supabase.auth.setSession({
+    access_token: sessionPayload.access_token,
+    refresh_token: sessionPayload.refresh_token,
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
 function normalizePhoneForAuthOrThrow(input: string): string {
   const normalized = normalizePhoneNumber(input);
   if (!normalized.ok) {
@@ -99,6 +204,7 @@ function normalizePhoneForAuthOrThrow(input: string): string {
 type AuthContextValue = {
   session: Session | null;
   profile: CandidateProfile | null;
+  needsPasswordReset: boolean;
   intakeDraft: IntakeDraft | null;
   authMethods: AuthMethods;
   authMethodsError: string | null;
@@ -107,6 +213,11 @@ type AuthContextValue = {
   authNotice: string | null;
   isLoading: boolean;
   setIntakeDraft: (draft: CandidateIntake) => void;
+  registerCandidateWithPassword: (input: CandidateRegistration) => Promise<void>;
+  signInWithEmailPassword: (email: string, password: string) => Promise<void>;
+  signInWithPhonePassword: (phone: string, password: string) => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
   sendEmailMagicLink: (email: string, options?: OtpOptions) => Promise<void>;
   sendSmsOtp: (phone: string, options?: OtpOptions) => Promise<void>;
   verifySmsOtp: (phone: string, token: string) => Promise<void>;
@@ -136,6 +247,7 @@ async function fetchProfile(userId: string): Promise<CandidateProfile | null> {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<CandidateProfile | null>(null);
+  const [needsPasswordReset, setNeedsPasswordReset] = useState(false);
   const [intakeDraft, setIntakeDraftState] = useState<IntakeDraft | null>(null);
   const [authMethods, setAuthMethods] = useState<AuthMethods>({
     emailOtpEnabled: true,
@@ -241,6 +353,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         setSession(data.session ?? null);
+        setNeedsPasswordReset(false);
         if (data.session?.user.id) {
           const nextProfile = await fetchProfile(data.session.user.id);
           setProfile(nextProfile);
@@ -271,8 +384,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       lastHandledUrlRef.current = url;
 
       try {
+        const callbackType = extractCallbackType(url);
         const handled = await completeAuthSessionFromUrl(url);
         if (handled && mounted) {
+          if (callbackType === 'recovery') {
+            setNeedsPasswordReset(true);
+          }
           setAuthNotice(null);
         }
       } catch (error) {
@@ -294,8 +411,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
       setSession(nextSession);
+      if (event === 'PASSWORD_RECOVERY') {
+        setNeedsPasswordReset(true);
+      } else if (event === 'SIGNED_OUT') {
+        setNeedsPasswordReset(false);
+      } else if (event === 'USER_UPDATED') {
+        setNeedsPasswordReset(false);
+      }
 
       if (nextSession?.user.id) {
         const nextProfile = await fetchProfile(nextSession.user.id);
@@ -320,6 +444,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       session,
       profile,
+      needsPasswordReset,
       intakeDraft,
       authMethods,
       authMethodsError,
@@ -328,6 +453,89 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authNotice,
       isLoading,
       setIntakeDraft: (draft) => setIntakeDraftState(draft),
+      registerCandidateWithPassword: async (input: CandidateRegistration) => {
+        if (authConfigError) {
+          throw new Error(authConfigError);
+        }
+        try {
+          const normalizedPhone = normalizePhoneForAuthOrThrow(input.mobile);
+          const result = await callPublicFunctionJson<{
+            ok: true;
+            session: PasswordAuthSessionPayload;
+            user_id: string;
+          }>('register_candidate_password', {
+            ...input,
+            email: input.email.trim().toLowerCase(),
+            mobile: normalizedPhone,
+          });
+
+          await setSupabaseSessionFromPasswordAuth(result.session);
+        } catch (error) {
+          throw new Error(mapRegistrationErrorToUserMessage(error));
+        }
+      },
+      signInWithEmailPassword: async (email: string, password: string) => {
+        if (authConfigError) {
+          throw new Error(authConfigError);
+        }
+        try {
+          const result = await callPublicFunctionJson<{
+            ok: true;
+            session: PasswordAuthSessionPayload;
+          }>('mobile_sign_in_with_identifier_password', {
+            identifier: email.trim().toLowerCase(),
+            password,
+          });
+          await setSupabaseSessionFromPasswordAuth(result.session);
+        } catch (error) {
+          throw new Error(mapPasswordAuthErrorToUserMessage(error));
+        }
+      },
+      signInWithPhonePassword: async (phone: string, password: string) => {
+        if (authConfigError) {
+          throw new Error(authConfigError);
+        }
+        try {
+          const normalizedPhone = normalizePhoneForAuthOrThrow(phone);
+          const result = await callPublicFunctionJson<{
+            ok: true;
+            session: PasswordAuthSessionPayload;
+          }>('mobile_sign_in_with_identifier_password', {
+            identifier: normalizedPhone,
+            password,
+          });
+          await setSupabaseSessionFromPasswordAuth(result.session);
+        } catch (error) {
+          throw new Error(mapPasswordAuthErrorToUserMessage(error));
+        }
+      },
+      requestPasswordReset: async (email: string) => {
+        if (authConfigError) {
+          throw new Error(authConfigError);
+        }
+        const trimmedEmail = email.trim().toLowerCase();
+        if (!trimmedEmail) {
+          throw new Error('Enter your email to reset your password.');
+        }
+
+        const { error } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+          redirectTo: authRedirectUrl,
+        });
+        if (error) {
+          throw new Error(mapPasswordAuthErrorToUserMessage(error));
+        }
+      },
+      updatePassword: async (newPassword: string) => {
+        if (authConfigError) {
+          throw new Error(authConfigError);
+        }
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) {
+          throw new Error(mapPasswordAuthErrorToUserMessage(error));
+        }
+        setNeedsPasswordReset(false);
+        setAuthNotice(null);
+      },
       sendEmailMagicLink: async (email: string, options?: OtpOptions) => {
         if (authConfigError) {
           throw new Error(authConfigError);
@@ -397,6 +605,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       },
       signOut: async () => {
+        setNeedsPasswordReset(false);
         await supabase.auth.signOut();
       },
       refreshProfile: async () => {
@@ -418,6 +627,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       intakeDraft,
       isLoading,
       isRefreshingAuthMethods,
+      needsPasswordReset,
       profile,
       refreshAuthMethods,
       session,

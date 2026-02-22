@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { candidateIntakeSchema, FIRM_STATUSES } from './domain';
+import { candidateIntakeSchema, candidateRegistrationSchema, FIRM_STATUSES } from './domain';
 
 describe('candidate intake schema', () => {
   it('requires text when city Other is selected', () => {
@@ -58,5 +58,46 @@ describe('candidate intake schema', () => {
       'Rejected by firm',
       'Offer received!',
     ]);
+  });
+});
+
+describe('candidate registration schema', () => {
+  it('requires password and confirm password', () => {
+    const result = candidateRegistrationSchema.safeParse({
+      name: 'Jane Doe',
+      email: 'jane@example.com',
+      mobile: '+12025550109',
+      preferredCities: [],
+      practiceArea: 'Antitrust',
+      acceptedPrivacyPolicy: true,
+      acceptedCommunicationConsent: true,
+      password: '',
+      confirmPassword: '',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.password).toBeTruthy();
+      expect(result.error.flatten().fieldErrors.confirmPassword).toBeTruthy();
+    }
+  });
+
+  it('rejects password mismatch', () => {
+    const result = candidateRegistrationSchema.safeParse({
+      name: 'Jane Doe',
+      email: 'jane@example.com',
+      mobile: '202-555-0109',
+      preferredCities: [],
+      practiceArea: 'Antitrust',
+      acceptedPrivacyPolicy: true,
+      acceptedCommunicationConsent: true,
+      password: 'password1',
+      confirmPassword: 'password2',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.confirmPassword?.[0]).toContain('Passwords do not match');
+    }
   });
 });

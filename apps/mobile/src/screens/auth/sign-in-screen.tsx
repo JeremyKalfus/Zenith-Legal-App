@@ -1,56 +1,27 @@
 import { normalizePhoneNumber, PHONE_VALIDATION_MESSAGES, sanitizePhoneInput } from '@zenith/shared';
-import { useEffect, useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
-import { useSendCooldown } from '../../hooks/use-send-cooldown';
 
 export function SignInScreen({ onBack }: { onBack: () => void }) {
   const {
     authConfigError,
-    authMethods,
-    authMethodsError,
     authNotice,
     clearAuthNotice,
-    isRefreshingAuthMethods,
-    refreshAuthMethods,
-    sendEmailMagicLink,
-    sendSmsOtp,
-    verifySmsOtp,
+    needsPasswordReset,
+    requestPasswordReset,
+    signInWithEmailPassword,
+    signInWithPhonePassword,
+    updatePassword,
   } = useAuth();
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
+  const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
-  const emailCooldown = useSendCooldown(60);
-  const smsExplicitlyDisabled = authMethods.smsOtpStatus === 'disabled';
-  const smsAvailabilityUnknown = authMethods.smsOtpStatus === 'unknown';
-  const smsSendDisabled = busy || !phone || smsExplicitlyDisabled;
-  const smsVerifyDisabled = busy || otp.length < 4 || !phone || smsExplicitlyDisabled;
-  const smsButtonLabel = smsExplicitlyDisabled ? 'SMS sign-in unavailable' : 'Send SMS code';
-
-  const authMethodsStatusMessage = useMemo(() => {
-    if (authMethodsError) {
-      return authMethodsError;
-    }
-    if (isRefreshingAuthMethods && authMethods.lastCheckedAt === null) {
-      return 'Checking email/SMS sign-in availability...';
-    }
-    if (smsAvailabilityUnknown) {
-      return 'SMS availability could not be confirmed yet. You can still try sending an SMS code.';
-    }
-    return null;
-  }, [
-    authMethods.lastCheckedAt,
-    authMethodsError,
-    isRefreshingAuthMethods,
-    smsAvailabilityUnknown,
-  ]);
-
-  useEffect(() => {
-    void refreshAuthMethods();
-  }, [refreshAuthMethods]);
 
   function normalizePhoneInputOrThrow(input: string): string {
     const normalized = normalizePhoneNumber(input);
@@ -59,6 +30,65 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
     }
 
     return normalized.e164;
+  }
+
+  if (needsPasswordReset) {
+    return (
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.container}>
+            <Text style={styles.title}>Set a new password</Text>
+            <Text style={styles.body}>
+              Your reset link is valid. Enter a new password to continue.
+            </Text>
+
+            {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
+            {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
+
+            <TextInput
+              secureTextEntry
+              placeholder="New password"
+              style={styles.input}
+              value={newPassword}
+              onChangeText={setNewPassword}
+            />
+            <TextInput
+              secureTextEntry
+              placeholder="Confirm new password"
+              style={styles.input}
+              value={confirmNewPassword}
+              onChangeText={setConfirmNewPassword}
+            />
+
+            <Pressable
+              style={[styles.button, (busy || !newPassword || !confirmNewPassword) && styles.buttonDisabled]}
+              disabled={busy || !newPassword || !confirmNewPassword}
+              accessibilityState={{ disabled: busy || !newPassword || !confirmNewPassword }}
+              onPress={async () => {
+                setBusy(true);
+                setMessage('');
+                clearAuthNotice();
+                try {
+                  if (newPassword !== confirmNewPassword) {
+                    throw new Error('Passwords do not match');
+                  }
+                  await updatePassword(newPassword);
+                  setMessage('Password updated successfully.');
+                } catch (error) {
+                  setMessage((error as Error).message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              <Text style={styles.buttonText}>{busy ? 'Updating password...' : 'Update password'}</Text>
+            </Pressable>
+
+            {message ? <Text style={styles.message}>{message}</Text> : null}
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -70,21 +100,6 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
 
           {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
           {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
-          {authMethodsStatusMessage ? (
-            <Text style={authMethodsError ? styles.error : styles.helper}>{authMethodsStatusMessage}</Text>
-          ) : null}
-          {authMethodsError ? (
-            <Pressable
-              style={styles.retryLinkButton}
-              onPress={() => void refreshAuthMethods()}
-              disabled={isRefreshingAuthMethods}
-              accessibilityState={{ disabled: isRefreshingAuthMethods }}
-            >
-              <Text style={styles.retryLinkText}>
-                {isRefreshingAuthMethods ? 'Retrying availability check...' : 'Retry availability check'}
-              </Text>
-            </Pressable>
-          ) : null}
 
           <TextInput
             autoCapitalize="none"
@@ -94,38 +109,6 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
             value={email}
             onChangeText={setEmail}
           />
-          <Pressable
-            style={[
-              styles.button,
-              (busy || !email || !authMethods.emailOtpEnabled || emailCooldown.isCoolingDown) &&
-                styles.buttonDisabled,
-            ]}
-            disabled={busy || !email || !authMethods.emailOtpEnabled || emailCooldown.isCoolingDown}
-            accessibilityState={{
-              disabled: busy || !email || !authMethods.emailOtpEnabled || emailCooldown.isCoolingDown,
-            }}
-            onPress={async () => {
-              setBusy(true);
-              clearAuthNotice();
-              try {
-                await sendEmailMagicLink(email.trim(), { shouldCreateUser: false });
-                emailCooldown.startCooldown();
-                setMessage('Magic link sent. Open it on this device to sign in.');
-              } catch (error) {
-                setMessage((error as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <Text style={styles.buttonText}>
-              {!authMethods.emailOtpEnabled
-                ? 'Email sign-in unavailable'
-                : emailCooldown.isCoolingDown
-                  ? `Resend in ${emailCooldown.remainingSeconds}s`
-                  : 'Send email magic link'}
-            </Text>
-          </Pressable>
 
           <TextInput
             keyboardType="phone-pad"
@@ -141,49 +124,26 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
             }}
           />
           <Text style={styles.helper}>US numbers can be entered without +1.</Text>
-          <Pressable
-            style={[styles.buttonSecondary, smsSendDisabled && styles.buttonSecondaryDisabled]}
-            disabled={smsSendDisabled}
-            accessibilityState={{ disabled: smsSendDisabled }}
-            onPress={async () => {
-              setBusy(true);
-              clearAuthNotice();
-              try {
-                const normalizedPhone = normalizePhoneInputOrThrow(phone);
-                setPhone(normalizedPhone);
-                await sendSmsOtp(normalizedPhone, { shouldCreateUser: false });
-                setMessage('SMS code sent. Enter it below.');
-              } catch (error) {
-                setMessage((error as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <Text style={styles.buttonTextSecondary}>
-              {smsButtonLabel}
-            </Text>
-          </Pressable>
 
           <TextInput
+            secureTextEntry
+            placeholder="Password"
             style={styles.input}
-            value={otp}
-            onChangeText={setOtp}
-            keyboardType="number-pad"
-            placeholder="Enter SMS code"
+            value={password}
+            onChangeText={setPassword}
           />
+
           <Pressable
-            style={[styles.button, smsVerifyDisabled && styles.buttonDisabled]}
-            disabled={smsVerifyDisabled}
-            accessibilityState={{ disabled: smsVerifyDisabled }}
+            style={[styles.button, (busy || !email.trim() || !password) && styles.buttonDisabled]}
+            disabled={busy || !email.trim() || !password}
+            accessibilityState={{ disabled: busy || !email.trim() || !password }}
             onPress={async () => {
               setBusy(true);
+              setMessage('');
               clearAuthNotice();
               try {
-                const normalizedPhone = normalizePhoneInputOrThrow(phone);
-                setPhone(normalizedPhone);
-                await verifySmsOtp(normalizedPhone, otp.trim());
-                setMessage('Phone verified. You are now signed in.');
+                await signInWithEmailPassword(email, password);
+                setMessage('Signing in...');
               } catch (error) {
                 setMessage((error as Error).message);
               } finally {
@@ -191,7 +151,51 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
               }
             }}
           >
-            <Text style={styles.buttonText}>Verify SMS code</Text>
+            <Text style={styles.buttonText}>Sign in with email</Text>
+          </Pressable>
+
+          <Pressable
+            style={[styles.buttonSecondary, (busy || !phone.trim() || !password) && styles.buttonSecondaryDisabled]}
+            disabled={busy || !phone.trim() || !password}
+            accessibilityState={{ disabled: busy || !phone.trim() || !password }}
+            onPress={async () => {
+              setBusy(true);
+              setMessage('');
+              clearAuthNotice();
+              try {
+                const normalizedPhone = normalizePhoneInputOrThrow(phone);
+                setPhone(normalizedPhone);
+                await signInWithPhonePassword(normalizedPhone, password);
+                setMessage('Signing in...');
+              } catch (error) {
+                setMessage((error as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <Text style={styles.buttonTextSecondary}>Sign in with mobile</Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.linkButton}
+            disabled={busy || !email.trim()}
+            accessibilityState={{ disabled: busy || !email.trim() }}
+            onPress={async () => {
+              setBusy(true);
+              setMessage('');
+              clearAuthNotice();
+              try {
+                await requestPasswordReset(email);
+                setMessage('Password reset link sent to your email. Open it on this device.');
+              } catch (error) {
+                setMessage((error as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <Text style={styles.linkText}>Forgot password? Send reset email</Text>
           </Pressable>
 
           {message ? <Text style={styles.message}>{message}</Text> : null}
@@ -248,6 +252,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: -2,
   },
+  helper: {
+    color: '#475569',
+    fontSize: 12,
+    marginTop: -2,
+  },
   input: {
     backgroundColor: '#ffffff',
     borderColor: '#CBD5E1',
@@ -256,11 +265,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     padding: 10,
   },
-  helper: {
-    color: '#475569',
-    fontSize: 12,
-    marginTop: -2,
-  },
   linkButton: {
     marginTop: 8,
   },
@@ -268,15 +272,6 @@ const styles = StyleSheet.create({
     color: '#0F766E',
     fontWeight: '600',
     textAlign: 'center',
-  },
-  retryLinkButton: {
-    marginTop: -2,
-    marginBottom: 6,
-  },
-  retryLinkText: {
-    color: '#0F766E',
-    fontSize: 12,
-    fontWeight: '600',
   },
   message: {
     color: '#0F172A',
