@@ -1,3 +1,4 @@
+import { normalizePhoneNumber, PHONE_VALIDATION_MESSAGES, sanitizePhoneInput } from '@zenith/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -50,6 +51,15 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
   useEffect(() => {
     void refreshAuthMethods();
   }, [refreshAuthMethods]);
+
+  function normalizePhoneInputOrThrow(input: string): string {
+    const normalized = normalizePhoneNumber(input);
+    if (!normalized.ok) {
+      throw new Error(PHONE_VALIDATION_MESSAGES.invalidMobileForAuth);
+    }
+
+    return normalized.e164;
+  }
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -122,8 +132,15 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
             placeholder="Mobile number"
             style={styles.input}
             value={phone}
-            onChangeText={setPhone}
+            onChangeText={(value) => setPhone(sanitizePhoneInput(value))}
+            onBlur={() => {
+              const normalized = normalizePhoneNumber(phone);
+              if (normalized.ok) {
+                setPhone(normalized.e164);
+              }
+            }}
           />
+          <Text style={styles.helper}>US numbers can be entered without +1.</Text>
           <Pressable
             style={[styles.buttonSecondary, smsSendDisabled && styles.buttonSecondaryDisabled]}
             disabled={smsSendDisabled}
@@ -132,7 +149,9 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
               setBusy(true);
               clearAuthNotice();
               try {
-                await sendSmsOtp(phone.trim(), { shouldCreateUser: false });
+                const normalizedPhone = normalizePhoneInputOrThrow(phone);
+                setPhone(normalizedPhone);
+                await sendSmsOtp(normalizedPhone, { shouldCreateUser: false });
                 setMessage('SMS code sent. Enter it below.');
               } catch (error) {
                 setMessage((error as Error).message);
@@ -161,7 +180,9 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
               setBusy(true);
               clearAuthNotice();
               try {
-                await verifySmsOtp(phone.trim(), otp.trim());
+                const normalizedPhone = normalizePhoneInputOrThrow(phone);
+                setPhone(normalizedPhone);
+                await verifySmsOtp(normalizedPhone, otp.trim());
                 setMessage('Phone verified. You are now signed in.');
               } catch (error) {
                 setMessage((error as Error).message);

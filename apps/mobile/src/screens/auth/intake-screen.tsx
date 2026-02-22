@@ -2,6 +2,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import {
   CITY_OPTIONS,
   candidateIntakeSchema,
+  normalizePhoneNumber,
+  sanitizePhoneInput,
   PRACTICE_AREAS,
 } from '@zenith/shared';
 import { z } from 'zod';
@@ -112,12 +114,22 @@ export function IntakeScreen({
                 keyboardType="phone-pad"
                 placeholder="Mobile number"
                 style={styles.input}
-                onChangeText={field.onChange}
+                onChangeText={(value) => field.onChange(sanitizePhoneInput(value))}
+                onBlur={() => {
+                  const normalized = normalizePhoneNumber(field.value ?? '');
+                  if (normalized.ok) {
+                    setValue('mobile', normalized.e164, { shouldValidate: true });
+                  }
+                  field.onBlur();
+                }}
                 value={field.value}
               />
             )}
           />
           {errors.mobile ? <Text style={styles.error}>{errors.mobile.message}</Text> : null}
+          {!errors.mobile ? (
+            <Text style={styles.helper}>US numbers can be entered without +1.</Text>
+          ) : null}
 
           <Text style={styles.label}>Preferred Cities (optional)</Text>
           <View style={styles.wrap}>
@@ -285,6 +297,11 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     fontSize: 24,
     fontWeight: '700',
+  },
+  helper: {
+    color: '#475569',
+    fontSize: 12,
+    marginTop: -6,
   },
   input: {
     backgroundColor: '#ffffff',

@@ -1,4 +1,8 @@
-import type { CandidateIntake } from '@zenith/shared';
+import {
+  normalizePhoneNumber,
+  PHONE_VALIDATION_MESSAGES,
+  type CandidateIntake,
+} from '@zenith/shared';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as Linking from 'expo-linking';
 import type { Session } from '@supabase/supabase-js';
@@ -62,6 +66,34 @@ function mapAuthErrorToUserMessage(error: unknown): string {
   }
 
   return extractErrorMessage(error);
+}
+
+function mapSmsAuthErrorToUserMessage(error: unknown): string {
+  const message = extractErrorMessage(error).toLowerCase();
+
+  if (message.includes('network request failed') || message.includes('failed to fetch')) {
+    return 'Cannot reach Supabase right now. Check your internet/VPN and retry.';
+  }
+  if (
+    message.includes('expired') ||
+    message.includes('invalid') ||
+    message.includes('grant') ||
+    message.includes('otp') ||
+    message.includes('token')
+  ) {
+    return 'That SMS code is invalid or expired. Request a new code and try again.';
+  }
+
+  return mapAuthErrorToUserMessage(error);
+}
+
+function normalizePhoneForAuthOrThrow(input: string): string {
+  const normalized = normalizePhoneNumber(input);
+  if (!normalized.ok) {
+    throw new Error(PHONE_VALIDATION_MESSAGES.invalidMobileForAuth);
+  }
+
+  return normalized.e164;
 }
 
 type AuthContextValue = {
@@ -316,29 +348,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (authConfigError) {
           throw new Error(authConfigError);
         }
+        const normalizedPhone = normalizePhoneForAuthOrThrow(phone);
 
         const { error } = await supabase.auth.signInWithOtp({
-          phone,
+          phone: normalizedPhone,
           options: {
             shouldCreateUser: options?.shouldCreateUser ?? true,
           },
         });
         if (error) {
-          throw new Error(mapAuthErrorToUserMessage(error));
+          throw new Error(mapSmsAuthErrorToUserMessage(error));
         }
       },
       verifySmsOtp: async (phone: string, token: string) => {
         if (authConfigError) {
           throw new Error(authConfigError);
         }
+        const normalizedPhone = normalizePhoneForAuthOrThrow(phone);
 
         const { error } = await supabase.auth.verifyOtp({
-          phone,
+          phone: normalizedPhone,
           token,
           type: 'sms',
         });
         if (error) {
-          throw new Error(mapAuthErrorToUserMessage(error));
+          throw new Error(mapSmsAuthErrorToUserMessage(error));
         }
       },
       persistDraftAfterVerification: async () => {

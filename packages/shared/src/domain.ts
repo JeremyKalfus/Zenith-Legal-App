@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { normalizePhoneNumber, PHONE_VALIDATION_MESSAGES } from './phone';
 
 export const USER_ROLES = ['candidate', 'staff'] as const;
 export type UserRole = (typeof USER_ROLES)[number];
@@ -43,12 +44,24 @@ export const FIRM_STATUSES = [
 export type FirmStatus = (typeof FIRM_STATUSES)[number];
 
 const trimmedString = z.string().trim();
+const mobileInputSchema = z.string().trim().max(30).transform((value, ctx) => {
+  const normalized = normalizePhoneNumber(value);
+  if (!normalized.ok) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: PHONE_VALIDATION_MESSAGES.invalidMobile,
+    });
+    return z.NEVER;
+  }
+
+  return normalized.e164;
+});
 
 export const candidateIntakeSchema = z
   .object({
     name: trimmedString.min(1, 'Name is required').max(120),
     email: trimmedString.email('Enter a valid email address').max(255),
-    mobile: trimmedString.min(7, 'Enter a valid mobile number').max(30),
+    mobile: mobileInputSchema,
     preferredCities: z.array(z.enum(CITY_OPTIONS)).default([]),
     otherCityText: trimmedString.max(120).optional(),
     practiceArea: z.enum(PRACTICE_AREAS),

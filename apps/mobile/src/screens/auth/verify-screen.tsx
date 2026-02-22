@@ -145,6 +145,7 @@ export function VerifyScreen() {
             keyboardType="number-pad"
             placeholder="Enter SMS code"
           />
+          <Text style={styles.helper}>Enter the SMS code only (not your phone number).</Text>
           <Pressable
             style={[styles.button, smsVerifyDisabled && styles.buttonDisabled]}
             disabled={smsVerifyDisabled}
