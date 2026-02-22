@@ -319,6 +319,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [authTransitionVersion, setAuthTransitionVersion] = useState(0);
   const lastHandledUrlRef = useRef<string | null>(null);
   const isMountedRef = useRef(true);
   const authTransitionSeqRef = useRef(0);
@@ -480,12 +481,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsHydratingProfile(true);
           setProfileLoadError(null);
         }
+        setAuthTransitionVersion((previous) => previous + 1);
         setSession(data.session ?? null);
         setNeedsPasswordReset(false);
       } catch {
         // Fail open into auth screens instead of hanging on spinner.
         if (mounted) {
           authTransitionSeqRef.current += 1;
+          setAuthTransitionVersion((previous) => previous + 1);
           setSession(null);
           setProfile(null);
           setProfileLoadError(null);
@@ -546,6 +549,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsHydratingProfile(true);
         setProfileLoadError(null);
       }
+      setAuthTransitionVersion((previous) => previous + 1);
       setSession(nextSession);
       if (event === 'PASSWORD_RECOVERY') {
         setNeedsPasswordReset(true);
@@ -588,7 +592,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void registerPushToken(nextUserId).catch(() => {
       // Non-blocking by design.
     });
-  }, [hydrateProfileForSession, isLoading, isSigningOut, needsPasswordReset, session]);
+  }, [
+    authTransitionVersion,
+    hydrateProfileForSession,
+    isLoading,
+    isSigningOut,
+    needsPasswordReset,
+    session,
+  ]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -766,6 +777,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       signOut: async () => {
         setIsSigningOut(true);
         authTransitionSeqRef.current += 1;
+        setAuthTransitionVersion((previous) => previous + 1);
         setNeedsPasswordReset(false);
         setAuthNotice(null);
         setProfileLoadError(null);
