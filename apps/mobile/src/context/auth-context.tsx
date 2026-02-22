@@ -15,6 +15,38 @@ type OtpOptions = {
   shouldCreateUser?: boolean;
 };
 
+function extractErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (typeof error === 'object' && error && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string') {
+      return message;
+    }
+  }
+  return 'Unknown error';
+}
+
+function mapAuthErrorToUserMessage(error: unknown): string {
+  const message = extractErrorMessage(error).toLowerCase();
+
+  if (message.includes('email rate limit exceeded')) {
+    return 'Too many email code requests. Wait 60 seconds and try again.';
+  }
+  if (message.includes('unsupported phone provider') || message.includes('phone provider')) {
+    return 'SMS sign-in is not configured in Supabase yet. Use email magic link.';
+  }
+  if (message.includes('network request failed') || message.includes('failed to fetch')) {
+    return 'Cannot reach Supabase right now. Check your internet/VPN and retry.';
+  }
+
+  return extractErrorMessage(error);
+}
+
 type AuthContextValue = {
   session: Session | null;
   profile: CandidateProfile | null;
@@ -53,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [intakeDraft, setIntakeDraftState] = useState<IntakeDraft | null>(null);
   const [authMethods, setAuthMethods] = useState<AuthMethods>({
     emailOtpEnabled: true,
-    smsOtpEnabled: true,
+    smsOtpEnabled: false,
   });
   const [authConfigError, setAuthConfigError] = useState<string | null>(
     getSupabaseClientConfigError(),
@@ -174,7 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           },
         });
         if (error) {
-          throw error;
+          throw new Error(mapAuthErrorToUserMessage(error));
         }
       },
       sendSmsOtp: async (phone: string, options?: OtpOptions) => {
@@ -189,7 +221,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           },
         });
         if (error) {
-          throw error;
+          throw new Error(mapAuthErrorToUserMessage(error));
         }
       },
       verifySmsOtp: async (phone: string, token: string) => {
@@ -203,7 +235,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           type: 'sms',
         });
         if (error) {
-          throw error;
+          throw new Error(mapAuthErrorToUserMessage(error));
         }
       },
       persistDraftAfterVerification: async () => {
