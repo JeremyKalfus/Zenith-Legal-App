@@ -115,6 +115,9 @@ function mapPasswordAuthErrorToUserMessage(error: unknown): string {
   if (message.includes('invalid_identifier')) {
     return PHONE_VALIDATION_MESSAGES.invalidMobileForAuth;
   }
+  if (message.includes('account_exists_auth_only')) {
+    return 'This email already exists but your profile setup is incomplete. Sign in or reset your password.';
+  }
   if (message.includes('invalid email/phone or password') || message.includes('invalid login credentials')) {
     return 'Invalid email/phone or password.';
   }
@@ -133,6 +136,9 @@ function mapRegistrationErrorToUserMessage(error: unknown): string {
 
   if (message.includes('duplicate_email')) {
     return 'An account with this email already exists. Sign in or reset your password.';
+  }
+  if (message.includes('account_exists_auth_only')) {
+    return 'This email already exists but your profile setup is incomplete. Sign in or reset your password.';
   }
   if (message.includes('duplicate_mobile')) {
     return 'An account with this mobile number already exists. Sign in or reset your password.';
@@ -382,9 +388,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       lastHandledUrlRef.current = url;
+      const callbackType = extractCallbackType(url);
 
       try {
-        const callbackType = extractCallbackType(url);
         const handled = await completeAuthSessionFromUrl(url);
         if (handled && mounted) {
           if (callbackType === 'recovery') {
@@ -394,7 +400,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (error) {
         if (mounted) {
-          setAuthNotice(mapAuthErrorToUserMessage(error));
+          if (callbackType === 'recovery') {
+            setAuthNotice(mapPasswordAuthErrorToUserMessage(error));
+          } else {
+            setAuthNotice(mapAuthErrorToUserMessage(error));
+          }
         }
       }
     }
@@ -512,6 +522,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       requestPasswordReset: async (email: string) => {
         if (authConfigError) {
           throw new Error(authConfigError);
+        }
+        if (authRedirectUrl?.startsWith('exp://')) {
+          throw new Error(
+            'Password reset links are not supported in Expo Go. Use a development build (zenithlegal://auth/callback) to reset your password on mobile.',
+          );
         }
         const trimmedEmail = email.trim().toLowerCase();
         if (!trimmedEmail) {

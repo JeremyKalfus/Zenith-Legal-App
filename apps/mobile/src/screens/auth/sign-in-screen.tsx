@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
+import { authRedirectUrl } from '../../lib/supabase';
 
 export function SignInScreen({ onBack }: { onBack: () => void }) {
   const {
@@ -187,7 +188,13 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
               clearAuthNotice();
               try {
                 await requestPasswordReset(email);
-                setMessage('Password reset link sent to your email. Open it on this device.');
+                const redirectHint =
+                  __DEV__ && authRedirectUrl?.startsWith('exp://')
+                    ? ` Reset callback: ${authRedirectUrl}`
+                    : '';
+                setMessage(
+                  `Password reset link sent to your email. Open it on this device.${redirectHint}`,
+                );
               } catch (error) {
                 setMessage((error as Error).message);
               } finally {
@@ -195,8 +202,15 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
               }
             }}
           >
-            <Text style={styles.linkText}>Forgot password? Send reset email</Text>
+          <Text style={styles.linkText}>Forgot password? Send reset email</Text>
           </Pressable>
+
+          {__DEV__ && authRedirectUrl?.startsWith('exp://') ? (
+            <Text style={styles.devNote}>
+              Dev note: Supabase password recovery does not honor Expo Go exp:// callbacks. Use a
+              development build (zenithlegal://auth/callback) for mobile password reset.
+            </Text>
+          ) : null}
 
           {message ? <Text style={styles.message}>{message}</Text> : null}
 
@@ -249,6 +263,11 @@ const styles = StyleSheet.create({
   },
   error: {
     color: '#B91C1C',
+    fontSize: 12,
+    marginTop: -2,
+  },
+  devNote: {
+    color: '#92400E',
     fontSize: 12,
     marginTop: -2,
   },

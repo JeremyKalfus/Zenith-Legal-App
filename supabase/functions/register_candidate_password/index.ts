@@ -240,6 +240,17 @@ Deno.serve(async (request) => {
     if (createUser.error || !createUser.data.user) {
       const errorText = createUser.error?.message ?? 'Unable to create account';
       if (errorText.toLowerCase().includes('already')) {
+        const { data: existingEmailProfileAfterCreate, error: existingEmailProfileAfterCreateError } =
+          await serviceClient.from('users_profile').select('id').ilike('email', email).maybeSingle();
+
+        if (!existingEmailProfileAfterCreateError && !existingEmailProfileAfterCreate) {
+          return structuredError(
+            'account_exists_auth_only',
+            'This email already exists but your profile setup is incomplete. Sign in or reset your password.',
+            409,
+          );
+        }
+
         return structuredError(
           'duplicate_email',
           'An account with this email already exists. Sign in or reset your password.',
