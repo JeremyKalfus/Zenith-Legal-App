@@ -3,6 +3,9 @@ import { errorResponse, jsonResponse } from '../_shared/http.ts';
 import { createAuthedClient, createServiceClient, getCurrentUserId } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
 
+const PRIVACY_POLICY_VERSION = Deno.env.get('CONSENT_PRIVACY_POLICY_VERSION') ?? 'v1';
+const COMMUNICATION_CONSENT_VERSION = Deno.env.get('CONSENT_COMMUNICATION_CONSENT_VERSION') ?? 'v1';
+
 const cityOptions = [
   'DC',
   'NYC',
@@ -44,6 +47,22 @@ const candidateIntakeSchema = z
     acceptedCommunicationConsent: z.boolean(),
   })
   .superRefine((value, ctx) => {
+    if (!value.acceptedPrivacyPolicy) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'acceptedPrivacyPolicy must be true',
+        path: ['acceptedPrivacyPolicy'],
+      });
+    }
+
+    if (!value.acceptedCommunicationConsent) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'acceptedCommunicationConsent must be true',
+        path: ['acceptedCommunicationConsent'],
+      });
+    }
+
     if (value.preferredCities.includes('Other') && !value.otherCityText) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -80,6 +99,7 @@ Deno.serve(async (request) => {
     }
 
     const intake = parsed.data;
+    const consentAcceptedAt = new Date().toISOString();
 
     const { data: existingProfile } = await serviceClient
       .from('users_profile')
@@ -120,6 +140,26 @@ Deno.serve(async (request) => {
       return errorResponse(upsertPreferences.error.message, 400);
     }
 
+    const upsertConsents = await client.from('candidate_consents').upsert(
+      {
+        user_id: userId,
+        privacy_policy_accepted: intake.acceptedPrivacyPolicy,
+        privacy_policy_accepted_at: intake.acceptedPrivacyPolicy ? consentAcceptedAt : null,
+        privacy_policy_version: intake.acceptedPrivacyPolicy ? PRIVACY_POLICY_VERSION : null,
+        communication_consent_accepted: intake.acceptedCommunicationConsent,
+        communication_consent_accepted_at: intake.acceptedCommunicationConsent ? consentAcceptedAt : null,
+        communication_consent_version: intake.acceptedCommunicationConsent
+          ? COMMUNICATION_CONSENT_VERSION
+          : null,
+        source: 'mobile_app',
+      },
+      { onConflict: 'user_id' },
+    );
+
+    if (upsertConsents.error) {
+      return errorResponse(upsertConsents.error.message, 400);
+    }
+
     await writeAuditEvent({
       client: serviceClient,
       actorUserId: userId,
@@ -130,6 +170,10 @@ Deno.serve(async (request) => {
         onboarding_complete: true,
         email: intake.email,
         mobile: intake.mobile,
+        consent_versions: {
+          privacy_policy_version: PRIVACY_POLICY_VERSION,
+          communication_consent_version: COMMUNICATION_CONSENT_VERSION,
+        },
       },
     });
 
