@@ -28,3 +28,92 @@ export const supabase = createClient(env.supabaseUrl, env.supabaseAnonKey, {
 });
 
 export const authRedirectUrl = redirectTo;
+
+function getUrlParamMaps(url: string): {
+  queryParams: URLSearchParams;
+  fragmentParams: URLSearchParams;
+} {
+  const hashIndex = url.indexOf('#');
+  const hash = hashIndex >= 0 ? url.slice(hashIndex + 1) : '';
+  const withoutHash = hashIndex >= 0 ? url.slice(0, hashIndex) : url;
+  const parsed = new URL(withoutHash);
+
+  return {
+    queryParams: parsed.searchParams,
+    fragmentParams: new URLSearchParams(hash),
+  };
+}
+
+function getParam(
+  name: string,
+  queryParams: URLSearchParams,
+  fragmentParams: URLSearchParams,
+): string | null {
+  return queryParams.get(name) ?? fragmentParams.get(name);
+}
+
+export function isAuthCallbackUrl(url: string | null | undefined): boolean {
+  if (!url) {
+    return false;
+  }
+
+  return (
+    url.includes('auth/callback') ||
+    url.includes('code=') ||
+    url.includes('access_token=') ||
+    url.includes('token_hash=')
+  );
+}
+
+export async function completeAuthSessionFromUrl(
+  url: string,
+): Promise<'pkce' | 'session' | 'token_hash' | null> {
+  if (!isAuthCallbackUrl(url)) {
+    return null;
+  }
+
+  const { queryParams, fragmentParams } = getUrlParamMaps(url);
+  const code = getParam('code', queryParams, fragmentParams);
+  const accessToken = getParam('access_token', queryParams, fragmentParams);
+  const refreshToken = getParam('refresh_token', queryParams, fragmentParams);
+  const tokenHash = getParam('token_hash', queryParams, fragmentParams);
+  const otpType = getParam('type', queryParams, fragmentParams);
+  const callbackErrorDescription = getParam('error_description', queryParams, fragmentParams);
+  const callbackError = getParam('error', queryParams, fragmentParams);
+
+  if (callbackError || callbackErrorDescription) {
+    throw new Error(callbackErrorDescription ?? callbackError ?? 'Auth callback failed');
+  }
+
+  if (code) {
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) {
+      throw error;
+    }
+    return 'pkce';
+  }
+
+  if (accessToken && refreshToken) {
+    const { error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    });
+    if (error) {
+      throw error;
+    }
+    return 'session';
+  }
+
+  if (tokenHash && otpType) {
+    const { error } = await supabase.auth.verifyOtp({
+      token_hash: tokenHash,
+      type: otpType as 'signup' | 'invite' | 'magiclink' | 'recovery' | 'email_change' | 'email',
+    });
+    if (error) {
+      throw error;
+    }
+    return 'token_hash';
+  }
+
+  return null;
+}

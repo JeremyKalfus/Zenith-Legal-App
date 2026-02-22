@@ -1,7 +1,13 @@
 import type { CandidateIntake } from '@zenith/shared';
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import * as Linking from 'expo-linking';
 import type { Session } from '@supabase/supabase-js';
-import { authRedirectUrl, supabase } from '../lib/supabase';
+import {
+  authRedirectUrl,
+  completeAuthSessionFromUrl,
+  isAuthCallbackUrl,
+  supabase,
+} from '../lib/supabase';
 import { env, getSupabaseClientConfigError } from '../config/env';
 import type { CandidateProfile, IntakeDraft } from '../types/domain';
 import { registerPushToken } from '../lib/notifications';
@@ -43,6 +49,14 @@ function mapAuthErrorToUserMessage(error: unknown): string {
   if (message.includes('network request failed') || message.includes('failed to fetch')) {
     return 'Cannot reach Supabase right now. Check your internet/VPN and retry.';
   }
+  if (
+    message.includes('expired') ||
+    message.includes('invalid') ||
+    message.includes('grant') ||
+    message.includes('otp')
+  ) {
+    return 'This verification link is invalid or expired. Request a new magic link.';
+  }
 
   return extractErrorMessage(error);
 }
@@ -53,6 +67,7 @@ type AuthContextValue = {
   intakeDraft: IntakeDraft | null;
   authMethods: AuthMethods;
   authConfigError: string | null;
+  authNotice: string | null;
   isLoading: boolean;
   setIntakeDraft: (draft: CandidateIntake) => void;
   sendEmailMagicLink: (email: string, options?: OtpOptions) => Promise<void>;
@@ -61,6 +76,7 @@ type AuthContextValue = {
   persistDraftAfterVerification: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  clearAuthNotice: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -90,7 +106,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authConfigError, setAuthConfigError] = useState<string | null>(
     getSupabaseClientConfigError(),
   );
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const lastHandledUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -160,7 +178,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    bootstrap();
+    void bootstrap();
+
+    async function processAuthCallbackUrl(url: string | null): Promise<void> {
+      if (!url || !isAuthCallbackUrl(url) || lastHandledUrlRef.current === url) {
+        return;
+      }
+
+      lastHandledUrlRef.current = url;
+
+      try {
+        const handled = await completeAuthSessionFromUrl(url);
+        if (handled && mounted) {
+          setAuthNotice(null);
+        }
+      } catch (error) {
+        if (mounted) {
+          setAuthNotice(mapAuthErrorToUserMessage(error));
+        }
+      }
+    }
+
+    Linking.getInitialURL()
+      .then((initialUrl) => processAuthCallbackUrl(initialUrl))
+      .catch(() => {
+        // Non-blocking. We'll still handle live URL events.
+      });
+
+    const linkSubscription = Linking.addEventListener('url', (event) => {
+      void processAuthCallbackUrl(event.url);
+    });
 
     const {
       data: { subscription },
@@ -180,6 +227,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mounted = false;
+      linkSubscription.remove();
       subscription.unsubscribe();
     };
   }, []);
@@ -191,6 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       intakeDraft,
       authMethods,
       authConfigError,
+      authNotice,
       isLoading,
       setIntakeDraft: (draft) => setIntakeDraftState(draft),
       sendEmailMagicLink: async (email: string, options?: OtpOptions) => {
@@ -270,8 +319,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const nextProfile = await fetchProfile(session.user.id);
         setProfile(nextProfile);
       },
+      clearAuthNotice: () => setAuthNotice(null),
     }),
-    [authConfigError, authMethods, intakeDraft, isLoading, profile, session],
+    [authConfigError, authMethods, authNotice, intakeDraft, isLoading, profile, session],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

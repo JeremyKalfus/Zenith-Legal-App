@@ -2,12 +2,15 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
+import { useSendCooldown } from '../../hooks/use-send-cooldown';
 
 export function VerifyScreen() {
   const {
     intakeDraft,
     authMethods,
     authConfigError,
+    authNotice,
+    clearAuthNotice,
     sendEmailMagicLink,
     sendSmsOtp,
     verifySmsOtp,
@@ -15,6 +18,7 @@ export function VerifyScreen() {
   const [otp, setOtp] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const emailCooldown = useSendCooldown(60);
 
   if (!intakeDraft) {
     return (
@@ -35,14 +39,17 @@ export function VerifyScreen() {
             Use email magic link or SMS OTP. You only need one method.
           </Text>
           {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
+          {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
 
           <Pressable
             style={styles.button}
-            disabled={busy || !authMethods.emailOtpEnabled}
+            disabled={busy || !authMethods.emailOtpEnabled || emailCooldown.isCoolingDown}
             onPress={async () => {
               setBusy(true);
+              clearAuthNotice();
               try {
                 await sendEmailMagicLink(intakeDraft.email);
+                emailCooldown.startCooldown();
                 setMessage('Magic link sent to your email. Open it on this device.');
               } catch (error) {
                 setMessage((error as Error).message);
@@ -52,7 +59,11 @@ export function VerifyScreen() {
             }}
           >
             <Text style={styles.buttonText}>
-              {authMethods.emailOtpEnabled ? 'Send email magic link' : 'Email sign-in unavailable'}
+              {!authMethods.emailOtpEnabled
+                ? 'Email sign-in unavailable'
+                : emailCooldown.isCoolingDown
+                  ? `Resend in ${emailCooldown.remainingSeconds}s`
+                  : 'Send email magic link'}
             </Text>
           </Pressable>
 
@@ -61,6 +72,7 @@ export function VerifyScreen() {
         disabled={busy || !authMethods.smsOtpEnabled}
         onPress={async () => {
           setBusy(true);
+          clearAuthNotice();
           try {
             await sendSmsOtp(intakeDraft.mobile);
             setMessage('SMS code sent. Enter it below.');
@@ -88,6 +100,7 @@ export function VerifyScreen() {
         disabled={busy || otp.length < 4 || !authMethods.smsOtpEnabled}
         onPress={async () => {
           setBusy(true);
+          clearAuthNotice();
           try {
             await verifySmsOtp(intakeDraft.mobile, otp);
             setMessage('Phone verified successfully.');

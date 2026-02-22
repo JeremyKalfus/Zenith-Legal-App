@@ -2,15 +2,24 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
+import { useSendCooldown } from '../../hooks/use-send-cooldown';
 
 export function SignInScreen({ onBack }: { onBack: () => void }) {
-  const { authConfigError, authMethods, sendEmailMagicLink, sendSmsOtp, verifySmsOtp } =
-    useAuth();
+  const {
+    authConfigError,
+    authMethods,
+    authNotice,
+    clearAuthNotice,
+    sendEmailMagicLink,
+    sendSmsOtp,
+    verifySmsOtp,
+  } = useAuth();
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const emailCooldown = useSendCooldown(60);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -20,6 +29,7 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
           <Text style={styles.body}>Use the same email or mobile number from your prior login.</Text>
 
           {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
+          {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
 
           <TextInput
             autoCapitalize="none"
@@ -31,11 +41,13 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
           />
           <Pressable
             style={styles.button}
-            disabled={busy || !email || !authMethods.emailOtpEnabled}
+            disabled={busy || !email || !authMethods.emailOtpEnabled || emailCooldown.isCoolingDown}
             onPress={async () => {
               setBusy(true);
+              clearAuthNotice();
               try {
                 await sendEmailMagicLink(email.trim(), { shouldCreateUser: false });
+                emailCooldown.startCooldown();
                 setMessage('Magic link sent. Open it on this device to sign in.');
               } catch (error) {
                 setMessage((error as Error).message);
@@ -45,7 +57,11 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
             }}
           >
             <Text style={styles.buttonText}>
-              {authMethods.emailOtpEnabled ? 'Send email magic link' : 'Email sign-in unavailable'}
+              {!authMethods.emailOtpEnabled
+                ? 'Email sign-in unavailable'
+                : emailCooldown.isCoolingDown
+                  ? `Resend in ${emailCooldown.remainingSeconds}s`
+                  : 'Send email magic link'}
             </Text>
           </Pressable>
 
@@ -61,6 +77,7 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
             disabled={busy || !phone || !authMethods.smsOtpEnabled}
             onPress={async () => {
               setBusy(true);
+              clearAuthNotice();
               try {
                 await sendSmsOtp(phone.trim(), { shouldCreateUser: false });
                 setMessage('SMS code sent. Enter it below.');
@@ -88,6 +105,7 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
             disabled={busy || otp.length < 4 || !phone || !authMethods.smsOtpEnabled}
             onPress={async () => {
               setBusy(true);
+              clearAuthNotice();
               try {
                 await verifySmsOtp(phone.trim(), otp.trim());
                 setMessage('Phone verified. You are now signed in.');
