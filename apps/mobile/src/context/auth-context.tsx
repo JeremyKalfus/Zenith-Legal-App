@@ -210,6 +210,8 @@ function normalizePhoneForAuthOrThrow(input: string): string {
 type AuthContextValue = {
   session: Session | null;
   profile: CandidateProfile | null;
+  isHydratingProfile: boolean;
+  profileLoadError: string | null;
   needsPasswordReset: boolean;
   intakeDraft: IntakeDraft | null;
   authMethods: AuthMethods;
@@ -218,6 +220,7 @@ type AuthContextValue = {
   authConfigError: string | null;
   authNotice: string | null;
   isLoading: boolean;
+  isSigningOut: boolean;
   setIntakeDraft: (draft: CandidateIntake) => void;
   registerCandidateWithPassword: (input: CandidateRegistration) => Promise<void>;
   signInWithEmailPassword: (email: string, password: string) => Promise<void>;
@@ -236,23 +239,44 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-async function fetchProfile(userId: string): Promise<CandidateProfile | null> {
+type ProfileFetchResult =
+  | { ok: true; profile: CandidateProfile }
+  | { ok: false; reason: 'not_found' | 'query_error'; message: string };
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
   const { data, error } = await supabase
     .from('users_profile')
     .select('*')
     .eq('id', userId)
     .maybeSingle();
 
-  if (error || !data) {
-    return null;
+  if (error) {
+    return {
+      ok: false,
+      reason: 'query_error',
+      message: `Unable to load account profile: ${error.message}`,
+    };
+  }
+  if (!data) {
+    return {
+      ok: false,
+      reason: 'not_found',
+      message: 'Your session is active, but no account profile was found.',
+    };
   }
 
-  return data as CandidateProfile;
+  return { ok: true, profile: data as CandidateProfile };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<CandidateProfile | null>(null);
+  const [isHydratingProfile, setIsHydratingProfile] = useState(false);
+  const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   const [needsPasswordReset, setNeedsPasswordReset] = useState(false);
   const [intakeDraft, setIntakeDraftState] = useState<IntakeDraft | null>(null);
   const [authMethods, setAuthMethods] = useState<AuthMethods>({
@@ -269,8 +293,67 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const lastHandledUrlRef = useRef<string | null>(null);
   const isMountedRef = useRef(true);
+  const authTransitionSeqRef = useRef(0);
+
+  const hydrateProfileForSession = useCallback(
+    async (nextSession: Session | null, transitionSeq: number): Promise<void> => {
+      if (!isMountedRef.current || transitionSeq !== authTransitionSeqRef.current) {
+        return;
+      }
+
+      if (!nextSession?.user.id) {
+        setProfile(null);
+        setProfileLoadError(null);
+        setIsHydratingProfile(false);
+        return;
+      }
+
+      setIsHydratingProfile(true);
+      setProfileLoadError(null);
+
+      try {
+        let result: ProfileFetchResult | null = null;
+        const retryBackoffMs = [0, 150, 400];
+
+        for (let attemptIndex = 0; attemptIndex < retryBackoffMs.length; attemptIndex += 1) {
+          const backoff = retryBackoffMs[attemptIndex];
+          if (backoff > 0) {
+            await sleep(backoff);
+          }
+          if (!isMountedRef.current || transitionSeq !== authTransitionSeqRef.current) {
+            return;
+          }
+
+          result = await fetchProfile(nextSession.user.id);
+          if (result.ok || result.reason === 'not_found') {
+            break;
+          }
+        }
+
+        if (!isMountedRef.current || transitionSeq !== authTransitionSeqRef.current) {
+          return;
+        }
+
+        if (result?.ok) {
+          setProfile(result.profile);
+          setProfileLoadError(null);
+        } else {
+          setProfile(null);
+          setProfileLoadError(
+            result?.message ?? 'Unable to load your account profile. Please retry or sign out.',
+          );
+        }
+      } finally {
+        if (isMountedRef.current && transitionSeq === authTransitionSeqRef.current) {
+          setIsHydratingProfile(false);
+        }
+      }
+    },
+    [],
+  );
 
   const refreshAuthMethods = useCallback(async (): Promise<void> => {
     if (getSupabaseClientConfigError()) {
@@ -358,11 +441,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        const transitionSeq = authTransitionSeqRef.current + 1;
+        authTransitionSeqRef.current = transitionSeq;
         setSession(data.session ?? null);
         setNeedsPasswordReset(false);
+        await hydrateProfileForSession(data.session ?? null, transitionSeq);
         if (data.session?.user.id) {
-          const nextProfile = await fetchProfile(data.session.user.id);
-          setProfile(nextProfile);
           void registerPushToken(data.session.user.id).catch(() => {
             // Non-blocking by design.
           });
@@ -370,8 +454,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {
         // Fail open into auth screens instead of hanging on spinner.
         if (mounted) {
+          authTransitionSeqRef.current += 1;
           setSession(null);
           setProfile(null);
+          setProfileLoadError(null);
+          setIsHydratingProfile(false);
         }
       } finally {
         if (mounted) {
@@ -422,6 +509,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
+      const transitionSeq = authTransitionSeqRef.current + 1;
+      authTransitionSeqRef.current = transitionSeq;
       setSession(nextSession);
       if (event === 'PASSWORD_RECOVERY') {
         setNeedsPasswordReset(true);
@@ -431,14 +520,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setNeedsPasswordReset(false);
       }
 
+      await hydrateProfileForSession(nextSession, transitionSeq);
+
       if (nextSession?.user.id) {
-        const nextProfile = await fetchProfile(nextSession.user.id);
-        setProfile(nextProfile);
         void registerPushToken(nextSession.user.id).catch(() => {
           // Non-blocking by design.
         });
-      } else {
-        setProfile(null);
       }
     });
 
@@ -448,12 +535,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       linkSubscription.remove();
       subscription.unsubscribe();
     };
-  }, [refreshAuthMethods]);
+  }, [hydrateProfileForSession, refreshAuthMethods]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
       profile,
+      isHydratingProfile,
+      profileLoadError,
       needsPasswordReset,
       intakeDraft,
       authMethods,
@@ -462,6 +551,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authConfigError,
       authNotice,
       isLoading,
+      isSigningOut,
       setIntakeDraft: (draft) => setIntakeDraftState(draft),
       registerCandidateWithPassword: async (input: CandidateRegistration) => {
         if (authConfigError) {
@@ -615,21 +705,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (session?.user.id) {
-          const nextProfile = await fetchProfile(session.user.id);
-          setProfile(nextProfile);
+          const transitionSeq = authTransitionSeqRef.current + 1;
+          authTransitionSeqRef.current = transitionSeq;
+          await hydrateProfileForSession(session, transitionSeq);
         }
       },
       signOut: async () => {
+        setIsSigningOut(true);
+        authTransitionSeqRef.current += 1;
         setNeedsPasswordReset(false);
-        await supabase.auth.signOut();
+        setAuthNotice(null);
+        setProfileLoadError(null);
+        setIsHydratingProfile(false);
+        setProfile(null);
+        setSession(null);
+        try {
+          const { error } = await supabase.auth.signOut();
+          if (error) {
+            throw error;
+          }
+        } catch (error) {
+          setAuthNotice(mapPasswordAuthErrorToUserMessage(error));
+        } finally {
+          setIsSigningOut(false);
+        }
       },
       refreshProfile: async () => {
         if (!session?.user.id) {
           return;
         }
-
-        const nextProfile = await fetchProfile(session.user.id);
-        setProfile(nextProfile);
+        const transitionSeq = authTransitionSeqRef.current + 1;
+        authTransitionSeqRef.current = transitionSeq;
+        await hydrateProfileForSession(session, transitionSeq);
       },
       refreshAuthMethods,
       clearAuthNotice: () => setAuthNotice(null),
@@ -639,11 +746,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       authMethods,
       authMethodsError,
       authNotice,
+      hydrateProfileForSession,
       intakeDraft,
+      isHydratingProfile,
       isLoading,
       isRefreshingAuthMethods,
+      isSigningOut,
       needsPasswordReset,
       profile,
+      profileLoadError,
       refreshAuthMethods,
       session,
     ],

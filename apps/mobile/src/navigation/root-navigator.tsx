@@ -1,6 +1,6 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { CandidateTabs } from './candidate-tabs';
 import { StaffTabs } from './staff-tabs';
@@ -11,7 +11,17 @@ import { useAuth } from '../context/auth-context';
 const Stack = createNativeStackNavigator();
 
 export function RootNavigator() {
-  const { isLoading, needsPasswordReset, profile, session } = useAuth();
+  const {
+    isHydratingProfile,
+    isLoading,
+    isSigningOut,
+    needsPasswordReset,
+    profile,
+    profileLoadError,
+    refreshProfile,
+    session,
+    signOut,
+  } = useAuth();
   const [authStep, setAuthStep] = useState<'intake' | 'signin'>('intake');
 
   useEffect(() => {
@@ -33,6 +43,11 @@ export function RootNavigator() {
     );
   }
 
+  const needsProfileHydrationGate =
+    isAuthenticated && !profile && (isHydratingProfile || !profileLoadError);
+  const showProfileRecovery =
+    isAuthenticated && !profile && !isHydratingProfile && !!profileLoadError;
+
   return (
     <NavigationContainer>
       {!isAuthenticated ? (
@@ -51,6 +66,37 @@ export function RootNavigator() {
             </Stack.Screen>
           )}
         </Stack.Navigator>
+      ) : needsProfileHydrationGate ? (
+        <View style={styles.center}>
+          <ActivityIndicator />
+          <Text style={styles.loadingText}>Loading account...</Text>
+        </View>
+      ) : showProfileRecovery ? (
+        <View style={styles.recoveryContainer}>
+          <Text style={styles.recoveryTitle}>Account profile unavailable</Text>
+          <Text style={styles.recoveryBody}>
+            {profileLoadError ??
+              'Your session is active, but account profile data is still unavailable.'}
+          </Text>
+          <Pressable
+            style={styles.primaryButton}
+            disabled={isSigningOut}
+            onPress={() => {
+              void refreshProfile();
+            }}
+          >
+            <Text style={styles.primaryButtonText}>Retry profile</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.secondaryButton, isSigningOut && styles.secondaryButtonDisabled]}
+            disabled={isSigningOut}
+            onPress={() => {
+              void signOut();
+            }}
+          >
+            <Text style={styles.secondaryButtonText}>{isSigningOut ? 'Signing out...' : 'Sign out'}</Text>
+          </Pressable>
+        </View>
       ) : profile?.role === 'staff' ? (
         <StaffTabs />
       ) : (
@@ -65,5 +111,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
+  },
+  loadingText: {
+    color: '#475569',
+    marginTop: 10,
+  },
+  primaryButton: {
+    alignItems: 'center',
+    backgroundColor: '#0F766E',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    width: '100%',
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  recoveryBody: {
+    color: '#475569',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  recoveryContainer: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 10,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  recoveryTitle: {
+    color: '#0F172A',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  secondaryButton: {
+    alignItems: 'center',
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    width: '100%',
+  },
+  secondaryButtonDisabled: {
+    opacity: 0.6,
+  },
+  secondaryButtonText: {
+    color: '#0F172A',
+    fontWeight: '600',
   },
 });
