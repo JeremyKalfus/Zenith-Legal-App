@@ -57,6 +57,14 @@ cat /tmp/zenith-auth-patch.json | jq
 Notes:
 
 - `SUPABASE_REDIRECT_KEY` defaults to `additional_redirect_urls`.
+- On your current project, the Management API exposes `uri_allow_list` (string), not `additional_redirect_urls`.
+- Set both of these before building the patch:
+
+```bash
+export SUPABASE_REDIRECT_KEY="uri_allow_list"
+export SUPABASE_REDIRECT_FORMAT="string"
+```
+
 - If Supabase Management API returns a different redirect key in your project auth config, override it:
 
 ```bash

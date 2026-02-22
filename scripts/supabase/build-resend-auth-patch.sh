@@ -15,8 +15,22 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 REDIRECT_KEY="${SUPABASE_REDIRECT_KEY:-additional_redirect_urls}"
+REDIRECT_FORMAT="${SUPABASE_REDIRECT_FORMAT:-auto}"
 SMTP_SENDER_NAME="${SUPABASE_SMTP_SENDER_NAME:-Zenith Legal}"
 MAILER_AUTOCONFIRM="${SUPABASE_MAILER_AUTOCONFIRM:-false}"
+
+if [[ "${REDIRECT_FORMAT}" == "auto" ]]; then
+  if [[ "${REDIRECT_KEY}" == "uri_allow_list" ]]; then
+    REDIRECT_FORMAT="string"
+  else
+    REDIRECT_FORMAT="array"
+  fi
+fi
+
+if [[ "${REDIRECT_FORMAT}" != "string" && "${REDIRECT_FORMAT}" != "array" ]]; then
+  echo "SUPABASE_REDIRECT_FORMAT must be one of: auto, string, array" >&2
+  exit 1
+fi
 
 jq -n \
   --arg site_url "${SUPABASE_SITE_URL}" \
@@ -27,6 +41,7 @@ jq -n \
   --arg smtp_pass "${SUPABASE_SMTP_PASS}" \
   --arg smtp_sender_name "${SMTP_SENDER_NAME}" \
   --arg redirect_key "${REDIRECT_KEY}" \
+  --arg redirect_format "${REDIRECT_FORMAT}" \
   --arg redirects_csv "${SUPABASE_REDIRECT_URLS_CSV}" \
   --argjson external_email_enabled true \
   --argjson mailer_secure_email_change_enabled true \
@@ -45,5 +60,10 @@ jq -n \
     smtp_sender_name: $smtp_sender_name
   }
   + {
-    ($redirect_key): ($redirects_csv | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0)))
+    ($redirect_key): (
+      if $redirect_format == "string"
+      then ($redirects_csv | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0)) | join(","))
+      else ($redirects_csv | split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(length > 0)))
+      end
+    )
   }'
