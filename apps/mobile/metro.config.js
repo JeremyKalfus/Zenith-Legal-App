@@ -23,6 +23,12 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       filePath: path.resolve(projectRoot, 'src/shims/mime.ts'),
     };
   }
+  if (moduleName === 'expo-av') {
+    return {
+      type: 'sourceFile',
+      filePath: path.resolve(projectRoot, 'src/shims/expo-av.ts'),
+    };
+  }
 
   return context.resolveRequest(context, moduleName, platform);
 };
