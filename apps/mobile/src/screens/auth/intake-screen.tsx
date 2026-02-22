@@ -33,7 +33,13 @@ function MultiSelectOption({
   );
 }
 
-export function IntakeScreen({ onContinue }: { onContinue: () => void }) {
+export function IntakeScreen({
+  onContinue,
+  onSignIn,
+}: {
+  onContinue: () => void;
+  onSignIn: () => void;
+}) {
   const { setIntakeDraft } = useAuth();
   const {
     control,
@@ -230,6 +236,9 @@ export function IntakeScreen({ onContinue }: { onContinue: () => void }) {
           >
             <Text style={styles.ctaText}>Continue to verification</Text>
           </Pressable>
+          <Pressable style={styles.linkButton} onPress={onSignIn}>
+            <Text style={styles.linkText}>Already have an account? Sign in</Text>
+          </Pressable>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -283,6 +292,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     padding: 10,
+  },
+  linkButton: {
+    marginTop: 2,
+  },
+  linkText: {
+    color: '#0F766E',
+    fontWeight: '600',
+    textAlign: 'center',
   },
   label: {
     color: '#0F172A',

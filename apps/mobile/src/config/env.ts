@@ -8,6 +8,25 @@ export const env = {
   supportEmail: process.env.EXPO_PUBLIC_RECRUITER_EMAIL ?? 'recruiting@zenithlegal.com',
 };
 
+export function isSupabaseSecretKey(value: string): boolean {
+  return value.startsWith('sb_secret_');
+}
+
+export function getSupabaseClientConfigError(): string | null {
+  if (isSupabaseSecretKey(env.supabaseAnonKey)) {
+    return 'Supabase mobile key is invalid. Use the Publishable/anon key (not sb_secret).';
+  }
+
+  if (
+    env.supabaseUrl.includes('placeholder.supabase.co') ||
+    env.supabaseAnonKey.includes('public-anon-key')
+  ) {
+    return 'Supabase config is still using placeholder values.';
+  }
+
+  return null;
+}
+
 export function assertRequiredEnv(): void {
   const required = [
     ['EXPO_PUBLIC_SUPABASE_URL', env.supabaseUrl],
@@ -19,5 +38,10 @@ export function assertRequiredEnv(): void {
 
   if (missing.length > 0 && __DEV__) {
     console.warn(`Missing required env vars: ${missing.join(', ')}`);
+  }
+
+  const configError = getSupabaseClientConfigError();
+  if (configError && __DEV__) {
+    console.warn(configError);
   }
 }

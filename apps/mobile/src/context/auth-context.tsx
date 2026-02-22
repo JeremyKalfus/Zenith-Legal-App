@@ -1,18 +1,30 @@
 import type { CandidateIntake } from '@zenith/shared';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { authRedirectUrl, supabase } from '../lib/supabase';
+import { env, getSupabaseClientConfigError } from '../config/env';
 import type { CandidateProfile, IntakeDraft } from '../types/domain';
 import { registerPushToken } from '../lib/notifications';
+
+type AuthMethods = {
+  emailOtpEnabled: boolean;
+  smsOtpEnabled: boolean;
+};
+
+type OtpOptions = {
+  shouldCreateUser?: boolean;
+};
 
 type AuthContextValue = {
   session: Session | null;
   profile: CandidateProfile | null;
   intakeDraft: IntakeDraft | null;
+  authMethods: AuthMethods;
+  authConfigError: string | null;
   isLoading: boolean;
   setIntakeDraft: (draft: CandidateIntake) => void;
-  sendEmailMagicLink: (email: string) => Promise<void>;
-  sendSmsOtp: (phone: string) => Promise<void>;
+  sendEmailMagicLink: (email: string, options?: OtpOptions) => Promise<void>;
+  sendSmsOtp: (phone: string, options?: OtpOptions) => Promise<void>;
   verifySmsOtp: (phone: string, token: string) => Promise<void>;
   persistDraftAfterVerification: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -39,18 +51,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<CandidateProfile | null>(null);
   const [intakeDraft, setIntakeDraftState] = useState<IntakeDraft | null>(null);
+  const [authMethods, setAuthMethods] = useState<AuthMethods>({
+    emailOtpEnabled: true,
+    smsOtpEnabled: true,
+  });
+  const [authConfigError, setAuthConfigError] = useState<string | null>(
+    getSupabaseClientConfigError(),
+  );
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(async ({ data }) => {
+    let mounted = true;
+
+    async function bootstrap(): Promise<void> {
+      const configError = getSupabaseClientConfigError();
+      if (mounted) {
+        setAuthConfigError(configError);
+      }
+
+      try {
+        const settingsResponse = await fetch(`${env.supabaseUrl}/auth/v1/settings`, {
+          headers: {
+            apikey: env.supabaseAnonKey,
+            Authorization: `Bearer ${env.supabaseAnonKey}`,
+          },
+        });
+
+        if (settingsResponse.ok) {
+          const settingsJson = (await settingsResponse.json()) as {
+            external?: { email?: boolean; phone?: boolean };
+          };
+          if (mounted) {
+            setAuthMethods({
+              emailOtpEnabled: settingsJson.external?.email !== false,
+              smsOtpEnabled: settingsJson.external?.phone === true,
+            });
+          }
+        }
+      } catch {
+        // Keep optimistic defaults if auth settings are temporarily unavailable.
+      }
+
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) {
+        return;
+      }
+
       setSession(data.session ?? null);
       if (data.session?.user.id) {
         const nextProfile = await fetchProfile(data.session.user.id);
         setProfile(nextProfile);
         await registerPushToken(data.session.user.id);
       }
-      setIsLoading(false);
-    });
+      if (mounted) {
+        setIsLoading(false);
+      }
+    }
+
+    bootstrap();
 
     const {
       data: { subscription },
@@ -66,7 +124,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -74,21 +135,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       session,
       profile,
       intakeDraft,
+      authMethods,
+      authConfigError,
       isLoading,
       setIntakeDraft: (draft) => setIntakeDraftState(draft),
-      sendEmailMagicLink: async (email: string) => {
-        const { error } = await supabase.auth.signInWithOtp({ email });
+      sendEmailMagicLink: async (email: string, options?: OtpOptions) => {
+        if (authConfigError) {
+          throw new Error(authConfigError);
+        }
+
+        const { error } = await supabase.auth.signInWithOtp({
+          email,
+          options: {
+            emailRedirectTo: authRedirectUrl,
+            shouldCreateUser: options?.shouldCreateUser ?? true,
+          },
+        });
         if (error) {
           throw error;
         }
       },
-      sendSmsOtp: async (phone: string) => {
-        const { error } = await supabase.auth.signInWithOtp({ phone });
+      sendSmsOtp: async (phone: string, options?: OtpOptions) => {
+        if (authConfigError) {
+          throw new Error(authConfigError);
+        }
+
+        const { error } = await supabase.auth.signInWithOtp({
+          phone,
+          options: {
+            shouldCreateUser: options?.shouldCreateUser ?? true,
+          },
+        });
         if (error) {
           throw error;
         }
       },
       verifySmsOtp: async (phone: string, token: string) => {
+        if (authConfigError) {
+          throw new Error(authConfigError);
+        }
+
         const { error } = await supabase.auth.verifyOtp({
           phone,
           token,
@@ -131,7 +217,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(nextProfile);
       },
     }),
-    [intakeDraft, isLoading, profile, session],
+    [authConfigError, authMethods, intakeDraft, isLoading, profile, session],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

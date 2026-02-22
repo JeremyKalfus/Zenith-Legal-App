@@ -4,7 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
 
 export function VerifyScreen() {
-  const { intakeDraft, sendEmailMagicLink, sendSmsOtp, verifySmsOtp } = useAuth();
+  const {
+    intakeDraft,
+    authMethods,
+    authConfigError,
+    sendEmailMagicLink,
+    sendSmsOtp,
+    verifySmsOtp,
+  } = useAuth();
   const [otp, setOtp] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -27,10 +34,11 @@ export function VerifyScreen() {
           <Text style={styles.body}>
             Use email magic link or SMS OTP. You only need one method.
           </Text>
+          {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
 
           <Pressable
             style={styles.button}
-            disabled={busy}
+            disabled={busy || !authMethods.emailOtpEnabled}
             onPress={async () => {
               setBusy(true);
               try {
@@ -43,12 +51,14 @@ export function VerifyScreen() {
               }
             }}
           >
-            <Text style={styles.buttonText}>Send email magic link</Text>
+            <Text style={styles.buttonText}>
+              {authMethods.emailOtpEnabled ? 'Send email magic link' : 'Email sign-in unavailable'}
+            </Text>
           </Pressable>
 
       <Pressable
         style={styles.buttonSecondary}
-        disabled={busy}
+        disabled={busy || !authMethods.smsOtpEnabled}
         onPress={async () => {
           setBusy(true);
           try {
@@ -61,7 +71,9 @@ export function VerifyScreen() {
           }
         }}
       >
-        <Text style={styles.buttonTextSecondary}>Send SMS code</Text>
+        <Text style={styles.buttonTextSecondary}>
+          {authMethods.smsOtpEnabled ? 'Send SMS code' : 'SMS sign-in unavailable'}
+        </Text>
       </Pressable>
 
       <TextInput
@@ -73,7 +85,7 @@ export function VerifyScreen() {
       />
       <Pressable
         style={styles.button}
-        disabled={busy || otp.length < 4}
+        disabled={busy || otp.length < 4 || !authMethods.smsOtpEnabled}
         onPress={async () => {
           setBusy(true);
           try {
@@ -126,6 +138,11 @@ const styles = StyleSheet.create({
   container: {
     gap: 8,
     padding: 16,
+  },
+  error: {
+    color: '#B91C1C',
+    fontSize: 12,
+    marginTop: -2,
   },
   safeArea: {
     backgroundColor: '#F8FAFC',
