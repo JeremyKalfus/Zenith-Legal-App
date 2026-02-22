@@ -346,6 +346,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             result?.message ?? 'Unable to load your account profile. Please retry or sign out.',
           );
         }
+      } catch (error) {
+        if (!isMountedRef.current || transitionSeq !== authTransitionSeqRef.current) {
+          return;
+        }
+        setProfile(null);
+        setProfileLoadError(
+          `Unable to load your account profile. Please retry or sign out. (${extractErrorMessage(error)})`,
+        );
       } finally {
         if (isMountedRef.current && transitionSeq === authTransitionSeqRef.current) {
           setIsHydratingProfile(false);
@@ -443,6 +451,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const transitionSeq = authTransitionSeqRef.current + 1;
         authTransitionSeqRef.current = transitionSeq;
+        if (data.session?.user.id) {
+          setIsHydratingProfile(true);
+          setProfileLoadError(null);
+        }
         setSession(data.session ?? null);
         setNeedsPasswordReset(false);
         await hydrateProfileForSession(data.session ?? null, transitionSeq);
@@ -511,6 +523,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
       const transitionSeq = authTransitionSeqRef.current + 1;
       authTransitionSeqRef.current = transitionSeq;
+      if (nextSession?.user.id) {
+        setIsHydratingProfile(true);
+        setProfileLoadError(null);
+      }
       setSession(nextSession);
       if (event === 'PASSWORD_RECOVERY') {
         setNeedsPasswordReset(true);

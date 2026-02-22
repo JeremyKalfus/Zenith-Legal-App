@@ -43,10 +43,8 @@ export function RootNavigator() {
     );
   }
 
-  const needsProfileHydrationGate =
-    isAuthenticated && !profile && (isHydratingProfile || !profileLoadError);
-  const showProfileRecovery =
-    isAuthenticated && !profile && !isHydratingProfile && !!profileLoadError;
+  const needsProfileHydrationGate = isAuthenticated && !profile && isHydratingProfile;
+  const showProfileRecovery = isAuthenticated && !profile && !isHydratingProfile;
 
   return (
     <NavigationContainer>
