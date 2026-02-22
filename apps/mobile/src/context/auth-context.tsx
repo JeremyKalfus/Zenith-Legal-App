@@ -63,19 +63,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    async function bootstrap(): Promise<void> {
-      const configError = getSupabaseClientConfigError();
-      if (mounted) {
-        setAuthConfigError(configError);
-      }
-
+    async function loadAuthMethods(): Promise<void> {
       try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
         const settingsResponse = await fetch(`${env.supabaseUrl}/auth/v1/settings`, {
           headers: {
             apikey: env.supabaseAnonKey,
             Authorization: `Bearer ${env.supabaseAnonKey}`,
           },
+          signal: controller.signal,
         });
+        clearTimeout(timeout);
 
         if (settingsResponse.ok) {
           const settingsJson = (await settingsResponse.json()) as {
@@ -91,20 +90,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {
         // Keep optimistic defaults if auth settings are temporarily unavailable.
       }
+    }
 
-      const { data } = await supabase.auth.getSession();
-      if (!mounted) {
-        return;
-      }
-
-      setSession(data.session ?? null);
-      if (data.session?.user.id) {
-        const nextProfile = await fetchProfile(data.session.user.id);
-        setProfile(nextProfile);
-        await registerPushToken(data.session.user.id);
-      }
+    async function bootstrap(): Promise<void> {
+      const configError = getSupabaseClientConfigError();
       if (mounted) {
-        setIsLoading(false);
+        setAuthConfigError(configError);
+      }
+
+      try {
+        // Never block loading UI on settings fetch.
+        void loadAuthMethods();
+
+        const { data } = await supabase.auth.getSession();
+        if (!mounted) {
+          return;
+        }
+
+        setSession(data.session ?? null);
+        if (data.session?.user.id) {
+          const nextProfile = await fetchProfile(data.session.user.id);
+          setProfile(nextProfile);
+          void registerPushToken(data.session.user.id).catch(() => {
+            // Non-blocking by design.
+          });
+        }
+      } catch {
+        // Fail open into auth screens instead of hanging on spinner.
+        if (mounted) {
+          setSession(null);
+          setProfile(null);
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
       }
     }
 
@@ -118,7 +138,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (nextSession?.user.id) {
         const nextProfile = await fetchProfile(nextSession.user.id);
         setProfile(nextProfile);
-        await registerPushToken(nextSession.user.id);
+        void registerPushToken(nextSession.user.id).catch(() => {
+          // Non-blocking by design.
+        });
       } else {
         setProfile(null);
       }
