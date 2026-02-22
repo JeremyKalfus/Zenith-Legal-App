@@ -247,29 +247,54 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
-  const { data, error } = await supabase
-    .from('users_profile')
-    .select('*')
-    .eq('id', userId)
-    .maybeSingle();
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
 
-  if (error) {
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutHandle) {
+      clearTimeout(timeoutHandle);
+    }
+  }
+}
+
+async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
+  try {
+    const { data, error } = await withTimeout(
+      (async () => supabase.from('users_profile').select('*').eq('id', userId).maybeSingle())(),
+      5000,
+      'Profile fetch',
+    );
+
+    if (error) {
+      return {
+        ok: false,
+        reason: 'query_error',
+        message: `Unable to load account profile: ${error.message}`,
+      };
+    }
+    if (!data) {
+      return {
+        ok: false,
+        reason: 'not_found',
+        message: 'Your session is active, but no account profile was found.',
+      };
+    }
+
+    return { ok: true, profile: data as CandidateProfile };
+  } catch (error) {
     return {
       ok: false,
       reason: 'query_error',
-      message: `Unable to load account profile: ${error.message}`,
+      message: `Unable to load account profile: ${extractErrorMessage(error)}`,
     };
   }
-  if (!data) {
-    return {
-      ok: false,
-      reason: 'not_found',
-      message: 'Your session is active, but no account profile was found.',
-    };
-  }
-
-  return { ok: true, profile: data as CandidateProfile };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -457,12 +482,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         setSession(data.session ?? null);
         setNeedsPasswordReset(false);
-        await hydrateProfileForSession(data.session ?? null, transitionSeq);
-        if (data.session?.user.id) {
-          void registerPushToken(data.session.user.id).catch(() => {
-            // Non-blocking by design.
-          });
-        }
       } catch {
         // Fail open into auth screens instead of hanging on spinner.
         if (mounted) {
@@ -520,7 +539,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
       const transitionSeq = authTransitionSeqRef.current + 1;
       authTransitionSeqRef.current = transitionSeq;
       if (nextSession?.user.id) {
@@ -535,14 +554,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else if (event === 'USER_UPDATED') {
         setNeedsPasswordReset(false);
       }
-
-      await hydrateProfileForSession(nextSession, transitionSeq);
-
-      if (nextSession?.user.id) {
-        void registerPushToken(nextSession.user.id).catch(() => {
-          // Non-blocking by design.
-        });
-      }
     });
 
     return () => {
@@ -552,6 +563,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe();
     };
   }, [hydrateProfileForSession, refreshAuthMethods]);
+
+  useEffect(() => {
+    if (isLoading) {
+      return;
+    }
+
+    const nextSession = session;
+    const nextUserId = nextSession?.user.id;
+    const transitionSeq = authTransitionSeqRef.current;
+
+    if (!nextUserId) {
+      setProfile(null);
+      setProfileLoadError(null);
+      setIsHydratingProfile(false);
+      return;
+    }
+
+    if (needsPasswordReset || isSigningOut) {
+      return;
+    }
+
+    void hydrateProfileForSession(nextSession, transitionSeq);
+    void registerPushToken(nextUserId).catch(() => {
+      // Non-blocking by design.
+    });
+  }, [hydrateProfileForSession, isLoading, isSigningOut, needsPasswordReset, session]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
