@@ -34,7 +34,17 @@ Deno.serve(async (request) => {
       .single();
 
     if (beforeError || !before) {
-      return errorResponse('Assignment not found', 404);
+      return errorResponse('Assignment not found', 404, 'assignment_not_found');
+    }
+
+    if (before.status_enum === payload.new_status) {
+      return jsonResponse({
+        success: true,
+        unchanged: true,
+        assignment: before,
+        previous_status: before.status_enum,
+        new_status: payload.new_status,
+      });
     }
 
     const { data: updated, error: updateError } = await serviceClient
@@ -48,7 +58,11 @@ Deno.serve(async (request) => {
       .single();
 
     if (updateError || !updated) {
-      return errorResponse(updateError?.message ?? 'Unable to update assignment', 400);
+      return errorResponse(
+        updateError?.message ?? 'Unable to update assignment',
+        400,
+        'status_update_failed',
+      );
     }
 
     await serviceClient.from('notification_deliveries').insert({
@@ -72,7 +86,13 @@ Deno.serve(async (request) => {
       afterJson: updated,
     });
 
-    return jsonResponse({ success: true, assignment: updated });
+    return jsonResponse({
+      success: true,
+      unchanged: false,
+      assignment: updated,
+      previous_status: before.status_enum,
+      new_status: payload.new_status,
+    });
   } catch (error) {
     return errorResponse((error as Error).message, 500);
   }

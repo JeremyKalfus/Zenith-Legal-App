@@ -19,6 +19,37 @@ Deno.serve(async (request) => {
     const serviceClient = createServiceClient();
     const payload = schema.parse(await request.json());
 
+    const [{ data: candidate, error: candidateError }, { data: firm, error: firmError }] =
+      await Promise.all([
+        serviceClient
+          .from('users_profile')
+          .select('id,role')
+          .eq('id', payload.candidate_id)
+          .maybeSingle(),
+        serviceClient
+          .from('firms')
+          .select('id,name,active')
+          .eq('id', payload.firm_id)
+          .maybeSingle(),
+      ]);
+
+    if (candidateError) {
+      return errorResponse(candidateError.message, 400, 'candidate_lookup_failed');
+    }
+    if (!candidate || candidate.role !== 'candidate') {
+      return errorResponse('Candidate not found', 404, 'candidate_not_found');
+    }
+
+    if (firmError) {
+      return errorResponse(firmError.message, 400, 'firm_lookup_failed');
+    }
+    if (!firm) {
+      return errorResponse('Firm not found', 404, 'firm_not_found');
+    }
+    if (!firm.active) {
+      return errorResponse('Firm is inactive and cannot be assigned', 400, 'firm_inactive');
+    }
+
     const { data, error } = await serviceClient
       .from('candidate_firm_assignments')
       .insert({
@@ -31,7 +62,15 @@ Deno.serve(async (request) => {
       .single();
 
     if (error || !data) {
-      return errorResponse(error?.message ?? 'Unable to assign firm', 400);
+      const errorCode =
+        (error as { code?: string } | null)?.code === '23505'
+          ? 'duplicate_assignment'
+          : 'assign_failed';
+      const message =
+        errorCode === 'duplicate_assignment'
+          ? 'This firm is already assigned to this candidate.'
+          : error?.message ?? 'Unable to assign firm';
+      return errorResponse(message, errorCode === 'duplicate_assignment' ? 409 : 400, errorCode);
     }
 
     await writeAuditEvent({
@@ -43,7 +82,12 @@ Deno.serve(async (request) => {
       afterJson: data,
     });
 
-    return jsonResponse({ success: true, assignment: data });
+    return jsonResponse({
+      success: true,
+      assignment: data,
+      candidate: { id: payload.candidate_id },
+      firm: { id: firm.id, name: firm.name },
+    });
   } catch (error) {
     return errorResponse((error as Error).message, 500);
   }

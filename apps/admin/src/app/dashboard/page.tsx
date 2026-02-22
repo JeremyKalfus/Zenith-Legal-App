@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { OperationsDashboard } from '@/components/modules/operations-dashboard';
 import { StaffDashboardGuard } from '@/components/modules/staff-dashboard-guard';
 
@@ -13,6 +14,14 @@ export default function DashboardPage() {
           <p className="text-slate-600">
             Candidate workflow modules with staff-only status control and audited actions.
           </p>
+          <div className="pt-2">
+            <Link
+              href="/dashboard/candidates"
+              className="inline-flex h-10 items-center rounded-md bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              Open Candidate Firm Manager
+            </Link>
+          </div>
         </div>
         <OperationsDashboard />
       </main>

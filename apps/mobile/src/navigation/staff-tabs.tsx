@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 import { useAuth } from '../context/auth-context';
 import { StaffAppointmentsScreen } from '../screens/staff/staff-appointments-screen';
 import { StaffMessagesScreen } from '../screens/staff/staff-messages-screen';
+import { StaffCandidatesStackNavigator } from './staff-candidates-stack';
 
 const Tab = createBottomTabNavigator();
 
@@ -35,6 +36,11 @@ export function StaffTabs() {
     >
       <Tab.Screen name="Messages" component={StaffMessagesScreen} />
       <Tab.Screen name="Appointments" component={StaffAppointmentsScreen} />
+      <Tab.Screen
+        name="Candidates"
+        component={StaffCandidatesStackNavigator}
+        options={{ headerShown: false }}
+      />
     </Tab.Navigator>
   );
 }

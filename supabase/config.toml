@@ -18,3 +18,21 @@ port = 54323
 [inbucket]
 enabled = true
 port = 54324
+
+[functions.register_candidate_password]
+verify_jwt = false
+
+[functions.mobile_sign_in_with_identifier_password]
+verify_jwt = false
+
+[functions.assign_firm_to_candidate]
+verify_jwt = false
+
+[functions.staff_update_assignment_status]
+verify_jwt = false
+
+[functions.staff_unassign_firm_from_candidate]
+verify_jwt = false
+
+[functions.authorize_firm_submission]
+verify_jwt = false
