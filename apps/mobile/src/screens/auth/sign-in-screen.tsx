@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
@@ -8,8 +8,11 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
   const {
     authConfigError,
     authMethods,
+    authMethodsError,
     authNotice,
     clearAuthNotice,
+    isRefreshingAuthMethods,
+    refreshAuthMethods,
     sendEmailMagicLink,
     sendSmsOtp,
     verifySmsOtp,
@@ -20,6 +23,33 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const emailCooldown = useSendCooldown(60);
+  const smsExplicitlyDisabled = authMethods.smsOtpStatus === 'disabled';
+  const smsAvailabilityUnknown = authMethods.smsOtpStatus === 'unknown';
+  const smsSendDisabled = busy || !phone || smsExplicitlyDisabled;
+  const smsVerifyDisabled = busy || otp.length < 4 || !phone || smsExplicitlyDisabled;
+  const smsButtonLabel = smsExplicitlyDisabled ? 'SMS sign-in unavailable' : 'Send SMS code';
+
+  const authMethodsStatusMessage = useMemo(() => {
+    if (authMethodsError) {
+      return authMethodsError;
+    }
+    if (isRefreshingAuthMethods && authMethods.lastCheckedAt === null) {
+      return 'Checking email/SMS sign-in availability...';
+    }
+    if (smsAvailabilityUnknown) {
+      return 'SMS availability could not be confirmed yet. You can still try sending an SMS code.';
+    }
+    return null;
+  }, [
+    authMethods.lastCheckedAt,
+    authMethodsError,
+    isRefreshingAuthMethods,
+    smsAvailabilityUnknown,
+  ]);
+
+  useEffect(() => {
+    void refreshAuthMethods();
+  }, [refreshAuthMethods]);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -30,6 +60,21 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
 
           {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
           {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
+          {authMethodsStatusMessage ? (
+            <Text style={authMethodsError ? styles.error : styles.helper}>{authMethodsStatusMessage}</Text>
+          ) : null}
+          {authMethodsError ? (
+            <Pressable
+              style={styles.retryLinkButton}
+              onPress={() => void refreshAuthMethods()}
+              disabled={isRefreshingAuthMethods}
+              accessibilityState={{ disabled: isRefreshingAuthMethods }}
+            >
+              <Text style={styles.retryLinkText}>
+                {isRefreshingAuthMethods ? 'Retrying availability check...' : 'Retry availability check'}
+              </Text>
+            </Pressable>
+          ) : null}
 
           <TextInput
             autoCapitalize="none"
@@ -40,8 +85,15 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
             onChangeText={setEmail}
           />
           <Pressable
-            style={styles.button}
+            style={[
+              styles.button,
+              (busy || !email || !authMethods.emailOtpEnabled || emailCooldown.isCoolingDown) &&
+                styles.buttonDisabled,
+            ]}
             disabled={busy || !email || !authMethods.emailOtpEnabled || emailCooldown.isCoolingDown}
+            accessibilityState={{
+              disabled: busy || !email || !authMethods.emailOtpEnabled || emailCooldown.isCoolingDown,
+            }}
             onPress={async () => {
               setBusy(true);
               clearAuthNotice();
@@ -73,8 +125,9 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
             onChangeText={setPhone}
           />
           <Pressable
-            style={styles.buttonSecondary}
-            disabled={busy || !phone || !authMethods.smsOtpEnabled}
+            style={[styles.buttonSecondary, smsSendDisabled && styles.buttonSecondaryDisabled]}
+            disabled={smsSendDisabled}
+            accessibilityState={{ disabled: smsSendDisabled }}
             onPress={async () => {
               setBusy(true);
               clearAuthNotice();
@@ -89,7 +142,7 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
             }}
           >
             <Text style={styles.buttonTextSecondary}>
-              {authMethods.smsOtpEnabled ? 'Send SMS code' : 'SMS sign-in unavailable'}
+              {smsButtonLabel}
             </Text>
           </Pressable>
 
@@ -101,8 +154,9 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
             placeholder="Enter SMS code"
           />
           <Pressable
-            style={styles.button}
-            disabled={busy || otp.length < 4 || !phone || !authMethods.smsOtpEnabled}
+            style={[styles.button, smsVerifyDisabled && styles.buttonDisabled]}
+            disabled={smsVerifyDisabled}
+            accessibilityState={{ disabled: smsVerifyDisabled }}
             onPress={async () => {
               setBusy(true);
               clearAuthNotice();
@@ -142,12 +196,19 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     padding: 12,
   },
+  buttonDisabled: {
+    opacity: 0.55,
+  },
   buttonSecondary: {
     alignItems: 'center',
     backgroundColor: '#E2E8F0',
     borderRadius: 10,
     marginBottom: 10,
     padding: 12,
+  },
+  buttonSecondaryDisabled: {
+    backgroundColor: '#E2E8F0',
+    opacity: 0.65,
   },
   buttonText: {
     color: '#ffffff',
@@ -174,6 +235,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     padding: 10,
   },
+  helper: {
+    color: '#475569',
+    fontSize: 12,
+    marginTop: -2,
+  },
   linkButton: {
     marginTop: 8,
   },
@@ -181,6 +247,15 @@ const styles = StyleSheet.create({
     color: '#0F766E',
     fontWeight: '600',
     textAlign: 'center',
+  },
+  retryLinkButton: {
+    marginTop: -2,
+    marginBottom: 6,
+  },
+  retryLinkText: {
+    color: '#0F766E',
+    fontSize: 12,
+    fontWeight: '600',
   },
   message: {
     color: '#0F172A',

@@ -1,5 +1,5 @@
 import type { CandidateIntake } from '@zenith/shared';
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as Linking from 'expo-linking';
 import type { Session } from '@supabase/supabase-js';
 import {
@@ -15,6 +15,9 @@ import { registerPushToken } from '../lib/notifications';
 type AuthMethods = {
   emailOtpEnabled: boolean;
   smsOtpEnabled: boolean;
+  emailOtpStatus: 'unknown' | 'enabled' | 'disabled';
+  smsOtpStatus: 'unknown' | 'enabled' | 'disabled';
+  lastCheckedAt: number | null;
 };
 
 type OtpOptions = {
@@ -66,6 +69,8 @@ type AuthContextValue = {
   profile: CandidateProfile | null;
   intakeDraft: IntakeDraft | null;
   authMethods: AuthMethods;
+  authMethodsError: string | null;
+  isRefreshingAuthMethods: boolean;
   authConfigError: string | null;
   authNotice: string | null;
   isLoading: boolean;
@@ -76,6 +81,7 @@ type AuthContextValue = {
   persistDraftAfterVerification: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  refreshAuthMethods: () => Promise<void>;
   clearAuthNotice: () => void;
 };
 
@@ -102,21 +108,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authMethods, setAuthMethods] = useState<AuthMethods>({
     emailOtpEnabled: true,
     smsOtpEnabled: false,
+    emailOtpStatus: 'unknown',
+    smsOtpStatus: 'unknown',
+    lastCheckedAt: null,
   });
+  const [authMethodsError, setAuthMethodsError] = useState<string | null>(null);
+  const [isRefreshingAuthMethods, setIsRefreshingAuthMethods] = useState(false);
   const [authConfigError, setAuthConfigError] = useState<string | null>(
     getSupabaseClientConfigError(),
   );
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const lastHandledUrlRef = useRef<string | null>(null);
+  const isMountedRef = useRef(true);
 
-  useEffect(() => {
-    let mounted = true;
+  const refreshAuthMethods = useCallback(async (): Promise<void> => {
+    if (getSupabaseClientConfigError()) {
+      return;
+    }
 
-    async function loadAuthMethods(): Promise<void> {
+    setIsRefreshingAuthMethods(true);
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
       try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
         const settingsResponse = await fetch(`${env.supabaseUrl}/auth/v1/settings`, {
           headers: {
             apikey: env.supabaseAnonKey,
@@ -124,23 +139,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           },
           signal: controller.signal,
         });
-        clearTimeout(timeout);
 
-        if (settingsResponse.ok) {
-          const settingsJson = (await settingsResponse.json()) as {
-            external?: { email?: boolean; phone?: boolean };
-          };
-          if (mounted) {
-            setAuthMethods({
-              emailOtpEnabled: settingsJson.external?.email !== false,
-              smsOtpEnabled: settingsJson.external?.phone === true,
-            });
+        if (!settingsResponse.ok) {
+          let responseDetail = '';
+          try {
+            responseDetail = await settingsResponse.text();
+          } catch {
+            responseDetail = '';
           }
+          throw new Error(
+            `Auth settings check failed (${settingsResponse.status})${responseDetail ? `: ${responseDetail}` : ''}`,
+          );
         }
-      } catch {
-        // Keep optimistic defaults if auth settings are temporarily unavailable.
+
+        const settingsJson = (await settingsResponse.json()) as {
+          external?: { email?: boolean; phone?: boolean };
+        };
+        if (!isMountedRef.current) {
+          return;
+        }
+
+        setAuthMethods({
+          emailOtpEnabled: settingsJson.external?.email !== false,
+          smsOtpEnabled: settingsJson.external?.phone === true,
+          emailOtpStatus: settingsJson.external?.email === false ? 'disabled' : 'enabled',
+          smsOtpStatus: settingsJson.external?.phone === true ? 'enabled' : 'disabled',
+          lastCheckedAt: Date.now(),
+        });
+        setAuthMethodsError(null);
+      } finally {
+        clearTimeout(timeout);
+      }
+    } catch (error) {
+      if (!isMountedRef.current) {
+        return;
+      }
+      setAuthMethodsError(
+        `Could not check SMS availability. You can retry or try sending an SMS code directly. (${extractErrorMessage(error)})`,
+      );
+      setAuthMethods((previous) => ({
+        ...previous,
+        emailOtpStatus: previous.emailOtpStatus === 'enabled' ? 'enabled' : 'unknown',
+        smsOtpStatus: previous.smsOtpStatus === 'enabled' ? 'enabled' : 'unknown',
+      }));
+    } finally {
+      if (isMountedRef.current) {
+        setIsRefreshingAuthMethods(false);
       }
     }
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    isMountedRef.current = true;
 
     async function bootstrap(): Promise<void> {
       const configError = getSupabaseClientConfigError();
@@ -150,7 +201,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       try {
         // Never block loading UI on settings fetch.
-        void loadAuthMethods();
+        void refreshAuthMethods();
 
         const { data } = await supabase.auth.getSession();
         if (!mounted) {
@@ -227,10 +278,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       mounted = false;
+      isMountedRef.current = false;
       linkSubscription.remove();
       subscription.unsubscribe();
     };
-  }, []);
+  }, [refreshAuthMethods]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -238,6 +290,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       profile,
       intakeDraft,
       authMethods,
+      authMethodsError,
+      isRefreshingAuthMethods,
       authConfigError,
       authNotice,
       isLoading,
@@ -319,9 +373,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const nextProfile = await fetchProfile(session.user.id);
         setProfile(nextProfile);
       },
+      refreshAuthMethods,
       clearAuthNotice: () => setAuthNotice(null),
     }),
-    [authConfigError, authMethods, authNotice, intakeDraft, isLoading, profile, session],
+    [
+      authConfigError,
+      authMethods,
+      authMethodsError,
+      authNotice,
+      intakeDraft,
+      isLoading,
+      isRefreshingAuthMethods,
+      profile,
+      refreshAuthMethods,
+      session,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

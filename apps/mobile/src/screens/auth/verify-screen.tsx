@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
@@ -8,9 +8,12 @@ export function VerifyScreen() {
   const {
     intakeDraft,
     authMethods,
+    authMethodsError,
     authConfigError,
     authNotice,
     clearAuthNotice,
+    isRefreshingAuthMethods,
+    refreshAuthMethods,
     sendEmailMagicLink,
     sendSmsOtp,
     verifySmsOtp,
@@ -19,6 +22,33 @@ export function VerifyScreen() {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const emailCooldown = useSendCooldown(60);
+  const smsExplicitlyDisabled = authMethods.smsOtpStatus === 'disabled';
+  const smsAvailabilityUnknown = authMethods.smsOtpStatus === 'unknown';
+  const smsSendDisabled = busy || smsExplicitlyDisabled;
+  const smsVerifyDisabled = busy || otp.length < 4 || smsExplicitlyDisabled;
+  const smsButtonLabel = smsExplicitlyDisabled ? 'SMS sign-in unavailable' : 'Send SMS code';
+
+  const authMethodsStatusMessage = useMemo(() => {
+    if (authMethodsError) {
+      return authMethodsError;
+    }
+    if (isRefreshingAuthMethods && authMethods.lastCheckedAt === null) {
+      return 'Checking email/SMS sign-in availability...';
+    }
+    if (smsAvailabilityUnknown) {
+      return 'SMS availability could not be confirmed yet. You can still try sending an SMS code.';
+    }
+    return null;
+  }, [
+    authMethods.lastCheckedAt,
+    authMethodsError,
+    isRefreshingAuthMethods,
+    smsAvailabilityUnknown,
+  ]);
+
+  useEffect(() => {
+    void refreshAuthMethods();
+  }, [refreshAuthMethods]);
 
   if (!intakeDraft) {
     return (
@@ -40,10 +70,31 @@ export function VerifyScreen() {
           </Text>
           {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
           {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
+          {authMethodsStatusMessage ? (
+            <Text style={authMethodsError ? styles.error : styles.helper}>{authMethodsStatusMessage}</Text>
+          ) : null}
+          {authMethodsError ? (
+            <Pressable
+              style={styles.retryLinkButton}
+              onPress={() => void refreshAuthMethods()}
+              disabled={isRefreshingAuthMethods}
+              accessibilityState={{ disabled: isRefreshingAuthMethods }}
+            >
+              <Text style={styles.retryLinkText}>
+                {isRefreshingAuthMethods ? 'Retrying availability check...' : 'Retry availability check'}
+              </Text>
+            </Pressable>
+          ) : null}
 
           <Pressable
-            style={styles.button}
+            style={[
+              styles.button,
+              (busy || !authMethods.emailOtpEnabled || emailCooldown.isCoolingDown) && styles.buttonDisabled,
+            ]}
             disabled={busy || !authMethods.emailOtpEnabled || emailCooldown.isCoolingDown}
+            accessibilityState={{
+              disabled: busy || !authMethods.emailOtpEnabled || emailCooldown.isCoolingDown,
+            }}
             onPress={async () => {
               setBusy(true);
               clearAuthNotice();
@@ -67,52 +118,52 @@ export function VerifyScreen() {
             </Text>
           </Pressable>
 
-      <Pressable
-        style={styles.buttonSecondary}
-        disabled={busy || !authMethods.smsOtpEnabled}
-        onPress={async () => {
-          setBusy(true);
-          clearAuthNotice();
-          try {
-            await sendSmsOtp(intakeDraft.mobile);
-            setMessage('SMS code sent. Enter it below.');
-          } catch (error) {
-            setMessage((error as Error).message);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        <Text style={styles.buttonTextSecondary}>
-          {authMethods.smsOtpEnabled ? 'Send SMS code' : 'SMS sign-in unavailable'}
-        </Text>
-      </Pressable>
+          <Pressable
+            style={[styles.buttonSecondary, smsSendDisabled && styles.buttonSecondaryDisabled]}
+            disabled={smsSendDisabled}
+            accessibilityState={{ disabled: smsSendDisabled }}
+            onPress={async () => {
+              setBusy(true);
+              clearAuthNotice();
+              try {
+                await sendSmsOtp(intakeDraft.mobile);
+                setMessage('SMS code sent. Enter it below.');
+              } catch (error) {
+                setMessage((error as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <Text style={styles.buttonTextSecondary}>{smsButtonLabel}</Text>
+          </Pressable>
 
-      <TextInput
-        style={styles.input}
-        value={otp}
-        onChangeText={setOtp}
-        keyboardType="number-pad"
-        placeholder="Enter SMS code"
-      />
-      <Pressable
-        style={styles.button}
-        disabled={busy || otp.length < 4 || !authMethods.smsOtpEnabled}
-        onPress={async () => {
-          setBusy(true);
-          clearAuthNotice();
-          try {
-            await verifySmsOtp(intakeDraft.mobile, otp);
-            setMessage('Phone verified successfully.');
-          } catch (error) {
-            setMessage((error as Error).message);
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        <Text style={styles.buttonText}>Verify SMS code</Text>
-      </Pressable>
+          <TextInput
+            style={styles.input}
+            value={otp}
+            onChangeText={setOtp}
+            keyboardType="number-pad"
+            placeholder="Enter SMS code"
+          />
+          <Pressable
+            style={[styles.button, smsVerifyDisabled && styles.buttonDisabled]}
+            disabled={smsVerifyDisabled}
+            accessibilityState={{ disabled: smsVerifyDisabled }}
+            onPress={async () => {
+              setBusy(true);
+              clearAuthNotice();
+              try {
+                await verifySmsOtp(intakeDraft.mobile, otp);
+                setMessage('Phone verified successfully.');
+              } catch (error) {
+                setMessage((error as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <Text style={styles.buttonText}>Verify SMS code</Text>
+          </Pressable>
 
           {message ? <Text style={styles.message}>{message}</Text> : null}
         </View>
@@ -133,12 +184,19 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     padding: 12,
   },
+  buttonDisabled: {
+    opacity: 0.55,
+  },
   buttonSecondary: {
     alignItems: 'center',
     backgroundColor: '#E2E8F0',
     borderRadius: 10,
     marginBottom: 10,
     padding: 12,
+  },
+  buttonSecondaryDisabled: {
+    backgroundColor: '#E2E8F0',
+    opacity: 0.65,
   },
   buttonText: {
     color: '#ffffff',
@@ -154,6 +212,11 @@ const styles = StyleSheet.create({
   },
   error: {
     color: '#B91C1C',
+    fontSize: 12,
+    marginTop: -2,
+  },
+  helper: {
+    color: '#475569',
     fontSize: 12,
     marginTop: -2,
   },
@@ -175,6 +238,15 @@ const styles = StyleSheet.create({
   message: {
     color: '#0F172A',
     marginTop: 8,
+  },
+  retryLinkButton: {
+    marginTop: -2,
+    marginBottom: 6,
+  },
+  retryLinkText: {
+    color: '#0F766E',
+    fontSize: 12,
+    fontWeight: '600',
   },
   title: {
     color: '#0F172A',
