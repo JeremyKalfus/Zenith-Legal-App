@@ -157,6 +157,8 @@ export type CandidateRegistration = z.infer<typeof candidateRegistrationSchema>;
 
 export const appointmentModalitySchema = z.enum(['virtual', 'in_person']);
 export type AppointmentModality = z.infer<typeof appointmentModalitySchema>;
+export const appointmentStatusSchema = z.enum(['requested', 'accepted', 'declined', 'cancelled']);
+export type AppointmentStatus = z.infer<typeof appointmentStatusSchema>;
 
 export const appointmentSchema = z
   .object({
