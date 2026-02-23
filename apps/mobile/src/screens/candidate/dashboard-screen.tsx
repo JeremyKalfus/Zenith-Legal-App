@@ -6,6 +6,21 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/auth-context';
 import type { CandidateFirmAssignment } from '../../types/domain';
 
+function extractFunctionInvokeErrorMessage(error: unknown, data: unknown): string {
+  if (typeof data === 'object' && data && 'error' in data) {
+    const message = (data as { error?: unknown }).error;
+    if (typeof message === 'string' && message.trim()) {
+      return message;
+    }
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return 'Unable to update authorization. Please try again.';
+}
+
 const statusRank = Object.fromEntries(
   FIRM_STATUSES.map((status, index) => [status, index]),
 ) as Record<string, number>;
@@ -18,6 +33,7 @@ export function DashboardScreen({
   const { session } = useAuth();
   const [assignments, setAssignments] = useState<CandidateFirmAssignment[]>([]);
   const [message, setMessage] = useState('');
+  const [busyAssignmentId, setBusyAssignmentId] = useState<string | null>(null);
 
   const loadAssignments = useCallback(async () => {
     if (!session?.user.id) {
@@ -63,6 +79,33 @@ export function DashboardScreen({
     loadAssignments();
   }, [loadAssignments]);
 
+  const handleAuthorizationDecision = useCallback(
+    async (assignmentId: string, decision: 'authorized' | 'declined') => {
+      setBusyAssignmentId(assignmentId);
+      setMessage('');
+
+      try {
+        const { data, error } = await supabase.functions.invoke('authorize_firm_submission', {
+          body: {
+            assignment_id: assignmentId,
+            decision,
+          },
+        });
+
+        if (error) {
+          throw new Error(extractFunctionInvokeErrorMessage(error, data));
+        }
+
+        await loadAssignments();
+      } catch (error) {
+        setMessage((error as Error).message);
+      } finally {
+        setBusyAssignmentId((current) => (current === assignmentId ? null : current));
+      }
+    },
+    [loadAssignments],
+  );
+
   const sortedAssignments = useMemo(
     () =>
       [...assignments].sort((a, b) => {
@@ -104,36 +147,42 @@ export function DashboardScreen({
           <View key={assignment.id} style={styles.card}>
             <Text style={styles.firmName}>{assignment.firms.name}</Text>
             <Text style={styles.status}>{assignment.status_enum}</Text>
-            {assignment.status_enum ===
-            'Waiting on your authorization to contact/submit' ? (
+            {assignment.status_enum === 'Waiting on your authorization to contact/submit' ||
+            assignment.status_enum === 'Authorized, will submit soon' ? (
               <View style={styles.authRow}>
+                {assignment.status_enum === 'Waiting on your authorization to contact/submit' ? (
+                  <Pressable
+                    style={[
+                      styles.authorizeButton,
+                      busyAssignmentId === assignment.id && styles.buttonDisabled,
+                    ]}
+                    disabled={busyAssignmentId === assignment.id}
+                    onPress={() => {
+                      void handleAuthorizationDecision(assignment.id, 'authorized');
+                    }}
+                  >
+                    <Text style={styles.authorizeText}>
+                      {busyAssignmentId === assignment.id ? 'Saving...' : 'Authorize'}
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <View style={[styles.authorizeButton, styles.authorizedBadge, styles.buttonDisabled]}>
+                    <Text style={styles.authorizeText}>Authorized</Text>
+                  </View>
+                )}
                 <Pressable
-                  style={styles.authorizeButton}
-                  onPress={async () => {
-                    await supabase.functions.invoke('authorize_firm_submission', {
-                      body: {
-                        assignment_id: assignment.id,
-                        decision: 'authorized',
-                      },
-                    });
-                    loadAssignments();
+                  style={[
+                    styles.declineButton,
+                    busyAssignmentId === assignment.id && styles.buttonDisabled,
+                  ]}
+                  disabled={busyAssignmentId === assignment.id}
+                  onPress={() => {
+                    void handleAuthorizationDecision(assignment.id, 'declined');
                   }}
                 >
-                  <Text style={styles.authorizeText}>Authorize</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.declineButton}
-                  onPress={async () => {
-                    await supabase.functions.invoke('authorize_firm_submission', {
-                      body: {
-                        assignment_id: assignment.id,
-                        decision: 'declined',
-                      },
-                    });
-                    loadAssignments();
-                  }}
-                >
-                  <Text style={styles.declineText}>Decline</Text>
+                  <Text style={styles.declineText}>
+                    {busyAssignmentId === assignment.id ? 'Saving...' : 'Decline'}
+                  </Text>
                 </Pressable>
               </View>
             ) : null}
@@ -160,8 +209,14 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
   },
+  authorizedBadge: {
+    opacity: 0.85,
+  },
   body: {
     color: '#475569',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   card: {
     backgroundColor: '#ffffff',

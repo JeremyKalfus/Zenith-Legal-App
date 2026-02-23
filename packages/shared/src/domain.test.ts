@@ -59,6 +59,7 @@ describe('candidate intake schema', () => {
   it('keeps the exact status order and values', () => {
     expect(FIRM_STATUSES).toEqual([
       'Waiting on your authorization to contact/submit',
+      'Authorized, will submit soon',
       'Submitted, waiting to hear from firm',
       'Interview Stage',
       'Rejected by firm',

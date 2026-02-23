@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { Channel, Chat, MessageInput, MessageList, OverlayProvider } from 'stream-chat-expo';
 import { getChatClient } from '../../lib/chat';
 import { useAuth } from '../../context/auth-context';
 import { supabase } from '../../lib/supabase';
+import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
 
-export function MessagesScreen() {
+export function MessagesScreen({
+  showRecruiterBanner = true,
+}: {
+  showRecruiterBanner?: boolean;
+}) {
   const { session, profile } = useAuth();
   const [channelId, setChannelId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -79,33 +84,47 @@ export function MessagesScreen() {
 
   if (isLoading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator />
-      </View>
+      <SafeAreaView style={styles.safeArea}>
+        {showRecruiterBanner ? <GlobalRecruiterBanner /> : null}
+        <View style={styles.center}>
+          <ActivityIndicator />
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (errorMessage || !channel) {
     return (
-      <View style={styles.center}>
-        <Text style={styles.error}>{errorMessage || 'Unable to load chat channel.'}</Text>
-      </View>
+      <SafeAreaView style={styles.safeArea}>
+        {showRecruiterBanner ? <GlobalRecruiterBanner /> : null}
+        <View style={styles.center}>
+          <Text style={styles.error}>{errorMessage || 'Unable to load chat channel.'}</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <OverlayProvider>
-      <Chat client={getChatClient()}>
-        <Channel channel={channel}>
-          <MessageList />
-          <MessageInput />
-        </Channel>
-      </Chat>
-    </OverlayProvider>
+    <SafeAreaView style={styles.safeArea}>
+      {showRecruiterBanner ? <GlobalRecruiterBanner /> : null}
+      <View style={styles.chatContainer}>
+        <OverlayProvider>
+          <Chat client={getChatClient()}>
+            <Channel channel={channel}>
+              <MessageList />
+              <MessageInput />
+            </Channel>
+          </Chat>
+        </OverlayProvider>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  chatContainer: {
+    flex: 1,
+  },
   center: {
     alignItems: 'center',
     flex: 1,
@@ -114,5 +133,9 @@ const styles = StyleSheet.create({
   },
   error: {
     color: '#B91C1C',
+  },
+  safeArea: {
+    backgroundColor: '#F8FAFC',
+    flex: 1,
   },
 });

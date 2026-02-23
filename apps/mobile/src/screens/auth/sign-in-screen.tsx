@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PasswordInput } from '../../components/password-input';
 import { useAuth } from '../../context/auth-context';
 import { authRedirectUrl } from '../../lib/supabase';
+import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
 
 export function SignInScreen({ onBack }: { onBack: () => void }) {
   const {
@@ -25,6 +26,7 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
   if (needsPasswordReset) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <GlobalRecruiterBanner />
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.container}>
             <Text style={styles.title}>Set a new password</Text>
@@ -82,8 +84,9 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.container}>
+      <GlobalRecruiterBanner />
+      <ScrollView contentContainerStyle={styles.signInScrollContent}>
+        <View style={[styles.container, styles.centeredContainer]}>
           <Text style={styles.title}>Sign in</Text>
           <Text style={styles.body}>Sign in with your email address and password.</Text>
 
@@ -232,9 +235,17 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 24,
   },
+  signInScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingBottom: 24,
+  },
   title: {
     color: '#0F172A',
     fontSize: 22,
     fontWeight: '700',
+  },
+  centeredContainer: {
+    justifyContent: 'center',
   },
 });

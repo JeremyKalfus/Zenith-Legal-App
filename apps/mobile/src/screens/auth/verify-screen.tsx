@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
 import { useSendCooldown } from '../../hooks/use-send-cooldown';
+import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
 
 export function VerifyScreen() {
   const {
@@ -58,6 +59,7 @@ export function VerifyScreen() {
   if (!intakeDraft) {
     return (
       <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <GlobalRecruiterBanner />
         <View style={styles.container}>
           <Text style={styles.title}>Missing intake data.</Text>
         </View>
@@ -67,6 +69,7 @@ export function VerifyScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <GlobalRecruiterBanner />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.container}>
           <Text style={styles.title}>Verify your identity</Text>

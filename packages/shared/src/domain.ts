@@ -36,6 +36,7 @@ export type PracticeArea = (typeof PRACTICE_AREAS)[number];
 
 export const FIRM_STATUSES = [
   'Waiting on your authorization to contact/submit',
+  'Authorized, will submit soon',
   'Submitted, waiting to hear from firm',
   'Interview Stage',
   'Rejected by firm',

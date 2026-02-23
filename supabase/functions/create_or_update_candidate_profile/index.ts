@@ -158,24 +158,47 @@ Deno.serve(async (request) => {
       return errorResponse(upsertPreferences.error.message, 400);
     }
 
-    const upsertConsents = await client.from('candidate_consents').upsert(
-      {
-        user_id: userId,
-        privacy_policy_accepted: intake.acceptedPrivacyPolicy,
-        privacy_policy_accepted_at: intake.acceptedPrivacyPolicy ? consentAcceptedAt : null,
-        privacy_policy_version: intake.acceptedPrivacyPolicy ? PRIVACY_POLICY_VERSION : null,
-        communication_consent_accepted: intake.acceptedCommunicationConsent,
-        communication_consent_accepted_at: intake.acceptedCommunicationConsent ? consentAcceptedAt : null,
-        communication_consent_version: intake.acceptedCommunicationConsent
-          ? COMMUNICATION_CONSENT_VERSION
-          : null,
-        source: 'mobile_app',
-      },
-      { onConflict: 'user_id' },
-    );
+    const { data: existingConsents, error: existingConsentsError } = await client
+      .from('candidate_consents')
+      .select(
+        'privacy_policy_accepted,privacy_policy_version,communication_consent_accepted,communication_consent_version',
+      )
+      .eq('user_id', userId)
+      .maybeSingle();
 
-    if (upsertConsents.error) {
-      return errorResponse(upsertConsents.error.message, 400);
+    if (existingConsentsError) {
+      return errorResponse(existingConsentsError.message, 400);
+    }
+
+    const shouldUpsertConsents =
+      !existingConsents ||
+      existingConsents.privacy_policy_accepted !== intake.acceptedPrivacyPolicy ||
+      existingConsents.communication_consent_accepted !== intake.acceptedCommunicationConsent ||
+      (intake.acceptedPrivacyPolicy && !existingConsents.privacy_policy_version) ||
+      (intake.acceptedCommunicationConsent && !existingConsents.communication_consent_version);
+
+    if (shouldUpsertConsents) {
+      const upsertConsents = await client.from('candidate_consents').upsert(
+        {
+          user_id: userId,
+          privacy_policy_accepted: intake.acceptedPrivacyPolicy,
+          privacy_policy_accepted_at: intake.acceptedPrivacyPolicy ? consentAcceptedAt : null,
+          privacy_policy_version: intake.acceptedPrivacyPolicy ? PRIVACY_POLICY_VERSION : null,
+          communication_consent_accepted: intake.acceptedCommunicationConsent,
+          communication_consent_accepted_at: intake.acceptedCommunicationConsent
+            ? consentAcceptedAt
+            : null,
+          communication_consent_version: intake.acceptedCommunicationConsent
+            ? COMMUNICATION_CONSENT_VERSION
+            : null,
+          source: 'mobile_app',
+        },
+        { onConflict: 'user_id' },
+      );
+
+      if (upsertConsents.error) {
+        return errorResponse(upsertConsents.error.message, 400);
+      }
     }
 
     await writeAuditEvent({

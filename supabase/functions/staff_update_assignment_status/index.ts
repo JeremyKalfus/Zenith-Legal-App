@@ -5,6 +5,7 @@ import { writeAuditEvent } from '../_shared/audit.ts';
 
 const FIRM_STATUSES = [
   'Waiting on your authorization to contact/submit',
+  'Authorized, will submit soon',
   'Submitted, waiting to hear from firm',
   'Interview Stage',
   'Rejected by firm',
