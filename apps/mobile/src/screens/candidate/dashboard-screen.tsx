@@ -6,11 +6,35 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/auth-context';
 import type { CandidateFirmAssignment } from '../../types/domain';
 
-function extractFunctionInvokeErrorMessage(error: unknown, data: unknown): string {
+async function extractFunctionInvokeErrorMessage(error: unknown, data: unknown): Promise<string> {
   if (typeof data === 'object' && data && 'error' in data) {
     const message = (data as { error?: unknown }).error;
     if (typeof message === 'string' && message.trim()) {
       return message;
+    }
+  }
+
+  if (typeof error === 'object' && error && 'context' in error) {
+    const context = (error as { context?: unknown }).context;
+    if (context instanceof Response) {
+      try {
+        const json = (await context.clone().json()) as { error?: unknown; message?: unknown };
+        if (typeof json.error === 'string' && json.error.trim()) {
+          return json.error;
+        }
+        if (typeof json.message === 'string' && json.message.trim()) {
+          return json.message;
+        }
+      } catch {
+        try {
+          const text = await context.clone().text();
+          if (text.trim()) {
+            return text;
+          }
+        } catch {
+          // Fall through.
+        }
+      }
     }
   }
 
@@ -102,7 +126,7 @@ export function DashboardScreen({
         });
 
         if (error) {
-          throw new Error(extractFunctionInvokeErrorMessage(error, data));
+          throw new Error(await extractFunctionInvokeErrorMessage(error, data));
         }
 
         await loadAssignments();
