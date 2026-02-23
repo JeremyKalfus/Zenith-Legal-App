@@ -143,7 +143,7 @@ export function IntakeScreen({
             <Text style={styles.helper}>US numbers can be entered without +1.</Text>
           ) : null}
 
-          <Text style={styles.label}>Preferred Cities (optional)</Text>
+          <Text style={styles.label}>Preferred Cities (choose 0-3)</Text>
           <View style={styles.wrap}>
             {CITY_OPTIONS.map((city) => {
               const selected = selectedCities.includes(city);
@@ -181,7 +181,7 @@ export function IntakeScreen({
             <Text style={styles.error}>{errors.otherCityText.message}</Text>
           ) : null}
 
-          <Text style={styles.label}>Practice Area (optional)</Text>
+          <Text style={styles.label}>Practice Area (choose 0-3)</Text>
           <Controller
             control={control}
             name="practiceArea"
