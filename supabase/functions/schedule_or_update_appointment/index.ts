@@ -1,6 +1,6 @@
 import { z } from 'npm:zod@4.3.6';
 import { errorResponse, jsonResponse } from '../_shared/http.ts';
-import { createServiceClient, getCurrentUserId } from '../_shared/supabase.ts';
+import { createAuthedClient, createServiceClient, getCurrentUserId } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
 
 const appointmentSchema = z
@@ -42,83 +42,9 @@ const appointmentSchema = z
 
 const schema = appointmentSchema.extend({
   id: z.string().uuid().optional(),
-  status: z.enum(['requested', 'accepted', 'declined', 'cancelled']).optional(),
+  candidateUserId: z.string().uuid().optional(),
+  status: z.enum(['scheduled', 'cancelled']).optional(),
 });
-
-type AppointmentStatus = 'requested' | 'accepted' | 'declined' | 'cancelled';
-
-type AppointmentRow = {
-  id: string;
-  candidate_user_id: string;
-  created_by_user_id: string;
-  title: string;
-  description: string | null;
-  modality: 'virtual' | 'in_person';
-  location_text: string | null;
-  video_url: string | null;
-  start_at_utc: string;
-  end_at_utc: string;
-  timezone_label: string;
-  status: AppointmentStatus;
-};
-
-function toAuthErrorResponse(error: Error): Response {
-  if (error.message === 'Unauthorized') {
-    return errorResponse('Unauthorized', 401);
-  }
-  if (error.message.startsWith('Forbidden')) {
-    return errorResponse(error.message, 403);
-  }
-  return errorResponse(error.message, 500);
-}
-
-async function getUserRole(serviceClient: ReturnType<typeof createServiceClient>, userId: string) {
-  const { data, error } = await serviceClient
-    .from('users_profile')
-    .select('role')
-    .eq('id', userId)
-    .single();
-
-  if (error || !data) {
-    throw new Error('Unauthorized');
-  }
-
-  return data.role as 'candidate' | 'staff';
-}
-
-async function findAcceptedConflict(params: {
-  serviceClient: ReturnType<typeof createServiceClient>;
-  candidateUserId: string;
-  appointmentId?: string;
-  startAtUtc: string;
-  endAtUtc: string;
-}) {
-  const { data, error } = await params.serviceClient
-    .from('appointments')
-    .select('id')
-    .eq('candidate_user_id', params.candidateUserId)
-    .eq('status', 'accepted')
-    .neq('id', params.appointmentId ?? '00000000-0000-0000-0000-000000000000')
-    .lt('start_at_utc', params.endAtUtc)
-    .gt('end_at_utc', params.startAtUtc)
-    .limit(1);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
-  return (data?.length ?? 0) > 0;
-}
-
-function participantRows(appointmentId: string, userId: string) {
-  return [
-    {
-      appointment_id: appointmentId,
-      user_id: userId,
-      participant_type: 'candidate',
-    },
-  ];
-}
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -128,59 +54,33 @@ Deno.serve(async (request) => {
   try {
     const authHeader = request.headers.get('Authorization');
     const userId = await getCurrentUserId(authHeader);
+    const client = createAuthedClient(authHeader);
     const serviceClient = createServiceClient();
     const payload = schema.parse(await request.json());
 
-    const role = await getUserRole(serviceClient, userId);
-    if (role !== 'candidate') {
-      return errorResponse('Forbidden: only candidates can request appointments', 403);
+    const candidateUserId = payload.candidateUserId ?? userId;
+
+    const { data: conflicts, error: conflictError } = await client
+      .from('appointments')
+      .select('id,start_at_utc,end_at_utc')
+      .eq('candidate_user_id', candidateUserId)
+      .neq('status', 'cancelled')
+      .neq('id', payload.id ?? '00000000-0000-0000-0000-000000000000')
+      .lt('start_at_utc', payload.endAtUtc)
+      .gt('end_at_utc', payload.startAtUtc)
+      .limit(1);
+
+    if (conflictError) {
+      return errorResponse(conflictError.message, 400);
     }
 
-    if (payload.status === 'accepted' || payload.status === 'declined') {
-      return errorResponse('Candidates cannot set accepted/declined appointment status', 403);
-    }
-
-    let beforeAppointment: AppointmentRow | null = null;
-
-    if (payload.id) {
-      const { data, error } = await serviceClient
-        .from('appointments')
-        .select('*')
-        .eq('id', payload.id)
-        .single();
-
-      if (error || !data) {
-        return errorResponse(error?.message ?? 'Appointment not found', 404);
-      }
-
-      beforeAppointment = data as AppointmentRow;
-      if (beforeAppointment.candidate_user_id !== userId) {
-        return errorResponse('Forbidden: not your appointment', 403);
-      }
-    }
-
-    const nextStatus: AppointmentStatus = payload.id
-      ? payload.status === 'cancelled'
-        ? 'cancelled'
-        : (beforeAppointment?.status ?? 'requested')
-      : 'requested';
-
-    if (nextStatus !== 'cancelled') {
-      const hasConflict = await findAcceptedConflict({
-        serviceClient,
-        candidateUserId: userId,
-        appointmentId: payload.id,
-        startAtUtc: payload.startAtUtc,
-        endAtUtc: payload.endAtUtc,
-      });
-
-      if (hasConflict) {
-        return errorResponse('Appointment conflict detected', 409);
-      }
+    if (conflicts && conflicts.length > 0) {
+      return errorResponse('Appointment conflict detected', 409);
     }
 
     const dbPayload = {
-      candidate_user_id: userId,
+      candidate_user_id: candidateUserId,
+      created_by_user_id: userId,
       title: payload.title,
       description: payload.description ?? null,
       modality: payload.modality,
@@ -189,62 +89,62 @@ Deno.serve(async (request) => {
       start_at_utc: payload.startAtUtc,
       end_at_utc: payload.endAtUtc,
       timezone_label: payload.timezoneLabel,
-      status: nextStatus,
+      status: payload.status ?? 'scheduled',
     };
 
     let appointmentResult;
 
     if (payload.id) {
-      appointmentResult = await serviceClient
+      appointmentResult = await client
         .from('appointments')
         .update(dbPayload)
         .eq('id', payload.id)
         .select('*')
         .single();
     } else {
-      appointmentResult = await serviceClient
+      appointmentResult = await client
         .from('appointments')
-        .insert({
-          ...dbPayload,
-          created_by_user_id: userId,
-        })
+        .insert(dbPayload)
         .select('*')
         .single();
     }
 
     if (appointmentResult.error || !appointmentResult.data) {
-      const message = appointmentResult.error?.message ?? 'Unable to save appointment';
-      const status = message.toLowerCase().includes('overlap') ? 409 : 400;
-      return errorResponse(message, status);
+      return errorResponse(appointmentResult.error?.message ?? 'Unable to save appointment', 400);
     }
 
-    const appointment = appointmentResult.data as AppointmentRow;
+    const appointment = appointmentResult.data;
 
-    await serviceClient
-      .from('appointment_participants')
-      .upsert(participantRows(appointment.id, userId), { onConflict: 'appointment_id,user_id' });
-
-    const eventType =
-      payload.id && appointment.status === 'cancelled'
-        ? 'appointment.cancelled'
-        : payload.id
-          ? 'appointment.updated'
-          : 'appointment.created';
+    await client.from('appointment_participants').upsert(
+      [
+        {
+          appointment_id: appointment.id,
+          user_id: candidateUserId,
+          participant_type: 'candidate',
+        },
+        {
+          appointment_id: appointment.id,
+          user_id: userId,
+          participant_type: userId === candidateUserId ? 'candidate' : 'staff',
+        },
+      ],
+      { onConflict: 'appointment_id,user_id' },
+    );
 
     await serviceClient.from('notification_deliveries').insert([
       {
-        user_id: userId,
+        user_id: candidateUserId,
         channel: 'push',
-        event_type: eventType,
+        event_type: payload.id ? 'appointment.updated' : 'appointment.created',
         payload: {
           appointment_id: appointment.id,
         },
         status: 'queued',
       },
       {
-        user_id: userId,
+        user_id: candidateUserId,
         channel: 'email',
-        event_type: eventType,
+        event_type: payload.id ? 'appointment.updated' : 'appointment.created',
         payload: {
           appointment_id: appointment.id,
         },
@@ -255,20 +155,14 @@ Deno.serve(async (request) => {
     await writeAuditEvent({
       client: serviceClient,
       actorUserId: userId,
-      action:
-        payload.id && appointment.status === 'cancelled'
-          ? 'cancel_appointment'
-          : payload.id
-            ? 'update_appointment'
-            : 'create_appointment',
+      action: payload.id ? 'update_appointment' : 'create_appointment',
       entityType: 'appointments',
       entityId: appointment.id,
-      beforeJson: (beforeAppointment as unknown as Record<string, unknown> | null) ?? null,
-      afterJson: appointment as unknown as Record<string, unknown>,
+      afterJson: appointment,
     });
 
     return jsonResponse({ success: true, appointment });
   } catch (error) {
-    return toAuthErrorResponse(error as Error);
+    return errorResponse((error as Error).message, 500);
   }
 });
