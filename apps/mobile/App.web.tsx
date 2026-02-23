@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { Platform, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { AuthProvider } from './src/context/auth-context';
 import { RecruiterContactProvider } from './src/context/recruiter-contact-context';
 import { assertRequiredEnv } from './src/config/env';
@@ -8,38 +8,32 @@ import { RootNavigator } from './src/navigation/root-navigator';
 assertRequiredEnv();
 
 export default function App() {
-  const appContent = (
-    <AuthProvider>
-      <RecruiterContactProvider>
-        <RootNavigator />
-        <StatusBar style="dark" />
-      </RecruiterContactProvider>
-    </AuthProvider>
-  );
-
-  if (Platform.OS === 'web') {
-    return (
-      <View style={styles.webPage}>
-        <View style={styles.webFrame}>{appContent}</View>
+  return (
+    <View style={styles.page}>
+      <View style={styles.frame}>
+        <AuthProvider>
+          <RecruiterContactProvider>
+            <RootNavigator />
+            <StatusBar style="dark" />
+          </RecruiterContactProvider>
+        </AuthProvider>
       </View>
-    );
-  }
-
-  return appContent;
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
-  webFrame: {
+  frame: {
     backgroundColor: '#F8FAFC',
     borderColor: '#CBD5E1',
     borderRadius: 16,
     borderWidth: 1,
     flex: 1,
-    maxWidth: 1100,
+    maxWidth: 1040,
     overflow: 'hidden',
     width: '67%',
   },
-  webPage: {
+  page: {
     alignItems: 'center',
     backgroundColor: '#E2E8F0',
     flex: 1,

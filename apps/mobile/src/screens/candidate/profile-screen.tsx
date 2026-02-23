@@ -15,7 +15,7 @@ import { ScreenShell } from '../../components/screen-shell';
 import { useAuth } from '../../context/auth-context';
 
 type CandidateProfileFormValues = z.input<typeof candidateIntakeSchema>;
-const COLLAPSED_BUBBLE_ROWS_HEIGHT = 84;
+const COLLAPSED_BUBBLE_ROWS_HEIGHT = 34;
 
 function MultiSelectOption({
   label,
@@ -77,7 +77,7 @@ export function ProfileScreen() {
       practiceArea: undefined,
       otherPracticeText: '',
       acceptedPrivacyPolicy: false,
-      acceptedCommunicationConsent: false,
+      acceptedCommunicationConsent: true,
     },
   });
 
@@ -95,7 +95,7 @@ export function ProfileScreen() {
       practiceArea: profile.practiceArea ?? undefined,
       otherPracticeText: profile.otherPracticeText ?? '',
       acceptedPrivacyPolicy: profile.acceptedPrivacyPolicy,
-      acceptedCommunicationConsent: profile.acceptedCommunicationConsent,
+      acceptedCommunicationConsent: true,
     });
     setMessage('');
     setEmailDraft(profile.email);
@@ -294,21 +294,6 @@ export function ProfileScreen() {
             />
             {errors.acceptedPrivacyPolicy ? (
               <Text style={styles.error}>{errors.acceptedPrivacyPolicy.message}</Text>
-            ) : null}
-
-            <Controller
-              control={control}
-              name="acceptedCommunicationConsent"
-              render={({ field }) => (
-                <Pressable onPress={() => field.onChange(!field.value)}>
-                  <Text style={styles.checkbox}>
-                    {field.value ? '☑' : '☐'} I consent to app/email communications (required)
-                  </Text>
-                </Pressable>
-              )}
-            />
-            {errors.acceptedCommunicationConsent ? (
-              <Text style={styles.error}>{errors.acceptedCommunicationConsent.message}</Text>
             ) : null}
 
             <Pressable
