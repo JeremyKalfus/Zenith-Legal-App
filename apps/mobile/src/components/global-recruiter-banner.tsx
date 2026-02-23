@@ -1,6 +1,9 @@
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRecruiterContact } from '../context/recruiter-contact-context';
 
+const ZENITH_RECRUITER_PHONE_DISPLAY = '(202) 486-3535';
+const ZENITH_RECRUITER_PHONE_DIAL = '+12024863535';
+
 function toDialablePhone(phone: string): string {
   const trimmed = phone.trim();
   const digits = trimmed.replace(/\D/g, '');
@@ -23,7 +26,7 @@ function toDialablePhone(phone: string): string {
 
 export function GlobalRecruiterBanner() {
   const { contact } = useRecruiterContact();
-  const dialablePhone = toDialablePhone(contact.phone);
+  const dialablePhone = ZENITH_RECRUITER_PHONE_DIAL || toDialablePhone(contact.phone);
 
   return (
     <View style={styles.container} accessibilityRole="header">
@@ -33,7 +36,7 @@ export function GlobalRecruiterBanner() {
           accessibilityRole="link"
           onPress={() => Linking.openURL(`tel:${dialablePhone}`)}
         >
-          <Text style={styles.link}>{contact.phone}</Text>
+          <Text style={styles.link}>{ZENITH_RECRUITER_PHONE_DISPLAY}</Text>
         </Pressable>
         <Pressable
           accessibilityRole="link"

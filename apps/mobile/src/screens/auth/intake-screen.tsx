@@ -112,7 +112,7 @@ export function IntakeScreen({
           />
           {errors.email ? <Text style={styles.error}>{errors.email.message}</Text> : null}
           <Text style={styles.disclaimerInline}>
-            We won't spam you. We only use your email for account access and recruiting-related
+            We won{"'"}t spam you. We only use your email for account access and recruiting-related
             communication.
           </Text>
 
