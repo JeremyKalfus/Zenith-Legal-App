@@ -48,6 +48,10 @@ function normalizeFirmRelation(
   return Array.isArray(relation) ? (relation[0] ?? null) : relation;
 }
 
+function isTrackedFirmStatus(value: unknown): value is FirmStatus {
+  return typeof value === 'string' && FIRM_STATUSES.includes(value as FirmStatus);
+}
+
 export async function listStaffCandidates(): Promise<StaffCandidateListItem[]> {
   const { data, error } = await supabase
     .from('users_profile')
@@ -83,29 +87,34 @@ export async function listCandidateAssignments(
     .from('candidate_firm_assignments')
     .select('id,candidate_user_id,firm_id,status_enum,status_updated_at,firms(id,name)')
     .eq('candidate_user_id', candidateId)
-    .in('status_enum', [...FIRM_STATUSES])
     .order('status_updated_at', { ascending: false });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as Record<string, unknown>[]).map((row) => {
-    const firm = normalizeFirmRelation(
-      row.firms as { id: string; name: string }[] | { id: string; name: string } | null,
-    );
-    return {
-      id: String(row.id),
-      candidate_user_id: String(row.candidate_user_id),
-      firm_id: String(row.firm_id),
-      status_enum: row.status_enum as FirmStatus,
-      status_updated_at: String(row.status_updated_at),
-      firm: {
-        id: firm?.id ?? '',
-        name: firm?.name ?? 'Unknown Firm',
-      },
-    };
-  });
+  return ((data ?? []) as Record<string, unknown>[])
+    .flatMap((row) => {
+      const status = row.status_enum;
+      if (!isTrackedFirmStatus(status)) {
+        return [];
+      }
+
+      const firm = normalizeFirmRelation(
+        row.firms as { id: string; name: string }[] | { id: string; name: string } | null,
+      );
+      return [{
+        id: String(row.id),
+        candidate_user_id: String(row.candidate_user_id),
+        firm_id: String(row.firm_id),
+        status_enum: status,
+        status_updated_at: String(row.status_updated_at),
+        firm: {
+          id: firm?.id ?? '',
+          name: firm?.name ?? 'Unknown Firm',
+        },
+      }];
+    });
 }
 
 async function getFunctionErrorMessage(error: unknown): Promise<string> {

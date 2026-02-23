@@ -21,6 +21,10 @@ function extractFunctionInvokeErrorMessage(error: unknown, data: unknown): strin
   return 'Unable to update authorization. Please try again.';
 }
 
+function isTrackedFirmStatus(value: unknown): value is CandidateFirmAssignment['status_enum'] {
+  return typeof value === 'string' && FIRM_STATUSES.includes(value as (typeof FIRM_STATUSES)[number]);
+}
+
 const statusRank = Object.fromEntries(
   FIRM_STATUSES.map((status, index) => [status, index]),
 ) as Record<string, number>;
@@ -44,32 +48,37 @@ export function DashboardScreen({
       .from('candidate_firm_assignments')
       .select('id,firm_id,status_enum,status_updated_at,firms(id,name)')
       .eq('candidate_user_id', session.user.id)
-      .in('status_enum', [...FIRM_STATUSES]);
+      .order('status_updated_at', { ascending: false });
 
     if (error) {
       setMessage(error.message);
       return;
     }
 
-    const normalized: CandidateFirmAssignment[] = ((data ??
-      []) as Record<string, unknown>[]).map((row) => {
-      const firmRelation = row.firms as
-        | { id: string; name: string }[]
-        | { id: string; name: string }
-        | null;
-      const firm = Array.isArray(firmRelation) ? firmRelation[0] : firmRelation;
+    const normalized: CandidateFirmAssignment[] = ((data ?? []) as Record<string, unknown>[])
+      .flatMap((row) => {
+        const status = row.status_enum;
+        if (!isTrackedFirmStatus(status)) {
+          return [];
+        }
 
-      return {
-        id: String(row.id),
-        firm_id: String(row.firm_id),
-        status_enum: row.status_enum as CandidateFirmAssignment['status_enum'],
-        status_updated_at: String(row.status_updated_at),
-        firms: {
-          id: firm?.id ?? '',
-          name: firm?.name ?? 'Unknown Firm',
-        },
-      };
-    });
+        const firmRelation = row.firms as
+          | { id: string; name: string }[]
+          | { id: string; name: string }
+          | null;
+        const firm = Array.isArray(firmRelation) ? firmRelation[0] : firmRelation;
+
+        return [{
+          id: String(row.id),
+          firm_id: String(row.firm_id),
+          status_enum: status,
+          status_updated_at: String(row.status_updated_at),
+          firms: {
+            id: firm?.id ?? '',
+            name: firm?.name ?? 'Unknown Firm',
+          },
+        }];
+      });
 
     setAssignments(normalized);
     setMessage('');
