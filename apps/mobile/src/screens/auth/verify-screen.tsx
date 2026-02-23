@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
 import { useSendCooldown } from '../../hooks/use-send-cooldown';
@@ -58,20 +58,29 @@ export function VerifyScreen() {
 
   if (!intakeDraft) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        <GlobalRecruiterBanner />
-        <View style={styles.container}>
-          <Text style={styles.title}>Missing intake data.</Text>
+      <SafeAreaView
+        style={[styles.safeArea, Platform.OS === 'web' ? styles.safeAreaWeb : null]}
+        edges={['top', 'bottom']}
+      >
+        <View style={Platform.OS === 'web' ? styles.webFrame : undefined}>
+          <GlobalRecruiterBanner />
+          <View style={styles.container}>
+            <Text style={styles.title}>Missing intake data.</Text>
+          </View>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <GlobalRecruiterBanner />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.container}>
+    <SafeAreaView
+      style={[styles.safeArea, Platform.OS === 'web' ? styles.safeAreaWeb : null]}
+      edges={['top', 'bottom']}
+    >
+      <View style={Platform.OS === 'web' ? styles.webFrame : undefined}>
+        <GlobalRecruiterBanner />
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.container}>
           <Text style={styles.title}>Verify your identity</Text>
           <Text style={styles.body}>
             Use email magic link or SMS OTP. You only need one method.
@@ -185,8 +194,9 @@ export function VerifyScreen() {
           </Pressable>
 
           {message ? <Text style={styles.message}>{message}</Text> : null}
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -243,6 +253,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     flex: 1,
   },
+  safeAreaWeb: {
+    alignItems: 'center',
+  },
   scrollContent: {
     paddingBottom: 24,
   },
@@ -271,5 +284,17 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     fontSize: 22,
     fontWeight: '700',
+  },
+  webFrame: {
+    alignSelf: 'center',
+    backgroundColor: '#F8FAFC',
+    borderColor: '#CBD5E1',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    maxWidth: 1100,
+    overflow: 'hidden',
+    width: '67%',
   },
 });

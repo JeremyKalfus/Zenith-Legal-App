@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PasswordInput } from '../../components/password-input';
 import { useAuth } from '../../context/auth-context';
@@ -25,10 +25,14 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
 
   if (needsPasswordReset) {
     return (
-      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-        <GlobalRecruiterBanner />
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <View style={styles.container}>
+      <SafeAreaView
+        style={[styles.safeArea, Platform.OS === 'web' ? styles.safeAreaWeb : null]}
+        edges={['top', 'bottom']}
+      >
+        <View style={Platform.OS === 'web' ? styles.webFrame : undefined}>
+          <GlobalRecruiterBanner />
+          <ScrollView contentContainerStyle={styles.scrollContent}>
+            <View style={styles.container}>
             <Text style={styles.title}>Set a new password</Text>
             <Text style={styles.body}>
               Your reset link is valid. Enter a new password to continue.
@@ -76,17 +80,22 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
             </Pressable>
 
             {message ? <Text style={styles.message}>{message}</Text> : null}
-          </View>
-        </ScrollView>
+            </View>
+          </ScrollView>
+        </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <GlobalRecruiterBanner />
-      <ScrollView contentContainerStyle={styles.signInScrollContent}>
-        <View style={[styles.container, styles.centeredContainer]}>
+    <SafeAreaView
+      style={[styles.safeArea, Platform.OS === 'web' ? styles.safeAreaWeb : null]}
+      edges={['top', 'bottom']}
+    >
+      <View style={Platform.OS === 'web' ? styles.webFrame : undefined}>
+        <GlobalRecruiterBanner />
+        <ScrollView contentContainerStyle={styles.signInScrollContent}>
+          <View style={[styles.container, styles.centeredContainer]}>
           <Text style={styles.title}>Sign in</Text>
           <Text style={styles.body}>Sign in with your email address and password.</Text>
 
@@ -169,8 +178,9 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
           <Pressable onPress={onBack} style={styles.linkButton}>
             <Text style={styles.linkText}>New candidate? Start intake</Text>
           </Pressable>
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -232,6 +242,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     flex: 1,
   },
+  safeAreaWeb: {
+    alignItems: 'center',
+  },
   scrollContent: {
     paddingBottom: 24,
   },
@@ -244,6 +257,18 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     fontSize: 22,
     fontWeight: '700',
+  },
+  webFrame: {
+    alignSelf: 'center',
+    backgroundColor: '#F8FAFC',
+    borderColor: '#CBD5E1',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    maxWidth: 1100,
+    overflow: 'hidden',
+    width: '67%',
   },
   centeredContainer: {
     justifyContent: 'center',

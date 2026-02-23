@@ -15,6 +15,7 @@ import { ScreenShell } from '../../components/screen-shell';
 import { useAuth } from '../../context/auth-context';
 
 type CandidateProfileFormValues = z.input<typeof candidateIntakeSchema>;
+const COLLAPSED_BUBBLE_ROWS_HEIGHT = 34;
 
 function MultiSelectOption({
   label,
@@ -55,6 +56,8 @@ export function ProfileScreen() {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState('');
+  const [showAllCities, setShowAllCities] = useState(false);
+  const [showAllPracticeAreas, setShowAllPracticeAreas] = useState(false);
 
   const {
     control,
@@ -74,7 +77,7 @@ export function ProfileScreen() {
       practiceArea: undefined,
       otherPracticeText: '',
       acceptedPrivacyPolicy: false,
-      acceptedCommunicationConsent: false,
+      acceptedCommunicationConsent: true,
     },
   });
 
@@ -92,7 +95,7 @@ export function ProfileScreen() {
       practiceArea: profile.practiceArea ?? undefined,
       otherPracticeText: profile.otherPracticeText ?? '',
       acceptedPrivacyPolicy: profile.acceptedPrivacyPolicy,
-      acceptedCommunicationConsent: profile.acceptedCommunicationConsent,
+      acceptedCommunicationConsent: true,
     });
     setMessage('');
     setEmailDraft(profile.email);
@@ -194,8 +197,8 @@ export function ProfileScreen() {
               <Text style={styles.helper}>US numbers can be entered without +1.</Text>
             ) : null}
 
-            <Text style={styles.label}>Preferred Cities (optional)</Text>
-            <View style={styles.wrap}>
+            <Text style={styles.label}>Preferred Cities (choose 0-3)</Text>
+            <View style={[styles.wrap, !showAllCities && styles.wrapCollapsed]}>
               {CITY_OPTIONS.map((city) => {
                 const selected = selectedCities.includes(city);
                 return (
@@ -213,6 +216,9 @@ export function ProfileScreen() {
                 );
               })}
             </View>
+            <Pressable style={styles.expandButton} onPress={() => setShowAllCities((value) => !value)}>
+              <Text style={styles.expandButtonText}>{showAllCities ? 'Show less' : 'See more'}</Text>
+            </Pressable>
 
             {selectedCities.includes('Other') ? (
               <Controller
@@ -230,12 +236,12 @@ export function ProfileScreen() {
             ) : null}
             {errors.otherCityText ? <Text style={styles.error}>{errors.otherCityText.message}</Text> : null}
 
-            <Text style={styles.label}>Practice Area (optional)</Text>
+            <Text style={styles.label}>Practice Area (choose 0-3)</Text>
             <Controller
               control={control}
               name="practiceArea"
               render={({ field }) => (
-                <View style={styles.wrap}>
+                <View style={[styles.wrap, !showAllPracticeAreas && styles.wrapCollapsed]}>
                   {PRACTICE_AREAS.map((area) => (
                     <MultiSelectOption
                       key={area}
@@ -247,6 +253,14 @@ export function ProfileScreen() {
                 </View>
               )}
             />
+            <Pressable
+              style={styles.expandButton}
+              onPress={() => setShowAllPracticeAreas((value) => !value)}
+            >
+              <Text style={styles.expandButtonText}>
+                {showAllPracticeAreas ? 'Show less' : 'See more'}
+              </Text>
+            </Pressable>
             {errors.practiceArea ? <Text style={styles.error}>{errors.practiceArea.message}</Text> : null}
 
             {selectedPractice === 'Other' ? (
@@ -280,21 +294,6 @@ export function ProfileScreen() {
             />
             {errors.acceptedPrivacyPolicy ? (
               <Text style={styles.error}>{errors.acceptedPrivacyPolicy.message}</Text>
-            ) : null}
-
-            <Controller
-              control={control}
-              name="acceptedCommunicationConsent"
-              render={({ field }) => (
-                <Pressable onPress={() => field.onChange(!field.value)}>
-                  <Text style={styles.checkbox}>
-                    {field.value ? '☑' : '☐'} I consent to app/email communications (required)
-                  </Text>
-                </Pressable>
-              )}
-            />
-            {errors.acceptedCommunicationConsent ? (
-              <Text style={styles.error}>{errors.acceptedCommunicationConsent.message}</Text>
             ) : null}
 
             <Pressable
@@ -427,6 +426,15 @@ const styles = StyleSheet.create({
     color: '#B91C1C',
     fontSize: 12,
   },
+  expandButton: {
+    alignSelf: 'flex-start',
+    marginTop: -4,
+  },
+  expandButtonText: {
+    color: '#0F766E',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   helper: {
     color: '#64748B',
     fontSize: 12,
@@ -531,5 +539,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  wrapCollapsed: {
+    maxHeight: COLLAPSED_BUBBLE_ROWS_HEIGHT,
+    overflow: 'hidden',
   },
 });

@@ -9,13 +9,14 @@ import {
 import { z } from 'zod';
 import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PasswordInput } from '../../components/password-input';
 import { useAuth } from '../../context/auth-context';
 import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
 
 type CandidateRegistrationFormValues = z.input<typeof candidateRegistrationSchema>;
+const COLLAPSED_BUBBLE_ROWS_HEIGHT = 34;
 
 function MultiSelectOption({
   label,
@@ -46,6 +47,8 @@ export function IntakeScreen({
   const { authConfigError, authNotice, clearAuthNotice, registerCandidateWithPassword } = useAuth();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [showAllCities, setShowAllCities] = useState(false);
+  const [showAllPracticeAreas, setShowAllPracticeAreas] = useState(false);
   const {
     control,
     handleSubmit,
@@ -63,7 +66,7 @@ export function IntakeScreen({
       practiceArea: undefined,
       otherPracticeText: '',
       acceptedPrivacyPolicy: false,
-      acceptedCommunicationConsent: false,
+      acceptedCommunicationConsent: true,
       password: '',
       confirmPassword: '',
     },
@@ -73,10 +76,14 @@ export function IntakeScreen({
   const selectedPractice = watch('practiceArea');
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <GlobalRecruiterBanner />
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.container}>
+    <SafeAreaView
+      style={[styles.safeArea, Platform.OS === 'web' ? styles.safeAreaWeb : null]}
+      edges={['top', 'bottom']}
+    >
+      <View style={Platform.OS === 'web' ? styles.webFrame : undefined}>
+        <GlobalRecruiterBanner />
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.container}>
           <Text style={styles.h1}>Welcome to Zenith Legal</Text>
           <Text style={styles.body}>
             Create your account and share your intake details to start.
@@ -143,8 +150,8 @@ export function IntakeScreen({
             <Text style={styles.helper}>US numbers can be entered without +1.</Text>
           ) : null}
 
-          <Text style={styles.label}>Preferred Cities (optional)</Text>
-          <View style={styles.wrap}>
+          <Text style={styles.label}>Preferred Cities (choose 0-3)</Text>
+          <View style={[styles.wrap, !showAllCities && styles.wrapCollapsed]}>
             {CITY_OPTIONS.map((city) => {
               const selected = selectedCities.includes(city);
               return (
@@ -162,6 +169,9 @@ export function IntakeScreen({
               );
             })}
           </View>
+          <Pressable style={styles.expandButton} onPress={() => setShowAllCities((value) => !value)}>
+            <Text style={styles.expandButtonText}>{showAllCities ? 'Show less' : 'See more'}</Text>
+          </Pressable>
 
           {selectedCities.includes('Other') ? (
             <Controller
@@ -181,12 +191,12 @@ export function IntakeScreen({
             <Text style={styles.error}>{errors.otherCityText.message}</Text>
           ) : null}
 
-          <Text style={styles.label}>Practice Area (optional)</Text>
+          <Text style={styles.label}>Practice Area (choose 0-3)</Text>
           <Controller
             control={control}
             name="practiceArea"
             render={({ field }) => (
-              <View style={styles.wrap}>
+              <View style={[styles.wrap, !showAllPracticeAreas && styles.wrapCollapsed]}>
                 {PRACTICE_AREAS.map((area) => (
                   <MultiSelectOption
                     key={area}
@@ -198,6 +208,14 @@ export function IntakeScreen({
               </View>
             )}
           />
+          <Pressable
+            style={styles.expandButton}
+            onPress={() => setShowAllPracticeAreas((value) => !value)}
+          >
+            <Text style={styles.expandButtonText}>
+              {showAllPracticeAreas ? 'Show less' : 'See more'}
+            </Text>
+          </Pressable>
           {errors.practiceArea ? (
             <Text style={styles.error}>{errors.practiceArea.message}</Text>
           ) : null}
@@ -224,9 +242,10 @@ export function IntakeScreen({
           <View style={styles.disclaimerCard}>
             <Text style={styles.disclaimerTitle}>Confidentiality & Encryption</Text>
             <Text style={styles.disclaimerBody}>
-              All information you share with Zenith Legal is treated as 100% confidential. Your
-              data is encrypted in transit via HTTPS/TLS and encrypted at rest with AES-256
-              through Supabase.
+              We promise 100% confidentiality. We don{"'"}t spam, we don{"'"}t sell your data, our
+              app doesn{"'"}t track any data you don{"'"}t explicitly provide. We collect minimal
+              contact data so we can stay in touch and your contact info is encrypted during
+              transmission and in our database.
             </Text>
           </View>
 
@@ -243,21 +262,6 @@ export function IntakeScreen({
           />
           {errors.acceptedPrivacyPolicy ? (
             <Text style={styles.error}>{errors.acceptedPrivacyPolicy.message}</Text>
-          ) : null}
-
-          <Controller
-            control={control}
-            name="acceptedCommunicationConsent"
-            render={({ field }) => (
-              <Pressable onPress={() => field.onChange(!field.value)}>
-                <Text style={styles.checkbox}>
-                  {field.value ? '☑' : '☐'} I consent to app/email communications
-                </Text>
-              </Pressable>
-            )}
-          />
-          {errors.acceptedCommunicationConsent ? (
-            <Text style={styles.error}>{errors.acceptedCommunicationConsent.message}</Text>
           ) : null}
 
           <Controller
@@ -316,8 +320,9 @@ export function IntakeScreen({
           <Pressable style={styles.linkButton} onPress={onSignIn}>
             <Text style={styles.linkText}>Already have an account? Sign in</Text>
           </Pressable>
-        </View>
-      </ScrollView>
+          </View>
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -338,6 +343,9 @@ const styles = StyleSheet.create({
   safeArea: {
     backgroundColor: '#F8FAFC',
     flex: 1,
+  },
+  safeAreaWeb: {
+    alignItems: 'center',
   },
   scrollContent: {
     paddingBottom: 24,
@@ -384,6 +392,15 @@ const styles = StyleSheet.create({
     color: '#B91C1C',
     fontSize: 12,
     marginTop: -2,
+  },
+  expandButton: {
+    alignSelf: 'flex-start',
+    marginTop: -4,
+  },
+  expandButtonText: {
+    color: '#0F766E',
+    fontSize: 12,
+    fontWeight: '700',
   },
   h1: {
     color: '#0F172A',
@@ -435,5 +452,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  wrapCollapsed: {
+    maxHeight: COLLAPSED_BUBBLE_ROWS_HEIGHT,
+    overflow: 'hidden',
+  },
+  webFrame: {
+    alignSelf: 'center',
+    backgroundColor: '#F8FAFC',
+    borderColor: '#CBD5E1',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    maxWidth: 1100,
+    overflow: 'hidden',
+    width: '67%',
   },
 });
