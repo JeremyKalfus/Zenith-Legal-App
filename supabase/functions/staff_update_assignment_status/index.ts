@@ -5,7 +5,6 @@ import { writeAuditEvent } from '../_shared/audit.ts';
 
 const FIRM_STATUSES = [
   'Waiting on your authorization to contact/submit',
-  'Authorized, will submit soon',
   'Submitted, waiting to hear from firm',
   'Interview Stage',
   'Rejected by firm',
@@ -26,7 +25,12 @@ Deno.serve(async (request) => {
     const authHeader = request.headers.get('Authorization');
     const actorUserId = await assertStaff(authHeader);
     const serviceClient = createServiceClient();
-    const payload = schema.parse(await request.json());
+    const parsed = schema.safeParse(await request.json());
+
+    if (!parsed.success) {
+      return errorResponse('Invalid status update payload', 422, 'invalid_payload');
+    }
+    const payload = parsed.data;
 
     const { data: before, error: beforeError } = await serviceClient
       .from('candidate_firm_assignments')
