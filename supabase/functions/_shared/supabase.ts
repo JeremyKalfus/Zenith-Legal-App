@@ -37,15 +37,27 @@ export function createAuthedClient(authHeader: string | null) {
   });
 }
 
+function extractBearerToken(authHeader: string | null): string {
+  if (!authHeader) {
+    throw new Error('Unauthorized: missing Authorization header');
+  }
+  const token = authHeader.replace(/^Bearer\s+/i, '');
+  if (!token) {
+    throw new Error('Unauthorized: malformed Authorization header');
+  }
+  return token;
+}
+
 export async function getCurrentUserId(authHeader: string | null): Promise<string> {
+  const token = extractBearerToken(authHeader);
   const client = createAuthedClient(authHeader);
   const {
     data: { user },
     error,
-  } = await client.auth.getUser();
+  } = await client.auth.getUser(token);
 
   if (error || !user) {
-    throw new Error('Unauthorized');
+    throw new Error(`Unauthorized: ${error?.message ?? 'user not found'}`);
   }
 
   return user.id;

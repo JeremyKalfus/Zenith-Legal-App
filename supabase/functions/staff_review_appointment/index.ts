@@ -115,7 +115,7 @@ Deno.serve(async (request) => {
     if (message === 'Forbidden: staff access required') {
       return errorResponse(message, 403);
     }
-    if (message === 'Unauthorized') {
+    if (message.startsWith('Unauthorized')) {
       return errorResponse(message, 401);
     }
     return errorResponse(message, 500);

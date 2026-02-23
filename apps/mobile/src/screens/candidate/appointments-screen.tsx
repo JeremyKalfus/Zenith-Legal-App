@@ -5,13 +5,13 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { appointmentSchema, type AppointmentInput, type AppointmentStatus } from '@zenith/shared';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { ScreenShell } from '../../components/screen-shell';
-import { supabase } from '../../lib/supabase';
-import { useAuth } from '../../context/auth-context';
+import { ensureValidSession, supabase } from '../../lib/supabase';
 
 type AppointmentRecord = {
   id: string;
   candidate_user_id: string;
   title: string;
+  description: string | null;
   start_at_utc: string;
   end_at_utc: string;
   modality: 'virtual' | 'in_person';
@@ -42,6 +42,20 @@ function formatTimeLabel(value: string | undefined): string {
     : date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 }
 
+function formatCardDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+  return date.toLocaleString([], {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 function mergeDatePart(baseIso: string, selected: Date): string {
   const next = new Date(baseIso);
   next.setFullYear(selected.getFullYear(), selected.getMonth(), selected.getDate());
@@ -54,6 +68,55 @@ function mergeTimePart(baseIso: string, selected: Date): string {
   return next.toISOString();
 }
 
+async function extractFunctionInvokeErrorMessage(error: unknown, data?: unknown): Promise<string> {
+  let rawMessage = '';
+
+  if (typeof data === 'object' && data && 'error' in data) {
+    const payloadMessage = (data as { error?: unknown }).error;
+    if (typeof payloadMessage === 'string' && payloadMessage.trim()) {
+      rawMessage = payloadMessage;
+    }
+  }
+
+  if (!rawMessage && typeof error === 'object' && error && 'context' in error) {
+    const context = (error as { context?: unknown }).context;
+    if (context instanceof Response) {
+      try {
+        const json = (await context.clone().json()) as { error?: unknown; message?: unknown };
+        if (typeof json.error === 'string' && json.error.trim()) {
+          rawMessage = json.error;
+        } else if (typeof json.message === 'string' && json.message.trim()) {
+          rawMessage = json.message;
+        }
+      } catch {
+        try {
+          const text = await context.clone().text();
+          if (text.trim()) {
+            rawMessage = text;
+          }
+        } catch {
+          // Fall back below.
+        }
+      }
+    }
+  }
+
+  if (!rawMessage && error instanceof Error && error.message.trim()) {
+    rawMessage = error.message;
+  }
+
+  if (!rawMessage) {
+    return 'Request failed';
+  }
+
+  const lower = rawMessage.toLowerCase();
+  if (lower.includes('invalid jwt') || lower.includes('jwt expired')) {
+    return 'Your session has expired. Please sign in again and retry.';
+  }
+
+  return rawMessage;
+}
+
 export function AppointmentsScreen({
   showRecruiterBanner = true,
   mode = 'candidate',
@@ -61,11 +124,11 @@ export function AppointmentsScreen({
   showRecruiterBanner?: boolean;
   mode?: 'candidate' | 'staff';
 }) {
-  const { session } = useAuth();
   const isStaffMode = mode === 'staff';
   const [appointments, setAppointments] = useState<AppointmentRecord[]>([]);
   const [serverMessage, setServerMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [reviewingAppointmentId, setReviewingAppointmentId] = useState<string | null>(null);
   const [reviewingDecision, setReviewingDecision] = useState<'accepted' | 'declined' | null>(null);
   const [pickerState, setPickerState] = useState<PickerState>(null);
@@ -81,7 +144,7 @@ export function AppointmentsScreen({
     resolver: zodResolver(appointmentSchema),
     defaultValues: {
       title: '',
-      description: '',
+      description: undefined,
       modality: 'virtual',
       locationText: '',
       videoUrl: undefined,
@@ -106,7 +169,7 @@ export function AppointmentsScreen({
   const loadAppointments = useCallback(async () => {
     const { data, error } = await supabase
       .from('appointments')
-      .select('id,candidate_user_id,title,start_at_utc,end_at_utc,modality,location_text,video_url,status')
+      .select('id,candidate_user_id,title,description,start_at_utc,end_at_utc,modality,location_text,video_url,status')
       .order('start_at_utc', { ascending: true });
 
     if (error) {
@@ -133,7 +196,7 @@ export function AppointmentsScreen({
       }
 
       const candidateById = new Map(
-        ((candidateProfiles as Array<{ id: string; name: string | null; email: string }> | null) ?? []).map(
+        ((candidateProfiles as { id: string; name: string | null; email: string }[] | null) ?? []).map(
           (candidate) => [candidate.id, candidate],
         ),
       );
@@ -155,86 +218,38 @@ export function AppointmentsScreen({
     setServerMessage('');
   }, [isStaffMode]);
 
-  async function extractFunctionInvokeErrorMessage(error: unknown, data?: unknown): Promise<string> {
-    if (typeof data === 'object' && data && 'error' in data) {
-      const payloadMessage = (data as { error?: unknown }).error;
-      if (typeof payloadMessage === 'string' && payloadMessage.trim()) {
-        return payloadMessage;
-      }
-    }
+  const reviewAppointment = useCallback(
+    async (appointmentId: string, decision: 'accepted' | 'declined') => {
+      setReviewingAppointmentId(appointmentId);
+      setReviewingDecision(decision);
+      setServerMessage('');
 
-    if (typeof error === 'object' && error && 'context' in error) {
-      const context = (error as { context?: unknown }).context;
-      if (context instanceof Response) {
-        try {
-          const json = (await context.clone().json()) as { error?: unknown; message?: unknown };
-          if (typeof json.error === 'string' && json.error.trim()) {
-            return json.error;
-          }
-          if (typeof json.message === 'string' && json.message.trim()) {
-            return json.message;
-          }
-        } catch {
-          try {
-            const text = await context.clone().text();
-            if (text.trim()) {
-              return text;
-            }
-          } catch {
-            // Fall back below.
-          }
-        }
-      }
-    }
-
-    if (error instanceof Error && error.message.trim()) {
-      return error.message;
-    }
-
-    return 'Request failed';
-  }
-
-  const invokeAuthedFunction = useCallback(
-    async (name: string, body: Record<string, unknown>) => {
-      const sessionResult = await supabase.auth.getSession();
-      const currentSession = session ?? sessionResult.data.session;
-      const currentToken = currentSession?.access_token;
-
-      if (!currentToken || !currentToken.includes('.')) {
-        return {
-          data: null,
-          error: new Error('Your session has expired. Please sign in again and retry.'),
-        };
+      try {
+        await ensureValidSession();
+      } catch (e) {
+        setServerMessage((e as Error).message);
+        setReviewingAppointmentId(null);
+        setReviewingDecision(null);
+        return;
       }
 
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError || !userData.user) {
-        if ((userError?.message ?? '').toLowerCase().includes('jwt')) {
-          await supabase.auth.signOut();
-        }
-        return {
-          data: null,
-          error: new Error('Your session is invalid. Please sign in again and retry.'),
-        };
-      }
-
-      const refreshedSession = (await supabase.auth.getSession()).data.session ?? currentSession;
-      const accessToken = refreshedSession?.access_token;
-      if (!accessToken || !accessToken.includes('.')) {
-        return {
-          data: null,
-          error: new Error('Your session is invalid. Please sign in again and retry.'),
-        };
-      }
-
-      return supabase.functions.invoke(name, {
-        body,
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+      const { error, data } = await supabase.functions.invoke('staff_review_appointment', {
+        body: { appointmentId, decision },
       });
+
+      if (error) {
+        setServerMessage(await extractFunctionInvokeErrorMessage(error, data));
+        setReviewingAppointmentId(null);
+        setReviewingDecision(null);
+        return;
+      }
+
+      setServerMessage(decision === 'accepted' ? 'Appointment accepted.' : 'Appointment declined.');
+      setReviewingAppointmentId(null);
+      setReviewingDecision(null);
+      await loadAppointments();
     },
-    [session],
+    [loadAppointments],
   );
 
   const handlePickerChange = useCallback(
@@ -289,32 +304,6 @@ export function AppointmentsScreen({
     return styles.statusPending;
   }
 
-  const reviewAppointment = useCallback(
-    async (appointmentId: string, decision: 'accepted' | 'declined') => {
-      setReviewingAppointmentId(appointmentId);
-      setReviewingDecision(decision);
-      setServerMessage('');
-
-      const { error, data } = await invokeAuthedFunction('staff_review_appointment', {
-        appointmentId,
-        decision,
-      });
-
-      if (error) {
-        setServerMessage(await extractFunctionInvokeErrorMessage(error, data));
-        setReviewingAppointmentId(null);
-        setReviewingDecision(null);
-        return;
-      }
-
-      setServerMessage(decision === 'accepted' ? 'Appointment accepted.' : 'Appointment declined.');
-      setReviewingAppointmentId(null);
-      setReviewingDecision(null);
-      await loadAppointments();
-    },
-    [invokeAuthedFunction, loadAppointments],
-  );
-
   useEffect(() => {
     void loadAppointments();
   }, [loadAppointments]);
@@ -345,7 +334,7 @@ export function AppointmentsScreen({
   return (
     <ScreenShell showBanner={showRecruiterBanner}>
       <Text style={styles.title}>Appointments</Text>
-      <Text style={styles.body}>Default reminders trigger at 24h and 1h.</Text>
+      <Text style={styles.subtitle}>Default reminders trigger at 24h and 1h.</Text>
 
       {!isStaffMode ? (
         <Pressable
@@ -374,6 +363,24 @@ export function AppointmentsScreen({
           />
           {errors.title?.message ? (
             <Text style={styles.fieldError}>{errors.title.message}</Text>
+          ) : null}
+
+          <Controller
+            control={control}
+            name="description"
+            render={({ field }) => (
+              <TextInput
+                style={[styles.input, styles.multilineInput]}
+                placeholder="Description (optional)"
+                multiline
+                numberOfLines={3}
+                onChangeText={(value) => field.onChange(value.trim().length > 0 ? value : undefined)}
+                value={field.value ?? ''}
+              />
+            )}
+          />
+          {errors.description?.message ? (
+            <Text style={styles.fieldError}>{errors.description.message}</Text>
           ) : null}
 
           <Controller
@@ -494,21 +501,35 @@ export function AppointmentsScreen({
           ) : null}
 
           <Pressable
-            style={styles.primaryCta}
+            style={[styles.primaryCta, submitting ? styles.ctaDisabled : null]}
+            disabled={submitting}
             onPress={handleSubmit(
               async (values) => {
-                const { error, data } = await invokeAuthedFunction(
+                setSubmitting(true);
+                setServerMessage('');
+
+                try {
+                  await ensureValidSession();
+                } catch (e) {
+                  setServerMessage((e as Error).message);
+                  setSubmitting(false);
+                  return;
+                }
+
+                const { error, data } = await supabase.functions.invoke(
                   'schedule_or_update_appointment',
-                  values,
+                  { body: values },
                 );
 
                 if (error) {
                   setServerMessage(await extractFunctionInvokeErrorMessage(error, data));
+                  setSubmitting(false);
                   return;
                 }
 
                 setServerMessage('Appointment request submitted.');
                 setShowForm(false);
+                setSubmitting(false);
                 reset();
                 await loadAppointments();
               },
@@ -517,12 +538,24 @@ export function AppointmentsScreen({
               },
             )}
           >
-            <Text style={styles.primaryCtaText}>Submit request</Text>
+            <Text style={styles.primaryCtaText}>
+              {submitting ? 'Submitting...' : 'Submit request'}
+            </Text>
           </Pressable>
         </View>
       ) : null}
 
       {serverMessage ? <Text style={styles.serverMessage}>{serverMessage}</Text> : null}
+
+      {appointments.length === 0 && !showForm ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>
+            {isStaffMode
+              ? 'No appointment requests yet.'
+              : 'No appointments yet. Tap "Request appointment" to get started.'}
+          </Text>
+        </View>
+      ) : null}
 
       {appointments.map((appointment) => (
         <View key={appointment.id} style={styles.card}>
@@ -535,8 +568,17 @@ export function AppointmentsScreen({
             </Text>
           ) : null}
           <Text style={styles.cardTitle}>{appointment.title}</Text>
-          <Text style={styles.body}>{appointment.modality}</Text>
-          <Text style={styles.body}>{appointment.start_at_utc}</Text>
+          {appointment.description ? (
+            <Text style={styles.cardBody}>{appointment.description}</Text>
+          ) : null}
+          <Text style={styles.cardBody}>
+            {appointment.modality === 'virtual' ? 'Virtual' : 'In-person'}
+            {appointment.location_text ? ` · ${appointment.location_text}` : ''}
+          </Text>
+          <Text style={styles.cardTime}>
+            {formatCardDateTime(appointment.start_at_utc)} –{' '}
+            {formatCardDateTime(appointment.end_at_utc)}
+          </Text>
           <View style={[styles.statusBadge, getStatusStyle(appointment.status)]}>
             <Text style={styles.statusBadgeText}>{getStatusLabel(appointment.status)}</Text>
           </View>
@@ -581,7 +623,7 @@ export function AppointmentsScreen({
 }
 
 const styles = StyleSheet.create({
-  body: {
+  subtitle: {
     color: '#475569',
   },
   card: {
@@ -597,11 +639,33 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
   },
+  cardBody: {
+    color: '#475569',
+    fontSize: 13,
+  },
+  cardTime: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '500',
+  },
   ctaDisabled: {
     opacity: 0.6,
   },
   declineCta: {
     backgroundColor: '#991B1B',
+  },
+  emptyState: {
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 24,
+  },
+  emptyStateText: {
+    color: '#64748B',
+    fontSize: 14,
+    textAlign: 'center',
   },
   formCard: {
     backgroundColor: '#ffffff',
@@ -617,6 +681,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     padding: 10,
+  },
+  multilineInput: {
+    minHeight: 72,
+    textAlignVertical: 'top',
   },
   fieldError: {
     color: '#B91C1C',

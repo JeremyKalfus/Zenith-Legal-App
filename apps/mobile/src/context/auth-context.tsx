@@ -10,6 +10,7 @@ import type { Session } from '@supabase/supabase-js';
 import {
   authRedirectUrl,
   completeAuthSessionFromUrl,
+  ensureValidSession,
   isAuthCallbackUrl,
   supabase,
 } from '../lib/supabase';
@@ -835,6 +836,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error('Enter an email address.');
         }
 
+        await ensureValidSession();
         const { error } = await supabase.auth.updateUser({ email: nextEmail });
         if (error) {
           throw new Error(extractErrorMessage(error));
@@ -844,6 +846,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (authConfigError) {
           throw new Error(authConfigError);
         }
+        await ensureValidSession();
         const { error } = await supabase.auth.updateUser({ password: newPassword });
         if (error) {
           throw new Error(mapPasswordAuthErrorToUserMessage(error));
@@ -903,6 +906,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        await ensureValidSession();
         const { data, error } = await supabase.functions.invoke(
           'create_or_update_candidate_profile',
           {
@@ -930,6 +934,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error('Your account email is unavailable. Please try again or sign in again.');
         }
 
+        await ensureValidSession();
         const { data, error } = await supabase.functions.invoke('create_or_update_candidate_profile', {
           body: {
             ...input,

@@ -51,6 +51,34 @@ export const supabase = createClient(env.supabaseUrl, env.supabaseAnonKey, {
 
 export const authRedirectUrl = redirectTo;
 
+/**
+ * Ensures a valid, non-expired session exists before making authenticated
+ * requests. Proactively refreshes the token if it expires within 60 seconds
+ * to guard against background-tab timer drift.
+ */
+export async function ensureValidSession() {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session) {
+    throw new Error('You are not signed in. Please sign in and try again.');
+  }
+
+  const expiresAt = session.expires_at ?? 0;
+  const nowSeconds = Math.floor(Date.now() / 1000);
+
+  if (nowSeconds >= expiresAt - 60) {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error || !data.session) {
+      throw new Error('Your session has expired. Please sign in again.');
+    }
+    return data.session;
+  }
+
+  return session;
+}
+
 function getUrlParamMaps(url: string): {
   queryParams: URLSearchParams;
   fragmentParams: URLSearchParams;
