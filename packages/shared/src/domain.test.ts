@@ -2,13 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { candidateIntakeSchema, candidateRegistrationSchema, FIRM_STATUSES } from './domain';
 
 describe('candidate intake schema', () => {
+  it('allows optional non-auth fields to be omitted', () => {
+    const result = candidateIntakeSchema.parse({
+      email: 'jane@example.com',
+      preferredCities: [],
+      acceptedPrivacyPolicy: true,
+      acceptedCommunicationConsent: true,
+    });
+
+    expect(result.name).toBeUndefined();
+    expect(result.mobile).toBeUndefined();
+    expect(result.practiceArea).toBeUndefined();
+  });
+
   it('requires text when city Other is selected', () => {
     const result = candidateIntakeSchema.safeParse({
-      name: 'Jane Doe',
       email: 'jane@example.com',
-      mobile: '+12025550109',
       preferredCities: ['Other'],
-      practiceArea: 'Antitrust',
       acceptedPrivacyPolicy: true,
       acceptedCommunicationConsent: true,
     });
@@ -21,11 +31,9 @@ describe('candidate intake schema', () => {
 
   it('normalizes mobile to E.164 with US default country code', () => {
     const result = candidateIntakeSchema.parse({
-      name: 'Jane Doe',
       email: 'jane@example.com',
       mobile: '202-555-0109',
       preferredCities: [],
-      practiceArea: 'Antitrust',
       acceptedPrivacyPolicy: true,
       acceptedCommunicationConsent: true,
     });
@@ -35,11 +43,9 @@ describe('candidate intake schema', () => {
 
   it('rejects invalid mobile format', () => {
     const result = candidateIntakeSchema.safeParse({
-      name: 'Jane Doe',
       email: 'jane@example.com',
       mobile: 'abc',
       preferredCities: [],
-      practiceArea: 'Antitrust',
       acceptedPrivacyPolicy: true,
       acceptedCommunicationConsent: true,
     });
@@ -64,11 +70,8 @@ describe('candidate intake schema', () => {
 describe('candidate registration schema', () => {
   it('requires password and confirm password', () => {
     const result = candidateRegistrationSchema.safeParse({
-      name: 'Jane Doe',
       email: 'jane@example.com',
-      mobile: '+12025550109',
       preferredCities: [],
-      practiceArea: 'Antitrust',
       acceptedPrivacyPolicy: true,
       acceptedCommunicationConsent: true,
       password: '',
@@ -84,11 +87,8 @@ describe('candidate registration schema', () => {
 
   it('rejects password mismatch', () => {
     const result = candidateRegistrationSchema.safeParse({
-      name: 'Jane Doe',
       email: 'jane@example.com',
-      mobile: '202-555-0109',
       preferredCities: [],
-      practiceArea: 'Antitrust',
       acceptedPrivacyPolicy: true,
       acceptedCommunicationConsent: true,
       password: 'password1',
@@ -98,6 +98,23 @@ describe('candidate registration schema', () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.flatten().fieldErrors.confirmPassword?.[0]).toContain('Passwords do not match');
+    }
+  });
+
+  it('still requires both consent checkboxes', () => {
+    const result = candidateRegistrationSchema.safeParse({
+      email: 'jane@example.com',
+      preferredCities: [],
+      acceptedPrivacyPolicy: false,
+      acceptedCommunicationConsent: false,
+      password: 'password1',
+      confirmPassword: 'password1',
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.acceptedPrivacyPolicy).toBeTruthy();
+      expect(result.error.flatten().fieldErrors.acceptedCommunicationConsent).toBeTruthy();
     }
   });
 });

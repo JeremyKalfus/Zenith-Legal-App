@@ -119,7 +119,7 @@ function mapPasswordAuthErrorToUserMessage(error: unknown): string {
     return 'This email already exists but your profile setup is incomplete. Sign in or reset your password.';
   }
   if (message.includes('invalid email/phone or password') || message.includes('invalid login credentials')) {
-    return 'Invalid email/phone or password.';
+    return 'Invalid email or password.';
   }
   if (message.includes('password reset link sent')) {
     return 'Password reset link sent to your email.';
@@ -224,13 +224,14 @@ type AuthContextValue = {
   setIntakeDraft: (draft: CandidateIntake) => void;
   registerCandidateWithPassword: (input: CandidateRegistration) => Promise<void>;
   signInWithEmailPassword: (email: string, password: string) => Promise<void>;
-  signInWithPhonePassword: (phone: string, password: string) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
+  updateEmail: (email: string) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
   sendEmailMagicLink: (email: string, options?: OtpOptions) => Promise<void>;
   sendSmsOtp: (phone: string, options?: OtpOptions) => Promise<void>;
   verifySmsOtp: (phone: string, token: string) => Promise<void>;
   persistDraftAfterVerification: () => Promise<void>;
+  updateCandidateProfileIntake: (input: CandidateIntake) => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   refreshAuthMethods: () => Promise<void>;
@@ -242,6 +243,18 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 type ProfileFetchResult =
   | { ok: true; profile: CandidateProfile }
   | { ok: false; reason: 'not_found' | 'query_error'; message: string };
+
+type CandidatePreferencesRow = {
+  cities: CandidateProfile['preferredCities'] | null;
+  other_city_text: string | null;
+  practice_area: CandidateProfile['practiceArea'];
+  other_practice_text: string | null;
+};
+
+type CandidateConsentsRow = {
+  privacy_policy_accepted: boolean;
+  communication_consent_accepted: boolean;
+};
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -266,20 +279,50 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 
 async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
   try {
-    const { data, error } = await withTimeout(
-      (async () => supabase.from('users_profile').select('*').eq('id', userId).maybeSingle())(),
+    const [profileResult, preferencesResult, consentsResult] = await withTimeout(
+      Promise.all([
+        supabase
+          .from('users_profile')
+          .select('id, role, name, email, mobile, onboarding_complete')
+          .eq('id', userId)
+          .maybeSingle(),
+        supabase
+          .from('candidate_preferences')
+          .select('cities, other_city_text, practice_area, other_practice_text')
+          .eq('user_id', userId)
+          .maybeSingle(),
+        supabase
+          .from('candidate_consents')
+          .select('privacy_policy_accepted, communication_consent_accepted')
+          .eq('user_id', userId)
+          .maybeSingle(),
+      ]),
       5000,
       'Profile fetch',
     );
 
-    if (error) {
+    if (profileResult.error) {
       return {
         ok: false,
         reason: 'query_error',
-        message: `Unable to load account profile: ${error.message}`,
+        message: `Unable to load account profile: ${profileResult.error.message}`,
       };
     }
-    if (!data) {
+    if (preferencesResult.error) {
+      return {
+        ok: false,
+        reason: 'query_error',
+        message: `Unable to load account profile: ${preferencesResult.error.message}`,
+      };
+    }
+    if (consentsResult.error) {
+      return {
+        ok: false,
+        reason: 'query_error',
+        message: `Unable to load account profile: ${consentsResult.error.message}`,
+      };
+    }
+    if (!profileResult.data) {
       return {
         ok: false,
         reason: 'not_found',
@@ -287,7 +330,25 @@ async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
       };
     }
 
-    return { ok: true, profile: data as CandidateProfile };
+    const profileRow = profileResult.data as Pick<
+      CandidateProfile,
+      'id' | 'role' | 'name' | 'email' | 'mobile' | 'onboarding_complete'
+    >;
+    const preferences = (preferencesResult.data as CandidatePreferencesRow | null) ?? null;
+    const consents = (consentsResult.data as CandidateConsentsRow | null) ?? null;
+
+    return {
+      ok: true,
+      profile: {
+        ...profileRow,
+        preferredCities: Array.isArray(preferences?.cities) ? preferences.cities : [],
+        otherCityText: preferences?.other_city_text ?? null,
+        practiceArea: preferences?.practice_area ?? null,
+        otherPracticeText: preferences?.other_practice_text ?? null,
+        acceptedPrivacyPolicy: consents?.privacy_policy_accepted ?? false,
+        acceptedCommunicationConsent: consents?.communication_consent_accepted ?? false,
+      },
+    };
   } catch (error) {
     return {
       ok: false,
@@ -601,6 +662,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     session,
   ]);
 
+  useEffect(() => {
+    if (isLoading || isSigningOut || needsPasswordReset) {
+      return;
+    }
+
+    const userId = session?.user?.id;
+    const sessionEmail = session?.user?.email?.trim().toLowerCase();
+    const profileEmail = profile?.email?.trim().toLowerCase();
+
+    if (!userId || !sessionEmail || !profile || profileEmail === sessionEmail) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      const { error } = await supabase.from('users_profile').update({ email: sessionEmail }).eq('id', userId);
+      if (error || cancelled) {
+        return;
+      }
+
+      setProfile((previous) => {
+        if (!previous || previous.id !== userId) {
+          return previous;
+        }
+        return {
+          ...previous,
+          email: sessionEmail,
+        };
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isLoading,
+    isSigningOut,
+    needsPasswordReset,
+    profile,
+    session?.user?.email,
+    session?.user?.id,
+  ]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
@@ -622,7 +727,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error(authConfigError);
         }
         try {
-          const normalizedPhone = normalizePhoneForAuthOrThrow(input.mobile);
+          const normalizedPhone = input.mobile ? normalizePhoneForAuthOrThrow(input.mobile) : undefined;
           const result = await callPublicFunctionJson<{
             ok: true;
             session: PasswordAuthSessionPayload;
@@ -630,7 +735,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }>('register_candidate_password', {
             ...input,
             email: input.email.trim().toLowerCase(),
-            mobile: normalizedPhone,
+            ...(normalizedPhone ? { mobile: normalizedPhone } : {}),
           });
 
           await setSupabaseSessionFromPasswordAuth(result.session);
@@ -648,24 +753,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             session: PasswordAuthSessionPayload;
           }>('mobile_sign_in_with_identifier_password', {
             identifier: email.trim().toLowerCase(),
-            password,
-          });
-          await setSupabaseSessionFromPasswordAuth(result.session);
-        } catch (error) {
-          throw new Error(mapPasswordAuthErrorToUserMessage(error));
-        }
-      },
-      signInWithPhonePassword: async (phone: string, password: string) => {
-        if (authConfigError) {
-          throw new Error(authConfigError);
-        }
-        try {
-          const normalizedPhone = normalizePhoneForAuthOrThrow(phone);
-          const result = await callPublicFunctionJson<{
-            ok: true;
-            session: PasswordAuthSessionPayload;
-          }>('mobile_sign_in_with_identifier_password', {
-            identifier: normalizedPhone,
             password,
           });
           await setSupabaseSessionFromPasswordAuth(result.session);
@@ -692,6 +779,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         if (error) {
           throw new Error(mapPasswordAuthErrorToUserMessage(error));
+        }
+      },
+      updateEmail: async (email: string) => {
+        if (authConfigError) {
+          throw new Error(authConfigError);
+        }
+
+        const nextEmail = email.trim().toLowerCase();
+        if (!nextEmail) {
+          throw new Error('Enter an email address.');
+        }
+
+        const { error } = await supabase.auth.updateUser({ email: nextEmail });
+        if (error) {
+          throw new Error(extractErrorMessage(error));
         }
       },
       updatePassword: async (newPassword: string) => {
@@ -773,6 +875,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           authTransitionSeqRef.current = transitionSeq;
           await hydrateProfileForSession(session, transitionSeq);
         }
+      },
+      updateCandidateProfileIntake: async (input: CandidateIntake) => {
+        if (!session?.user.id) {
+          throw new Error('You must be signed in to update your profile.');
+        }
+
+        const email = (profile?.email ?? session.user.email ?? '').trim().toLowerCase();
+        if (!email) {
+          throw new Error('Your account email is unavailable. Please try again or sign in again.');
+        }
+
+        const { error } = await supabase.functions.invoke('create_or_update_candidate_profile', {
+          body: {
+            ...input,
+            email,
+          },
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        const transitionSeq = authTransitionSeqRef.current + 1;
+        authTransitionSeqRef.current = transitionSeq;
+        await hydrateProfileForSession(session, transitionSeq);
       },
       signOut: async () => {
         setIsSigningOut(true);

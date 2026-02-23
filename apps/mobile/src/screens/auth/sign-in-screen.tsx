@@ -1,7 +1,7 @@
-import { normalizePhoneNumber, PHONE_VALIDATION_MESSAGES, sanitizePhoneInput } from '@zenith/shared';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PasswordInput } from '../../components/password-input';
 import { useAuth } from '../../context/auth-context';
 import { authRedirectUrl } from '../../lib/supabase';
 
@@ -13,25 +13,14 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
     needsPasswordReset,
     requestPasswordReset,
     signInWithEmailPassword,
-    signInWithPhonePassword,
     updatePassword,
   } = useAuth();
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
-
-  function normalizePhoneInputOrThrow(input: string): string {
-    const normalized = normalizePhoneNumber(input);
-    if (!normalized.ok) {
-      throw new Error(PHONE_VALIDATION_MESSAGES.invalidMobileForAuth);
-    }
-
-    return normalized.e164;
-  }
 
   if (needsPasswordReset) {
     return (
@@ -46,15 +35,14 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
             {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
             {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
 
-            <TextInput
-              secureTextEntry
+            <PasswordInput
               placeholder="New password"
               style={styles.input}
               value={newPassword}
               onChangeText={setNewPassword}
+              showStrength
             />
-            <TextInput
-              secureTextEntry
+            <PasswordInput
               placeholder="Confirm new password"
               style={styles.input}
               value={confirmNewPassword}
@@ -97,7 +85,7 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.container}>
           <Text style={styles.title}>Sign in</Text>
-          <Text style={styles.body}>Use the same email or mobile number from your prior login.</Text>
+          <Text style={styles.body}>Sign in with your email address and password.</Text>
 
           {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
           {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
@@ -111,23 +99,7 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
             onChangeText={setEmail}
           />
 
-          <TextInput
-            keyboardType="phone-pad"
-            placeholder="Mobile number"
-            style={styles.input}
-            value={phone}
-            onChangeText={(value) => setPhone(sanitizePhoneInput(value))}
-            onBlur={() => {
-              const normalized = normalizePhoneNumber(phone);
-              if (normalized.ok) {
-                setPhone(normalized.e164);
-              }
-            }}
-          />
-          <Text style={styles.helper}>US numbers can be entered without +1.</Text>
-
-          <TextInput
-            secureTextEntry
+          <PasswordInput
             placeholder="Password"
             style={styles.input}
             value={password}
@@ -153,29 +125,6 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
             }}
           >
             <Text style={styles.buttonText}>Sign in with email</Text>
-          </Pressable>
-
-          <Pressable
-            style={[styles.buttonSecondary, (busy || !phone.trim() || !password) && styles.buttonSecondaryDisabled]}
-            disabled={busy || !phone.trim() || !password}
-            accessibilityState={{ disabled: busy || !phone.trim() || !password }}
-            onPress={async () => {
-              setBusy(true);
-              setMessage('');
-              clearAuthNotice();
-              try {
-                const normalizedPhone = normalizePhoneInputOrThrow(phone);
-                setPhone(normalizedPhone);
-                await signInWithPhonePassword(normalizedPhone, password);
-                setMessage('Signing in...');
-              } catch (error) {
-                setMessage((error as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <Text style={styles.buttonTextSecondary}>Sign in with mobile</Text>
           </Pressable>
 
           <Pressable
@@ -238,23 +187,8 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.55,
   },
-  buttonSecondary: {
-    alignItems: 'center',
-    backgroundColor: '#E2E8F0',
-    borderRadius: 10,
-    marginBottom: 10,
-    padding: 12,
-  },
-  buttonSecondaryDisabled: {
-    backgroundColor: '#E2E8F0',
-    opacity: 0.65,
-  },
   buttonText: {
     color: '#ffffff',
-    fontWeight: '600',
-  },
-  buttonTextSecondary: {
-    color: '#0F172A',
     fontWeight: '600',
   },
   container: {
@@ -268,11 +202,6 @@ const styles = StyleSheet.create({
   },
   devNote: {
     color: '#92400E',
-    fontSize: 12,
-    marginTop: -2,
-  },
-  helper: {
-    color: '#475569',
     fontSize: 12,
     marginTop: -2,
   },

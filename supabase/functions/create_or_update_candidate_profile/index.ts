@@ -34,15 +34,33 @@ const practiceAreas = [
   'Other',
 ] as const;
 
+function optionalTrimmedString(max: number) {
+  return z
+    .string()
+    .trim()
+    .max(max)
+    .transform((value) => (value.length === 0 ? undefined : value))
+    .optional()
+    .transform((value) => value ?? undefined);
+}
+
+const optionalMobileInputSchema = z
+  .string()
+  .trim()
+  .max(30)
+  .transform((value) => (value.length === 0 ? undefined : value))
+  .optional()
+  .transform((value) => value ?? undefined);
+
 const candidateIntakeSchema = z
   .object({
-    name: z.string().trim().min(1).max(120),
+    name: optionalTrimmedString(120),
     email: z.string().trim().email().max(255),
-    mobile: z.string().trim().min(7).max(30),
+    mobile: optionalMobileInputSchema,
     preferredCities: z.array(z.enum(cityOptions)).default([]),
-    otherCityText: z.string().trim().max(120).optional(),
-    practiceArea: z.enum(practiceAreas),
-    otherPracticeText: z.string().trim().max(120).optional(),
+    otherCityText: optionalTrimmedString(120),
+    practiceArea: z.enum(practiceAreas).optional(),
+    otherPracticeText: optionalTrimmedString(120),
     acceptedPrivacyPolicy: z.boolean(),
     acceptedCommunicationConsent: z.boolean(),
   })
@@ -113,9 +131,9 @@ Deno.serve(async (request) => {
       {
         id: userId,
         role,
-        name: intake.name,
+        name: intake.name ?? null,
         email: intake.email,
-        mobile: intake.mobile,
+        mobile: intake.mobile ?? null,
         onboarding_complete: true,
       },
       { onConflict: 'id' },
@@ -130,7 +148,7 @@ Deno.serve(async (request) => {
         user_id: userId,
         cities: intake.preferredCities,
         other_city_text: intake.otherCityText || null,
-        practice_area: intake.practiceArea,
+        practice_area: intake.practiceArea ?? null,
         other_practice_text: intake.otherPracticeText || null,
       },
       { onConflict: 'user_id' },

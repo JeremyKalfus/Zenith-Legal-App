@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { PasswordInput } from '../../components/password-input';
 import { useAuth } from '../../context/auth-context';
 
 type CandidateRegistrationFormValues = z.input<typeof candidateRegistrationSchema>;
@@ -58,7 +59,7 @@ export function IntakeScreen({
       mobile: '',
       preferredCities: [],
       otherCityText: '',
-      practiceArea: 'Antitrust',
+      practiceArea: undefined,
       otherPracticeText: '',
       acceptedPrivacyPolicy: false,
       acceptedCommunicationConsent: false,
@@ -68,7 +69,7 @@ export function IntakeScreen({
   });
 
   const selectedCities = watch('preferredCities') ?? [];
-  const selectedPractice = watch('practiceArea') ?? 'Antitrust';
+  const selectedPractice = watch('practiceArea');
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
@@ -86,7 +87,7 @@ export function IntakeScreen({
             name="name"
             render={({ field }) => (
               <TextInput
-                placeholder="Full name"
+                placeholder="Full name (optional)"
                 style={styles.input}
                 onChangeText={field.onChange}
                 value={field.value}
@@ -110,6 +111,10 @@ export function IntakeScreen({
             )}
           />
           {errors.email ? <Text style={styles.error}>{errors.email.message}</Text> : null}
+          <Text style={styles.disclaimerInline}>
+            We won't spam you. We only use your email for account access and recruiting-related
+            communication.
+          </Text>
 
           <Controller
             control={control}
@@ -117,7 +122,7 @@ export function IntakeScreen({
             render={({ field }) => (
               <TextInput
                 keyboardType="phone-pad"
-                placeholder="Mobile number"
+                placeholder="Mobile number (optional)"
                 style={styles.input}
                 onChangeText={(value) => field.onChange(sanitizePhoneInput(value))}
                 onBlur={() => {
@@ -174,7 +179,7 @@ export function IntakeScreen({
             <Text style={styles.error}>{errors.otherCityText.message}</Text>
           ) : null}
 
-          <Text style={styles.label}>Practice Area</Text>
+          <Text style={styles.label}>Practice Area (optional)</Text>
           <Controller
             control={control}
             name="practiceArea"
@@ -185,7 +190,7 @@ export function IntakeScreen({
                     key={area}
                     label={area}
                     selected={field.value === area}
-                    onToggle={() => field.onChange(area)}
+                    onToggle={() => field.onChange(field.value === area ? undefined : area)}
                   />
                 ))}
               </View>
@@ -212,6 +217,16 @@ export function IntakeScreen({
           {errors.otherPracticeText ? (
             <Text style={styles.error}>{errors.otherPracticeText.message}</Text>
           ) : null}
+
+          {/* Infra-dependent wording: keep this aligned with verified HTTPS/TLS + Supabase storage posture. */}
+          <View style={styles.disclaimerCard}>
+            <Text style={styles.disclaimerTitle}>Confidentiality & Encryption</Text>
+            <Text style={styles.disclaimerBody}>
+              All information you share with Zenith Legal is treated as 100% confidential. Your
+              data is encrypted in transit via HTTPS/TLS and encrypted at rest with AES-256
+              through Supabase.
+            </Text>
+          </View>
 
           <Controller
             control={control}
@@ -247,12 +262,12 @@ export function IntakeScreen({
             control={control}
             name="password"
             render={({ field }) => (
-              <TextInput
-                secureTextEntry
+              <PasswordInput
                 placeholder="Password"
                 style={styles.input}
                 onChangeText={field.onChange}
                 value={field.value}
+                showStrength
               />
             )}
           />
@@ -262,8 +277,7 @@ export function IntakeScreen({
             control={control}
             name="confirmPassword"
             render={({ field }) => (
-              <TextInput
-                secureTextEntry
+              <PasswordInput
                 placeholder="Confirm password"
                 style={styles.input}
                 onChangeText={field.onChange}
@@ -339,6 +353,30 @@ const styles = StyleSheet.create({
   },
   ctaDisabled: {
     opacity: 0.65,
+  },
+  disclaimerBody: {
+    color: '#334155',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  disclaimerCard: {
+    backgroundColor: '#F0FDFA',
+    borderColor: '#99F6E4',
+    borderRadius: 10,
+    borderWidth: 1,
+    gap: 4,
+    padding: 10,
+  },
+  disclaimerInline: {
+    color: '#475569',
+    fontSize: 12,
+    marginTop: -6,
+  },
+  disclaimerTitle: {
+    color: '#0F172A',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
   },
   error: {
     color: '#B91C1C',

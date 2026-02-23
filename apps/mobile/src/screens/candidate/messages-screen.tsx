@@ -41,7 +41,7 @@ export function MessagesScreen() {
         await client.connectUser(
           {
             id: session.user.id,
-            name: response.user_name || profile.name,
+            name: response.user_name || profile.name || undefined,
           },
           response.token,
         );

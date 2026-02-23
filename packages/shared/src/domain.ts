@@ -44,6 +44,17 @@ export const FIRM_STATUSES = [
 export type FirmStatus = (typeof FIRM_STATUSES)[number];
 
 const trimmedString = z.string().trim();
+
+function optionalTrimmedString(max: number) {
+  return z
+    .string()
+    .trim()
+    .max(max)
+    .transform((value) => (value.length === 0 ? undefined : value))
+    .optional()
+    .transform((value) => value ?? undefined);
+}
+
 const mobileInputSchema = z.string().trim().max(30).transform((value, ctx) => {
   const normalized = normalizePhoneNumber(value);
   if (!normalized.ok) {
@@ -57,15 +68,38 @@ const mobileInputSchema = z.string().trim().max(30).transform((value, ctx) => {
   return normalized.e164;
 });
 
+const optionalMobileInputSchema = z
+  .string()
+  .trim()
+  .max(30)
+  .transform((value, ctx) => {
+    if (value.length === 0) {
+      return undefined;
+    }
+
+    const normalized = normalizePhoneNumber(value);
+    if (!normalized.ok) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: PHONE_VALIDATION_MESSAGES.invalidMobile,
+      });
+      return z.NEVER;
+    }
+
+    return normalized.e164;
+  })
+  .optional()
+  .transform((value) => value ?? undefined);
+
 export const candidateIntakeSchema = z
   .object({
-    name: trimmedString.min(1, 'Name is required').max(120),
+    name: optionalTrimmedString(120),
     email: trimmedString.email('Enter a valid email address').max(255),
-    mobile: mobileInputSchema,
+    mobile: optionalMobileInputSchema,
     preferredCities: z.array(z.enum(CITY_OPTIONS)).default([]),
-    otherCityText: trimmedString.max(120).optional(),
-    practiceArea: z.enum(PRACTICE_AREAS),
-    otherPracticeText: trimmedString.max(120).optional(),
+    otherCityText: optionalTrimmedString(120),
+    practiceArea: z.enum(PRACTICE_AREAS).optional(),
+    otherPracticeText: optionalTrimmedString(120),
     acceptedPrivacyPolicy: z.boolean().refine((value) => value, {
       message: 'Privacy policy acceptance is required',
     }),

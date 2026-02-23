@@ -1,21 +1,42 @@
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRecruiterContact } from '../context/recruiter-contact-context';
 
+function toDialablePhone(phone: string): string {
+  const trimmed = phone.trim();
+  const digits = trimmed.replace(/\D/g, '');
+
+  if (!digits) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('+')) {
+    return `+${digits}`;
+  }
+  if (digits.length === 10) {
+    return `+1${digits}`;
+  }
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+${digits}`;
+  }
+
+  return `+${digits}`;
+}
+
 export function GlobalRecruiterBanner() {
   const { contact } = useRecruiterContact();
+  const dialablePhone = toDialablePhone(contact.phone);
 
   return (
     <View style={styles.container} accessibilityRole="header">
       <Text style={styles.title}>Zenith Legal Recruiter Contact</Text>
       <View style={styles.row}>
         <Pressable
-          accessibilityRole="button"
-          onPress={() => Linking.openURL(`tel:${contact.phone}`)}
+          accessibilityRole="link"
+          onPress={() => Linking.openURL(`tel:${dialablePhone}`)}
         >
           <Text style={styles.link}>{contact.phone}</Text>
         </Pressable>
         <Pressable
-          accessibilityRole="button"
+          accessibilityRole="link"
           onPress={() => Linking.openURL(`mailto:${contact.email}`)}
         >
           <Text style={styles.link}>{contact.email}</Text>

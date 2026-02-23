@@ -22,11 +22,16 @@ export function VerifyScreen() {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const emailCooldown = useSendCooldown(60);
+  const hasMobileForSms = !!intakeDraft?.mobile;
   const smsExplicitlyDisabled = authMethods.smsOtpStatus === 'disabled';
   const smsAvailabilityUnknown = authMethods.smsOtpStatus === 'unknown';
-  const smsSendDisabled = busy || smsExplicitlyDisabled;
-  const smsVerifyDisabled = busy || otp.length < 4 || smsExplicitlyDisabled;
-  const smsButtonLabel = smsExplicitlyDisabled ? 'SMS sign-in unavailable' : 'Send SMS code';
+  const smsSendDisabled = busy || smsExplicitlyDisabled || !hasMobileForSms;
+  const smsVerifyDisabled = busy || otp.length < 4 || smsExplicitlyDisabled || !hasMobileForSms;
+  const smsButtonLabel = !hasMobileForSms
+    ? 'SMS requires mobile at sign-up'
+    : smsExplicitlyDisabled
+      ? 'SMS sign-in unavailable'
+      : 'Send SMS code';
 
   const authMethodsStatusMessage = useMemo(() => {
     if (authMethodsError) {
@@ -126,6 +131,9 @@ export function VerifyScreen() {
               setBusy(true);
               clearAuthNotice();
               try {
+                if (!intakeDraft.mobile) {
+                  throw new Error('Add a mobile number during sign-up to use SMS verification.');
+                }
                 await sendSmsOtp(intakeDraft.mobile);
                 setMessage('SMS code sent. Enter it below.');
               } catch (error) {
@@ -145,7 +153,11 @@ export function VerifyScreen() {
             keyboardType="number-pad"
             placeholder="Enter SMS code"
           />
-          <Text style={styles.helper}>Enter the SMS code only (not your phone number).</Text>
+          <Text style={styles.helper}>
+            {hasMobileForSms
+              ? 'Enter the SMS code only (not your phone number).'
+              : 'SMS verification is unavailable because no mobile number was provided.'}
+          </Text>
           <Pressable
             style={[styles.button, smsVerifyDisabled && styles.buttonDisabled]}
             disabled={smsVerifyDisabled}
@@ -154,6 +166,9 @@ export function VerifyScreen() {
               setBusy(true);
               clearAuthNotice();
               try {
+                if (!intakeDraft.mobile) {
+                  throw new Error('Add a mobile number during sign-up to use SMS verification.');
+                }
                 await verifySmsOtp(intakeDraft.mobile, otp);
                 setMessage('Phone verified successfully.');
               } catch (error) {

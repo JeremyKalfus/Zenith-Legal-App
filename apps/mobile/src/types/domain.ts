@@ -1,12 +1,18 @@
-import type { CandidateIntake, FirmStatus } from '@zenith/shared';
+import type { CandidateIntake, CityOption, FirmStatus, PracticeArea } from '@zenith/shared';
 
 export type CandidateProfile = {
   id: string;
   role: 'candidate' | 'staff';
-  name: string;
+  name: string | null;
   email: string;
-  mobile: string;
+  mobile: string | null;
   onboarding_complete: boolean;
+  preferredCities: CityOption[];
+  otherCityText: string | null;
+  practiceArea: PracticeArea | null;
+  otherPracticeText: string | null;
+  acceptedPrivacyPolicy: boolean;
+  acceptedCommunicationConsent: boolean;
 };
 
 export type CandidateFirmAssignment = {
