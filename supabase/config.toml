@@ -25,6 +25,21 @@ verify_jwt = false
 [functions.mobile_sign_in_with_identifier_password]
 verify_jwt = false
 
+[functions.schedule_or_update_appointment]
+verify_jwt = false
+
+[functions.staff_review_appointment]
+verify_jwt = false
+
+[functions.create_or_update_candidate_profile]
+verify_jwt = false
+
+[functions.chat_auth_bootstrap]
+verify_jwt = false
+
+[functions.authorize_firm_submission]
+verify_jwt = false
+
 [functions.assign_firm_to_candidate]
 verify_jwt = false
 
@@ -34,5 +49,17 @@ verify_jwt = false
 [functions.staff_unassign_firm_from_candidate]
 verify_jwt = false
 
-[functions.authorize_firm_submission]
+[functions.staff_handle_data_request]
+verify_jwt = false
+
+[functions.bulk_paste_ingest_firms]
+verify_jwt = false
+
+[functions.connect_calendar_provider]
+verify_jwt = false
+
+[functions.dispatch_notifications]
+verify_jwt = false
+
+[functions.process_chat_webhook]
 verify_jwt = false

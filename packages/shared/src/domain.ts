@@ -158,9 +158,12 @@ export type CandidateRegistration = z.infer<typeof candidateRegistrationSchema>;
 export const appointmentModalitySchema = z.enum(['virtual', 'in_person']);
 export type AppointmentModality = z.infer<typeof appointmentModalitySchema>;
 
+export const appointmentStatusSchema = z.enum(['pending', 'accepted', 'declined', 'cancelled']);
+export type AppointmentStatus = z.infer<typeof appointmentStatusSchema>;
+
 export const appointmentSchema = z
   .object({
-    title: trimmedString.min(1).max(120),
+    title: trimmedString.max(120).optional(),
     description: trimmedString.max(2000).optional(),
     modality: appointmentModalitySchema,
     locationText: trimmedString.max(255).optional(),
@@ -180,21 +183,6 @@ export const appointmentSchema = z
       });
     }
 
-    if (data.modality === 'virtual' && !data.videoUrl) {
-      ctx.addIssue({
-        path: ['videoUrl'],
-        code: z.ZodIssueCode.custom,
-        message: 'Virtual appointments require a video URL',
-      });
-    }
-
-    if (data.modality === 'in_person' && !data.locationText) {
-      ctx.addIssue({
-        path: ['locationText'],
-        code: z.ZodIssueCode.custom,
-        message: 'In-person appointments require a location',
-      });
-    }
   });
 
 export type AppointmentInput = z.infer<typeof appointmentSchema>;

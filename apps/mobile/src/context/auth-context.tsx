@@ -10,6 +10,7 @@ import type { Session } from '@supabase/supabase-js';
 import {
   authRedirectUrl,
   completeAuthSessionFromUrl,
+  ensureValidSession,
   isAuthCallbackUrl,
   supabase,
 } from '../lib/supabase';
@@ -198,14 +199,20 @@ async function callPublicFunctionJson<TResponse>(
   functionName: string,
   payload: Record<string, unknown>,
 ): Promise<TResponse> {
+  const authHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    apikey: env.supabaseAnonKey,
+    'x-client-info': 'zenith-legal-mobile',
+  };
+
+  // New publishable keys (sb_publishable_*) are not JWTs and should not be sent as Bearer auth.
+  if (!env.supabaseAnonKey.startsWith('sb_publishable_')) {
+    authHeaders.Authorization = `Bearer ${env.supabaseAnonKey}`;
+  }
+
   const response = await fetch(`${env.supabaseUrl}/functions/v1/${functionName}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: env.supabaseAnonKey,
-      Authorization: `Bearer ${env.supabaseAnonKey}`,
-      'x-client-info': 'zenith-legal-mobile',
-    },
+    headers: authHeaders,
     body: JSON.stringify(payload),
   });
 
@@ -829,6 +836,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error('Enter an email address.');
         }
 
+        await ensureValidSession();
         const { error } = await supabase.auth.updateUser({ email: nextEmail });
         if (error) {
           throw new Error(extractErrorMessage(error));
@@ -838,6 +846,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (authConfigError) {
           throw new Error(authConfigError);
         }
+        await ensureValidSession();
         const { error } = await supabase.auth.updateUser({ password: newPassword });
         if (error) {
           throw new Error(mapPasswordAuthErrorToUserMessage(error));
@@ -897,6 +906,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        await ensureValidSession();
         const { data, error } = await supabase.functions.invoke(
           'create_or_update_candidate_profile',
           {
@@ -924,6 +934,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error('Your account email is unavailable. Please try again or sign in again.');
         }
 
+        await ensureValidSession();
         const { data, error } = await supabase.functions.invoke('create_or_update_candidate_profile', {
           body: {
             ...input,

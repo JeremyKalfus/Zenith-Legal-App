@@ -53,6 +53,13 @@ Deno.serve(async (request) => {
 
     return jsonResponse({ success: true, request: data });
   } catch (error) {
-    return errorResponse((error as Error).message, 500);
+    const message = (error as Error).message;
+    if (message.startsWith('Unauthorized')) {
+      return errorResponse(message, 401);
+    }
+    if (message === 'Forbidden: staff access required') {
+      return errorResponse(message, 403);
+    }
+    return errorResponse(message, 500);
   }
 });

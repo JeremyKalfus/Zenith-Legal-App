@@ -69,6 +69,10 @@ Deno.serve(async (request) => {
 
     return jsonResponse({ success: true, connection: data });
   } catch (error) {
-    return errorResponse((error as Error).message, 500);
+    const message = (error as Error).message;
+    if (message.startsWith('Unauthorized')) {
+      return errorResponse(message, 401);
+    }
+    return errorResponse(message, 500);
   }
 });

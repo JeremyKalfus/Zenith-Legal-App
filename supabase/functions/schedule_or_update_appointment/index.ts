@@ -5,7 +5,7 @@ import { writeAuditEvent } from '../_shared/audit.ts';
 
 const appointmentSchema = z
   .object({
-    title: z.string().trim().min(1).max(120),
+    title: z.string().trim().max(120).optional(),
     description: z.string().trim().max(2000).optional(),
     modality: z.enum(['virtual', 'in_person']),
     locationText: z.string().trim().max(255).optional(),
@@ -23,28 +23,18 @@ const appointmentSchema = z
       });
     }
 
-    if (value.modality === 'virtual' && !value.videoUrl) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'videoUrl required for virtual appointments',
-        path: ['videoUrl'],
-      });
-    }
-
-    if (value.modality === 'in_person' && !value.locationText) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'locationText required for in-person appointments',
-        path: ['locationText'],
-      });
-    }
   });
 
 const schema = appointmentSchema.extend({
   id: z.string().uuid().optional(),
   candidateUserId: z.string().uuid().optional(),
-  status: z.enum(['scheduled', 'cancelled']).optional(),
 });
+
+type ExistingAppointment = {
+  id: string;
+  candidate_user_id: string;
+  status: 'pending' | 'accepted' | 'declined' | 'cancelled';
+};
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -57,14 +47,43 @@ Deno.serve(async (request) => {
     const client = createAuthedClient(authHeader);
     const serviceClient = createServiceClient();
     const payload = schema.parse(await request.json());
+    const { data: profile, error: profileError } = await client
+      .from('users_profile')
+      .select('role')
+      .eq('id', userId)
+      .single();
 
-    const candidateUserId = payload.candidateUserId ?? userId;
+    if (profileError || !profile) {
+      return errorResponse(profileError?.message ?? 'Unable to load profile', 400);
+    }
+
+    if (profile.role === 'staff') {
+      return errorResponse('Staff cannot create or update appointment requests from this endpoint', 403);
+    }
+
+    let existingAppointment: ExistingAppointment | null = null;
+
+    if (payload.id) {
+      const { data, error } = await client
+        .from('appointments')
+        .select('id,candidate_user_id,status')
+        .eq('id', payload.id)
+        .single();
+
+      if (error || !data) {
+        return errorResponse(error?.message ?? 'Appointment not found', 404);
+      }
+
+      existingAppointment = data as ExistingAppointment;
+    }
+
+    const candidateUserId = existingAppointment?.candidate_user_id ?? userId;
 
     const { data: conflicts, error: conflictError } = await client
       .from('appointments')
       .select('id,start_at_utc,end_at_utc')
       .eq('candidate_user_id', candidateUserId)
-      .neq('status', 'cancelled')
+      .eq('status', 'accepted')
       .neq('id', payload.id ?? '00000000-0000-0000-0000-000000000000')
       .lt('start_at_utc', payload.endAtUtc)
       .gt('end_at_utc', payload.startAtUtc)
@@ -75,13 +94,16 @@ Deno.serve(async (request) => {
     }
 
     if (conflicts && conflicts.length > 0) {
-      return errorResponse('Appointment conflict detected', 409);
+      return errorResponse(
+        'You already have an accepted appointment in this time window. Please choose a different time.',
+        409,
+      );
     }
 
     const dbPayload = {
       candidate_user_id: candidateUserId,
       created_by_user_id: userId,
-      title: payload.title,
+      title: payload.title && payload.title.trim().length > 0 ? payload.title : 'Appointment request',
       description: payload.description ?? null,
       modality: payload.modality,
       location_text: payload.locationText ?? null,
@@ -89,7 +111,7 @@ Deno.serve(async (request) => {
       start_at_utc: payload.startAtUtc,
       end_at_utc: payload.endAtUtc,
       timezone_label: payload.timezoneLabel,
-      status: payload.status ?? 'scheduled',
+      status: existingAppointment?.status ?? 'pending',
     };
 
     let appointmentResult;
@@ -163,6 +185,10 @@ Deno.serve(async (request) => {
 
     return jsonResponse({ success: true, appointment });
   } catch (error) {
-    return errorResponse((error as Error).message, 500);
+    const message = (error as Error).message;
+    if (message.startsWith('Unauthorized')) {
+      return errorResponse(message, 401);
+    }
+    return errorResponse(message, 500);
   }
 });
