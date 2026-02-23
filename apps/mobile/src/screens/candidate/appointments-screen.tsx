@@ -196,19 +196,41 @@ export function AppointmentsScreen({
 
   const invokeAuthedFunction = useCallback(
     async (name: string, body: Record<string, unknown>) => {
-      const currentSession = session ?? (await supabase.auth.getSession()).data.session;
+      const sessionResult = await supabase.auth.getSession();
+      const currentSession = session ?? sessionResult.data.session;
+      const currentToken = currentSession?.access_token;
 
-      if (!currentSession?.access_token) {
+      if (!currentToken || !currentToken.includes('.')) {
         return {
           data: null,
           error: new Error('Your session has expired. Please sign in again and retry.'),
         };
       }
 
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) {
+        if ((userError?.message ?? '').toLowerCase().includes('jwt')) {
+          await supabase.auth.signOut();
+        }
+        return {
+          data: null,
+          error: new Error('Your session is invalid. Please sign in again and retry.'),
+        };
+      }
+
+      const refreshedSession = (await supabase.auth.getSession()).data.session ?? currentSession;
+      const accessToken = refreshedSession?.access_token;
+      if (!accessToken || !accessToken.includes('.')) {
+        return {
+          data: null,
+          error: new Error('Your session is invalid. Please sign in again and retry.'),
+        };
+      }
+
       return supabase.functions.invoke(name, {
         body,
         headers: {
-          Authorization: `Bearer ${currentSession.access_token}`,
+          Authorization: `Bearer ${accessToken}`,
         },
       });
     },

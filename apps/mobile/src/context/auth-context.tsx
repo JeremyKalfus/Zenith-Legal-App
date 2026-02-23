@@ -198,14 +198,20 @@ async function callPublicFunctionJson<TResponse>(
   functionName: string,
   payload: Record<string, unknown>,
 ): Promise<TResponse> {
+  const authHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    apikey: env.supabaseAnonKey,
+    'x-client-info': 'zenith-legal-mobile',
+  };
+
+  // New publishable keys (sb_publishable_*) are not JWTs and should not be sent as Bearer auth.
+  if (!env.supabaseAnonKey.startsWith('sb_publishable_')) {
+    authHeaders.Authorization = `Bearer ${env.supabaseAnonKey}`;
+  }
+
   const response = await fetch(`${env.supabaseUrl}/functions/v1/${functionName}`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: env.supabaseAnonKey,
-      Authorization: `Bearer ${env.supabaseAnonKey}`,
-      'x-client-info': 'zenith-legal-mobile',
-    },
+    headers: authHeaders,
     body: JSON.stringify(payload),
   });
 
