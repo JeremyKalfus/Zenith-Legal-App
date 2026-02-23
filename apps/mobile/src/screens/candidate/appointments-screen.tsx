@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { appointmentSchema, type AppointmentInput, type AppointmentStatus } from '@zenith/shared';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { ScreenShell } from '../../components/screen-shell';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../context/auth-context';
 
 type AppointmentRecord = {
   id: string;
@@ -20,6 +22,38 @@ type AppointmentRecord = {
   candidate_email?: string | null;
 };
 
+type PickerState = { field: 'start' | 'end'; mode: 'date' | 'time' } | null;
+
+function formatDateLabel(value: string | undefined): string {
+  if (!value) {
+    return 'Select date';
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Select date' : date.toLocaleDateString();
+}
+
+function formatTimeLabel(value: string | undefined): string {
+  if (!value) {
+    return 'Select time';
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? 'Select time'
+    : date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function mergeDatePart(baseIso: string, selected: Date): string {
+  const next = new Date(baseIso);
+  next.setFullYear(selected.getFullYear(), selected.getMonth(), selected.getDate());
+  return next.toISOString();
+}
+
+function mergeTimePart(baseIso: string, selected: Date): string {
+  const next = new Date(baseIso);
+  next.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
+  return next.toISOString();
+}
+
 export function AppointmentsScreen({
   showRecruiterBanner = true,
   mode = 'candidate',
@@ -27,12 +61,14 @@ export function AppointmentsScreen({
   showRecruiterBanner?: boolean;
   mode?: 'candidate' | 'staff';
 }) {
+  const { session } = useAuth();
   const isStaffMode = mode === 'staff';
   const [appointments, setAppointments] = useState<AppointmentRecord[]>([]);
   const [serverMessage, setServerMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [reviewingAppointmentId, setReviewingAppointmentId] = useState<string | null>(null);
   const [reviewingDecision, setReviewingDecision] = useState<'accepted' | 'declined' | null>(null);
+  const [pickerState, setPickerState] = useState<PickerState>(null);
 
   const {
     control,
@@ -56,6 +92,16 @@ export function AppointmentsScreen({
     },
   });
   const selectedModality = watch('modality') ?? 'virtual';
+  const startAtUtc = watch('startAtUtc');
+  const endAtUtc = watch('endAtUtc');
+
+  const getValidDate = useCallback((value: string | undefined, fallbackMsOffset: number) => {
+    const parsed = value ? new Date(value) : new Date(Date.now() + fallbackMsOffset);
+    if (Number.isNaN(parsed.getTime())) {
+      return new Date(Date.now() + fallbackMsOffset);
+    }
+    return parsed;
+  }, []);
 
   const loadAppointments = useCallback(async () => {
     const { data, error } = await supabase
@@ -148,6 +194,53 @@ export function AppointmentsScreen({
     return 'Request failed';
   }
 
+  const invokeAuthedFunction = useCallback(
+    async (name: string, body: Record<string, unknown>) => {
+      const currentSession = session ?? (await supabase.auth.getSession()).data.session;
+
+      if (!currentSession?.access_token) {
+        return {
+          data: null,
+          error: new Error('Your session has expired. Please sign in again and retry.'),
+        };
+      }
+
+      return supabase.functions.invoke(name, {
+        body,
+        headers: {
+          Authorization: `Bearer ${currentSession.access_token}`,
+        },
+      });
+    },
+    [session],
+  );
+
+  const handlePickerChange = useCallback(
+    (event: DateTimePickerEvent, selectedDate?: Date) => {
+      if (Platform.OS !== 'ios') {
+        setPickerState(null);
+      }
+
+      if (!pickerState || event.type === 'dismissed' || !selectedDate) {
+        return;
+      }
+
+      const fieldName = pickerState.field === 'start' ? 'startAtUtc' : 'endAtUtc';
+      const fallbackOffset = pickerState.field === 'start' ? 3600_000 : 7200_000;
+      const baseIso = getValidDate(
+        pickerState.field === 'start' ? startAtUtc : endAtUtc,
+        fallbackOffset,
+      ).toISOString();
+      const nextIso =
+        pickerState.mode === 'date'
+          ? mergeDatePart(baseIso, selectedDate)
+          : mergeTimePart(baseIso, selectedDate);
+
+      setValue(fieldName, nextIso, { shouldValidate: true, shouldDirty: true });
+    },
+    [endAtUtc, getValidDate, pickerState, setValue, startAtUtc],
+  );
+
   function getStatusLabel(status: AppointmentStatus): string {
     if (status === 'pending') {
       return 'Pending';
@@ -180,8 +273,9 @@ export function AppointmentsScreen({
       setReviewingDecision(decision);
       setServerMessage('');
 
-      const { error, data } = await supabase.functions.invoke('staff_review_appointment', {
-        body: { appointmentId, decision },
+      const { error, data } = await invokeAuthedFunction('staff_review_appointment', {
+        appointmentId,
+        decision,
       });
 
       if (error) {
@@ -196,7 +290,7 @@ export function AppointmentsScreen({
       setReviewingDecision(null);
       await loadAppointments();
     },
-    [loadAppointments],
+    [invokeAuthedFunction, loadAppointments],
   );
 
   useEffect(() => {
@@ -219,6 +313,12 @@ export function AppointmentsScreen({
       void supabase.removeChannel(channel);
     };
   }, [loadAppointments, mode]);
+
+  const activePickerValue = pickerState
+    ? pickerState.field === 'start'
+      ? getValidDate(startAtUtc, 3600_000)
+      : getValidDate(endAtUtc, 7200_000)
+    : null;
 
   return (
     <ScreenShell showBanner={showRecruiterBanner}>
@@ -324,6 +424,49 @@ export function AppointmentsScreen({
               ) : null}
             </>
           )}
+          <View style={styles.timeSection}>
+            <Text style={styles.sectionLabel}>Start time</Text>
+            <View style={styles.row}>
+              <Pressable
+                style={styles.timeButton}
+                onPress={() => setPickerState({ field: 'start', mode: 'date' })}
+              >
+                <Text style={styles.timeButtonText}>{formatDateLabel(startAtUtc)}</Text>
+              </Pressable>
+              <Pressable
+                style={styles.timeButton}
+                onPress={() => setPickerState({ field: 'start', mode: 'time' })}
+              >
+                <Text style={styles.timeButtonText}>{formatTimeLabel(startAtUtc)}</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.sectionLabel}>End time</Text>
+            <View style={styles.row}>
+              <Pressable
+                style={styles.timeButton}
+                onPress={() => setPickerState({ field: 'end', mode: 'date' })}
+              >
+                <Text style={styles.timeButtonText}>{formatDateLabel(endAtUtc)}</Text>
+              </Pressable>
+              <Pressable
+                style={styles.timeButton}
+                onPress={() => setPickerState({ field: 'end', mode: 'time' })}
+              >
+                <Text style={styles.timeButtonText}>{formatTimeLabel(endAtUtc)}</Text>
+              </Pressable>
+            </View>
+          </View>
+          {activePickerValue && pickerState ? (
+            <DateTimePicker
+              value={activePickerValue}
+              mode={pickerState.mode}
+              display="default"
+              onChange={handlePickerChange}
+            />
+          ) : null}
+          {errors.startAtUtc?.message ? (
+            <Text style={styles.fieldError}>{errors.startAtUtc.message}</Text>
+          ) : null}
           {errors.endAtUtc?.message ? (
             <Text style={styles.fieldError}>{errors.endAtUtc.message}</Text>
           ) : null}
@@ -332,11 +475,9 @@ export function AppointmentsScreen({
             style={styles.primaryCta}
             onPress={handleSubmit(
               async (values) => {
-                const { error, data } = await supabase.functions.invoke(
+                const { error, data } = await invokeAuthedFunction(
                   'schedule_or_update_appointment',
-                  {
-                    body: values,
-                  },
+                  values,
                 );
 
                 if (error) {
@@ -488,6 +629,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  sectionLabel: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '600',
+  },
   serverMessage: {
     color: '#0F172A',
   },
@@ -513,6 +659,22 @@ const styles = StyleSheet.create({
   },
   statusPending: {
     backgroundColor: '#FEF3C7',
+  },
+  timeButton: {
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderColor: '#CBD5E1',
+    borderRadius: 8,
+    borderWidth: 1,
+    flex: 1,
+    padding: 10,
+  },
+  timeButtonText: {
+    color: '#0F172A',
+    fontWeight: '600',
+  },
+  timeSection: {
+    gap: 8,
   },
   tag: {
     backgroundColor: '#E2E8F0',
