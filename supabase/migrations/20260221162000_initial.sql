@@ -498,5 +498,5 @@ using (public.is_staff())
 with check (public.is_staff());
 
 insert into public.recruiter_contact_config (id, phone, email, is_active)
-values ('00000000-0000-0000-0000-000000000001', '+12025550123', 'recruiting@zenithlegal.com', true)
+values ('00000000-0000-0000-0000-000000000001', '+12025550123', 'mason@zenithlegal.com', true)
 on conflict (id) do nothing;

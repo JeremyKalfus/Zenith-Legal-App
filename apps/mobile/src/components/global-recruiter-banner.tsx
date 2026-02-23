@@ -3,6 +3,7 @@ import { useRecruiterContact } from '../context/recruiter-contact-context';
 
 const ZENITH_RECRUITER_PHONE_DISPLAY = '(202) 486-3535';
 const ZENITH_RECRUITER_PHONE_DIAL = '+12024863535';
+const ZENITH_RECRUITER_EMAIL = 'mason@zenithlegal.com';
 
 function toDialablePhone(phone: string): string {
   const trimmed = phone.trim();
@@ -27,6 +28,7 @@ function toDialablePhone(phone: string): string {
 export function GlobalRecruiterBanner() {
   const { contact } = useRecruiterContact();
   const dialablePhone = ZENITH_RECRUITER_PHONE_DIAL || toDialablePhone(contact.phone);
+  const email = ZENITH_RECRUITER_EMAIL || contact.email;
 
   return (
     <View style={styles.container} accessibilityRole="header">
@@ -40,9 +42,9 @@ export function GlobalRecruiterBanner() {
         </Pressable>
         <Pressable
           accessibilityRole="link"
-          onPress={() => Linking.openURL(`mailto:${contact.email}`)}
+          onPress={() => Linking.openURL(`mailto:${email}`)}
         >
-          <Text style={styles.link}>{contact.email}</Text>
+          <Text style={styles.link}>{email}</Text>
         </Pressable>
       </View>
     </View>

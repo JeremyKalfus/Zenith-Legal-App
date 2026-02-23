@@ -5,7 +5,7 @@ export const env = {
     process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'public-anon-key',
   streamApiKey: process.env.EXPO_PUBLIC_STREAM_API_KEY ?? 'placeholder',
   supportPhone: process.env.EXPO_PUBLIC_RECRUITER_PHONE ?? '(202) 486-3535',
-  supportEmail: process.env.EXPO_PUBLIC_RECRUITER_EMAIL ?? 'recruiting@zenithlegal.com',
+  supportEmail: process.env.EXPO_PUBLIC_RECRUITER_EMAIL ?? 'mason@zenithlegal.com',
 };
 
 export function isSupabaseSecretKey(value: string): boolean {
