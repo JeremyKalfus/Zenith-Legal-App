@@ -34,14 +34,19 @@ export function AppointmentsScreen({
   const [reviewingAppointmentId, setReviewingAppointmentId] = useState<string | null>(null);
   const [reviewingDecision, setReviewingDecision] = useState<'accepted' | 'declined' | null>(null);
 
-  const { control, handleSubmit, reset } = useForm<AppointmentInput>({
+  const {
+    control,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<AppointmentInput>({
     resolver: zodResolver(appointmentSchema),
     defaultValues: {
       title: '',
       description: '',
       modality: 'virtual',
       locationText: '',
-      videoUrl: '',
+      videoUrl: undefined,
       startAtUtc: new Date(Date.now() + 3600_000).toISOString(),
       endAtUtc: new Date(Date.now() + 7200_000).toISOString(),
       timezoneLabel:
@@ -242,6 +247,9 @@ export function AppointmentsScreen({
               />
             )}
           />
+          {errors.title?.message ? (
+            <Text style={styles.fieldError}>{errors.title.message}</Text>
+          ) : null}
 
           <Controller
             control={control}
@@ -277,11 +285,14 @@ export function AppointmentsScreen({
               <TextInput
                 style={styles.input}
                 placeholder="Video URL"
-                onChangeText={field.onChange}
-                value={field.value}
+                onChangeText={(value) => field.onChange(value.trim().length > 0 ? value : undefined)}
+                value={field.value ?? ''}
               />
             )}
           />
+          {errors.videoUrl?.message ? (
+            <Text style={styles.fieldError}>{errors.videoUrl.message}</Text>
+          ) : null}
 
           <Controller
             control={control}
@@ -295,28 +306,39 @@ export function AppointmentsScreen({
               />
             )}
           />
+          {errors.locationText?.message ? (
+            <Text style={styles.fieldError}>{errors.locationText.message}</Text>
+          ) : null}
+          {errors.endAtUtc?.message ? (
+            <Text style={styles.fieldError}>{errors.endAtUtc.message}</Text>
+          ) : null}
 
           <Pressable
             style={styles.primaryCta}
-            onPress={handleSubmit(async (values) => {
-              const { error } = await supabase.functions.invoke(
-                'schedule_or_update_appointment',
-                {
-                  body: values,
-                },
-              );
+            onPress={handleSubmit(
+              async (values) => {
+                const { error, data } = await supabase.functions.invoke(
+                  'schedule_or_update_appointment',
+                  {
+                    body: values,
+                  },
+                );
 
-                  if (error) {
-                    setServerMessage(await extractFunctionInvokeErrorMessage(error, undefined));
-                    return;
-                  }
+                if (error) {
+                  setServerMessage(await extractFunctionInvokeErrorMessage(error, data));
+                  return;
+                }
 
-                  setServerMessage('Appointment request submitted.');
-                  setShowForm(false);
-                  reset();
-                  await loadAppointments();
-                })}
-              >
+                setServerMessage('Appointment request submitted.');
+                setShowForm(false);
+                reset();
+                await loadAppointments();
+              },
+              () => {
+                setServerMessage('Please fix the form errors and try again.');
+              },
+            )}
+          >
             <Text style={styles.primaryCtaText}>Submit request</Text>
           </Pressable>
         </View>
@@ -417,6 +439,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     padding: 10,
+  },
+  fieldError: {
+    color: '#B91C1C',
+    fontSize: 12,
+    marginTop: -4,
   },
   metaText: {
     color: '#334155',
