@@ -1,12 +1,21 @@
 create extension if not exists btree_gist;
 
-alter type public.appointment_status add value if not exists 'pending';
-alter type public.appointment_status add value if not exists 'accepted';
-alter type public.appointment_status add value if not exists 'declined';
+alter type public.appointment_status rename to appointment_status_old;
 
-update public.appointments
-set status = 'accepted'
-where status = 'scheduled';
+create type public.appointment_status as enum ('pending', 'accepted', 'declined', 'cancelled');
+
+alter table public.appointments
+  alter column status drop default,
+  alter column status type public.appointment_status
+    using (
+      case
+        when status::text = 'scheduled' then 'accepted'
+        else status::text
+      end::public.appointment_status
+    ),
+  alter column status set default 'pending';
+
+drop type public.appointment_status_old;
 
 -- Preflight overlap check before enforcing the accepted-only exclusion constraint.
 -- If this raises, resolve the overlapping accepted appointments first and re-run.
@@ -27,18 +36,6 @@ begin
   end if;
 end
 $$;
-
-alter type public.appointment_status rename to appointment_status_old;
-
-create type public.appointment_status as enum ('pending', 'accepted', 'declined', 'cancelled');
-
-alter table public.appointments
-  alter column status drop default,
-  alter column status type public.appointment_status
-    using (status::text::public.appointment_status),
-  alter column status set default 'pending';
-
-drop type public.appointment_status_old;
 
 drop policy if exists "appointments_create_self_or_staff" on public.appointments;
 
