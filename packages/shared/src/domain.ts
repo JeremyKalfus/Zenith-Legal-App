@@ -11,6 +11,8 @@ export const CITY_OPTIONS = [
   'Houston',
   'Dallas',
   'Chicago',
+  'Atlanta',
+  'Charlotte',
   'LA / Southern Cal',
   'SF / Northern Cal',
   'Miami',

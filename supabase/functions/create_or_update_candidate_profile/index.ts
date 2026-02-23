@@ -13,6 +13,8 @@ const cityOptions = [
   'Houston',
   'Dallas',
   'Chicago',
+  'Atlanta',
+  'Charlotte',
   'LA / Southern Cal',
   'SF / Northern Cal',
   'Miami',
