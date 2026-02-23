@@ -20,7 +20,7 @@ export default function App() {
   if (Platform.OS === 'web') {
     return (
       <View style={styles.webPage}>
-        <View style={styles.webFrame}>{appContent}</View>
+        {appContent}
       </View>
     );
   }
@@ -29,20 +29,8 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  webFrame: {
-    backgroundColor: '#F8FAFC',
-    borderColor: '#CBD5E1',
-    borderRadius: 16,
-    borderWidth: 1,
-    flex: 1,
-    maxWidth: 1100,
-    overflow: 'hidden',
-    width: '67%',
-  },
   webPage: {
-    alignItems: 'center',
     backgroundColor: '#E2E8F0',
     flex: 1,
-    padding: 16,
   },
 });
