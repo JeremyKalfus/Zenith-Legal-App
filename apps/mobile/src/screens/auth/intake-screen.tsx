@@ -13,6 +13,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { PasswordInput } from '../../components/password-input';
 import { useAuth } from '../../context/auth-context';
+import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
 
 type CandidateRegistrationFormValues = z.input<typeof candidateRegistrationSchema>;
 
@@ -73,6 +74,7 @@ export function IntakeScreen({
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <GlobalRecruiterBanner />
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.container}>
           <Text style={styles.h1}>Welcome to Zenith Legal</Text>

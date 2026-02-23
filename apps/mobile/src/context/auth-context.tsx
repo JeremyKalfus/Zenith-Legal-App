@@ -60,6 +60,44 @@ function extractErrorMessage(error: unknown): string {
   return 'Unknown error';
 }
 
+async function extractFunctionInvokeErrorMessage(error: unknown, data?: unknown): Promise<string> {
+  if (typeof data === 'object' && data && 'error' in data) {
+    const payloadMessage = (data as { error?: unknown }).error;
+    if (typeof payloadMessage === 'string' && payloadMessage.trim()) {
+      return payloadMessage;
+    }
+  }
+
+  if (typeof error === 'object' && error && 'context' in error) {
+    const context = (error as { context?: unknown }).context;
+    if (context instanceof Response) {
+      try {
+        const json = (await context.clone().json()) as { error?: unknown; message?: unknown; code?: unknown };
+        if (typeof json.error === 'string' && json.error.trim()) {
+          return json.error;
+        }
+        if (typeof json.message === 'string' && json.message.trim()) {
+          return json.message;
+        }
+        if (typeof json.code === 'string' && json.code.trim()) {
+          return json.code;
+        }
+      } catch {
+        try {
+          const text = await context.clone().text();
+          if (text.trim()) {
+            return text;
+          }
+        } catch {
+          // Fall through to generic extractor below.
+        }
+      }
+    }
+  }
+
+  return extractErrorMessage(error);
+}
+
 function mapAuthErrorToUserMessage(error: unknown): string {
   const message = extractErrorMessage(error).toLowerCase();
 
@@ -859,7 +897,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        const { error } = await supabase.functions.invoke(
+        const { data, error } = await supabase.functions.invoke(
           'create_or_update_candidate_profile',
           {
             body: intakeDraft,
@@ -867,7 +905,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         );
 
         if (error) {
-          throw error;
+          throw new Error(await extractFunctionInvokeErrorMessage(error, data));
         }
 
         if (session?.user.id) {
@@ -886,7 +924,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error('Your account email is unavailable. Please try again or sign in again.');
         }
 
-        const { error } = await supabase.functions.invoke('create_or_update_candidate_profile', {
+        const { data, error } = await supabase.functions.invoke('create_or_update_candidate_profile', {
           body: {
             ...input,
             email,
@@ -894,7 +932,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
 
         if (error) {
-          throw error;
+          throw new Error(await extractFunctionInvokeErrorMessage(error, data));
         }
 
         const transitionSeq = authTransitionSeqRef.current + 1;

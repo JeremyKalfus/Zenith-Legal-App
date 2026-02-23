@@ -22,7 +22,7 @@ Deno.serve(async (request) => {
 
     const { data: assignment, error: assignmentError } = await client
       .from('candidate_firm_assignments')
-      .select('id,candidate_user_id')
+      .select('id,candidate_user_id,status_enum')
       .eq('id', payload.assignment_id)
       .single();
 
@@ -30,7 +30,12 @@ Deno.serve(async (request) => {
       return errorResponse('Assignment not found for user', 404);
     }
 
-    const upsertResult = await client.from('candidate_authorizations').upsert(
+    const nextStatus =
+      payload.decision === 'authorized'
+        ? 'Authorized, will submit soon'
+        : 'Waiting on your authorization to contact/submit';
+
+    const upsertResult = await serviceClient.from('candidate_authorizations').upsert(
       {
         assignment_id: payload.assignment_id,
         decision: payload.decision,
@@ -44,6 +49,20 @@ Deno.serve(async (request) => {
       return errorResponse(upsertResult.error.message, 400);
     }
 
+    const { data: updatedAssignment, error: updateAssignmentError } = await serviceClient
+      .from('candidate_firm_assignments')
+      .update({
+        status_enum: nextStatus,
+        status_updated_at: new Date().toISOString(),
+      })
+      .eq('id', payload.assignment_id)
+      .select('*')
+      .single();
+
+    if (updateAssignmentError || !updatedAssignment) {
+      return errorResponse(updateAssignmentError?.message ?? 'Unable to update assignment', 400);
+    }
+
     await writeAuditEvent({
       client: serviceClient,
       actorUserId: userId,
@@ -52,10 +71,17 @@ Deno.serve(async (request) => {
       entityId: payload.assignment_id,
       afterJson: {
         decision: payload.decision,
+        previous_status: assignment.status_enum,
+        new_status: nextStatus,
       },
     });
 
-    return jsonResponse({ success: true });
+    return jsonResponse({
+      success: true,
+      previous_status: assignment.status_enum,
+      new_status: nextStatus,
+      assignment: updatedAssignment,
+    });
   } catch (error) {
     return errorResponse((error as Error).message, 500);
   }

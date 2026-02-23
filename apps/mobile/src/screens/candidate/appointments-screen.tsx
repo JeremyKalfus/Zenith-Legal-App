@@ -16,7 +16,11 @@ type AppointmentRecord = {
   video_url: string | null;
 };
 
-export function AppointmentsScreen() {
+export function AppointmentsScreen({
+  showRecruiterBanner = true,
+}: {
+  showRecruiterBanner?: boolean;
+}) {
   const [appointments, setAppointments] = useState<AppointmentRecord[]>([]);
   const [serverMessage, setServerMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -56,7 +60,7 @@ export function AppointmentsScreen() {
   }, []);
 
   return (
-    <ScreenShell>
+    <ScreenShell showBanner={showRecruiterBanner}>
       <Text style={styles.title}>Appointments</Text>
       <Text style={styles.body}>Default reminders trigger at 24h and 1h.</Text>
 

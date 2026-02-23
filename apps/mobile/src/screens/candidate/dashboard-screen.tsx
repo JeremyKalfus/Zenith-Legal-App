@@ -6,6 +6,49 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/auth-context';
 import type { CandidateFirmAssignment } from '../../types/domain';
 
+async function extractFunctionInvokeErrorMessage(error: unknown, data: unknown): Promise<string> {
+  if (typeof data === 'object' && data && 'error' in data) {
+    const message = (data as { error?: unknown }).error;
+    if (typeof message === 'string' && message.trim()) {
+      return message;
+    }
+  }
+
+  if (typeof error === 'object' && error && 'context' in error) {
+    const context = (error as { context?: unknown }).context;
+    if (context instanceof Response) {
+      try {
+        const json = (await context.clone().json()) as { error?: unknown; message?: unknown };
+        if (typeof json.error === 'string' && json.error.trim()) {
+          return json.error;
+        }
+        if (typeof json.message === 'string' && json.message.trim()) {
+          return json.message;
+        }
+      } catch {
+        try {
+          const text = await context.clone().text();
+          if (text.trim()) {
+            return text;
+          }
+        } catch {
+          // Fall through.
+        }
+      }
+    }
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return 'Unable to update authorization. Please try again.';
+}
+
+function isTrackedFirmStatus(value: unknown): value is CandidateFirmAssignment['status_enum'] {
+  return typeof value === 'string' && FIRM_STATUSES.includes(value as (typeof FIRM_STATUSES)[number]);
+}
+
 const statusRank = Object.fromEntries(
   FIRM_STATUSES.map((status, index) => [status, index]),
 ) as Record<string, number>;
@@ -18,6 +61,7 @@ export function DashboardScreen({
   const { session } = useAuth();
   const [assignments, setAssignments] = useState<CandidateFirmAssignment[]>([]);
   const [message, setMessage] = useState('');
+  const [busyAssignmentId, setBusyAssignmentId] = useState<string | null>(null);
 
   const loadAssignments = useCallback(async () => {
     if (!session?.user.id) {
@@ -28,32 +72,37 @@ export function DashboardScreen({
       .from('candidate_firm_assignments')
       .select('id,firm_id,status_enum,status_updated_at,firms(id,name)')
       .eq('candidate_user_id', session.user.id)
-      .in('status_enum', [...FIRM_STATUSES]);
+      .order('status_updated_at', { ascending: false });
 
     if (error) {
       setMessage(error.message);
       return;
     }
 
-    const normalized: CandidateFirmAssignment[] = ((data ??
-      []) as Record<string, unknown>[]).map((row) => {
-      const firmRelation = row.firms as
-        | { id: string; name: string }[]
-        | { id: string; name: string }
-        | null;
-      const firm = Array.isArray(firmRelation) ? firmRelation[0] : firmRelation;
+    const normalized: CandidateFirmAssignment[] = ((data ?? []) as Record<string, unknown>[])
+      .flatMap((row) => {
+        const status = row.status_enum;
+        if (!isTrackedFirmStatus(status)) {
+          return [];
+        }
 
-      return {
-        id: String(row.id),
-        firm_id: String(row.firm_id),
-        status_enum: row.status_enum as CandidateFirmAssignment['status_enum'],
-        status_updated_at: String(row.status_updated_at),
-        firms: {
-          id: firm?.id ?? '',
-          name: firm?.name ?? 'Unknown Firm',
-        },
-      };
-    });
+        const firmRelation = row.firms as
+          | { id: string; name: string }[]
+          | { id: string; name: string }
+          | null;
+        const firm = Array.isArray(firmRelation) ? firmRelation[0] : firmRelation;
+
+        return [{
+          id: String(row.id),
+          firm_id: String(row.firm_id),
+          status_enum: status,
+          status_updated_at: String(row.status_updated_at),
+          firms: {
+            id: firm?.id ?? '',
+            name: firm?.name ?? 'Unknown Firm',
+          },
+        }];
+      });
 
     setAssignments(normalized);
     setMessage('');
@@ -62,6 +111,33 @@ export function DashboardScreen({
   useEffect(() => {
     loadAssignments();
   }, [loadAssignments]);
+
+  const handleAuthorizationDecision = useCallback(
+    async (assignmentId: string, decision: 'authorized' | 'declined') => {
+      setBusyAssignmentId(assignmentId);
+      setMessage('');
+
+      try {
+        const { data, error } = await supabase.functions.invoke('authorize_firm_submission', {
+          body: {
+            assignment_id: assignmentId,
+            decision,
+          },
+        });
+
+        if (error) {
+          throw new Error(await extractFunctionInvokeErrorMessage(error, data));
+        }
+
+        await loadAssignments();
+      } catch (error) {
+        setMessage((error as Error).message);
+      } finally {
+        setBusyAssignmentId((current) => (current === assignmentId ? null : current));
+      }
+    },
+    [loadAssignments],
+  );
 
   const sortedAssignments = useMemo(
     () =>
@@ -104,36 +180,42 @@ export function DashboardScreen({
           <View key={assignment.id} style={styles.card}>
             <Text style={styles.firmName}>{assignment.firms.name}</Text>
             <Text style={styles.status}>{assignment.status_enum}</Text>
-            {assignment.status_enum ===
-            'Waiting on your authorization to contact/submit' ? (
+            {assignment.status_enum === 'Waiting on your authorization to contact/submit' ||
+            assignment.status_enum === 'Authorized, will submit soon' ? (
               <View style={styles.authRow}>
+                {assignment.status_enum === 'Waiting on your authorization to contact/submit' ? (
+                  <Pressable
+                    style={[
+                      styles.authorizeButton,
+                      busyAssignmentId === assignment.id && styles.buttonDisabled,
+                    ]}
+                    disabled={busyAssignmentId === assignment.id}
+                    onPress={() => {
+                      void handleAuthorizationDecision(assignment.id, 'authorized');
+                    }}
+                  >
+                    <Text style={styles.authorizeText}>
+                      {busyAssignmentId === assignment.id ? 'Saving...' : 'Authorize'}
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <View style={[styles.authorizeButton, styles.authorizedBadge, styles.buttonDisabled]}>
+                    <Text style={styles.authorizeText}>Authorized</Text>
+                  </View>
+                )}
                 <Pressable
-                  style={styles.authorizeButton}
-                  onPress={async () => {
-                    await supabase.functions.invoke('authorize_firm_submission', {
-                      body: {
-                        assignment_id: assignment.id,
-                        decision: 'authorized',
-                      },
-                    });
-                    loadAssignments();
+                  style={[
+                    styles.declineButton,
+                    busyAssignmentId === assignment.id && styles.buttonDisabled,
+                  ]}
+                  disabled={busyAssignmentId === assignment.id}
+                  onPress={() => {
+                    void handleAuthorizationDecision(assignment.id, 'declined');
                   }}
                 >
-                  <Text style={styles.authorizeText}>Authorize</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.declineButton}
-                  onPress={async () => {
-                    await supabase.functions.invoke('authorize_firm_submission', {
-                      body: {
-                        assignment_id: assignment.id,
-                        decision: 'declined',
-                      },
-                    });
-                    loadAssignments();
-                  }}
-                >
-                  <Text style={styles.declineText}>Decline</Text>
+                  <Text style={styles.declineText}>
+                    {busyAssignmentId === assignment.id ? 'Saving...' : 'Decline'}
+                  </Text>
                 </Pressable>
               </View>
             ) : null}
@@ -160,8 +242,14 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
   },
+  authorizedBadge: {
+    opacity: 0.85,
+  },
   body: {
     color: '#475569',
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
   card: {
     backgroundColor: '#ffffff',

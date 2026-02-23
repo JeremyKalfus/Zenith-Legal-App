@@ -27,6 +27,11 @@ type StatusModalState = {
   selectedStatus: FirmStatus;
 } | null;
 
+const USER_ONLY_AUTHORIZED_STATUS = 'Authorized, will submit soon' as const;
+const STAFF_SETTABLE_FIRM_STATUSES = FIRM_STATUSES.filter(
+  (status) => status !== USER_ONLY_AUTHORIZED_STATUS,
+) as FirmStatus[];
+
 export function StaffCandidateFirmsScreen({
   candidate,
 }: {
@@ -98,6 +103,10 @@ export function StaffCandidateFirmsScreen({
 
   const handleSaveStatus = useCallback(async () => {
     if (!statusModal) {
+      return;
+    }
+    if (statusModal.selectedStatus === USER_ONLY_AUTHORIZED_STATUS) {
+      setMessage('Only candidates can set "Authorized, will submit soon". Choose the next staff status.');
       return;
     }
 
@@ -253,8 +262,13 @@ export function StaffCandidateFirmsScreen({
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Update Status</Text>
             <Text style={styles.modalSubtitle}>{statusModal?.firmName ?? ''}</Text>
+            {statusModal?.selectedStatus === USER_ONLY_AUTHORIZED_STATUS ? (
+              <Text style={styles.modalHelper}>
+                Candidate-only status. Select a staff status to continue.
+              </Text>
+            ) : null}
             <View style={styles.statusOptionList}>
-              {FIRM_STATUSES.map((status) => {
+              {STAFF_SETTABLE_FIRM_STATUSES.map((status) => {
                 const selected = statusModal?.selectedStatus === status;
                 return (
                   <Pressable
@@ -288,7 +302,11 @@ export function StaffCandidateFirmsScreen({
               </Pressable>
               <Pressable
                 style={styles.primaryButtonModal}
-                disabled={!statusModal || busyAction?.startsWith('status:')}
+                disabled={
+                  !statusModal ||
+                  statusModal.selectedStatus === USER_ONLY_AUTHORIZED_STATUS ||
+                  !!busyAction?.startsWith('status:')
+                }
                 onPress={() => void handleSaveStatus()}
               >
                 <Text style={styles.primaryButtonModalText}>
@@ -394,6 +412,10 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     width: '100%',
+  },
+  modalHelper: {
+    color: '#92400E',
+    fontSize: 12,
   },
   modalSubtitle: {
     color: '#475569',
