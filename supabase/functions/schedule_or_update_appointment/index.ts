@@ -5,7 +5,7 @@ import { writeAuditEvent } from '../_shared/audit.ts';
 
 const appointmentSchema = z
   .object({
-    title: z.string().trim().min(1).max(120),
+    title: z.string().trim().max(120).optional(),
     description: z.string().trim().max(2000).optional(),
     modality: z.enum(['virtual', 'in_person']),
     locationText: z.string().trim().max(255).optional(),
@@ -23,21 +23,6 @@ const appointmentSchema = z
       });
     }
 
-    if (value.modality === 'virtual' && !value.videoUrl) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'videoUrl required for virtual appointments',
-        path: ['videoUrl'],
-      });
-    }
-
-    if (value.modality === 'in_person' && !value.locationText) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'locationText required for in-person appointments',
-        path: ['locationText'],
-      });
-    }
   });
 
 const schema = appointmentSchema.extend({
@@ -118,7 +103,7 @@ Deno.serve(async (request) => {
     const dbPayload = {
       candidate_user_id: candidateUserId,
       created_by_user_id: userId,
-      title: payload.title,
+      title: payload.title && payload.title.trim().length > 0 ? payload.title : 'Appointment request',
       description: payload.description ?? null,
       modality: payload.modality,
       location_text: payload.locationText ?? null,

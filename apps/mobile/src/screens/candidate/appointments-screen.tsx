@@ -38,6 +38,8 @@ export function AppointmentsScreen({
     control,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<AppointmentInput>({
     resolver: zodResolver(appointmentSchema),
@@ -53,6 +55,7 @@ export function AppointmentsScreen({
         Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
     },
   });
+  const selectedModality = watch('modality') ?? 'virtual';
 
   const loadAppointments = useCallback(async () => {
     const { data, error } = await supabase
@@ -241,9 +244,9 @@ export function AppointmentsScreen({
             render={({ field }) => (
               <TextInput
                 style={styles.input}
-                placeholder="Title"
-                onChangeText={field.onChange}
-                value={field.value}
+                placeholder="Title (optional)"
+                onChangeText={(value) => field.onChange(value.trim().length > 0 ? value : undefined)}
+                value={field.value ?? ''}
               />
             )}
           />
@@ -261,7 +264,10 @@ export function AppointmentsScreen({
                     styles.tag,
                     field.value === 'virtual' ? styles.tagSelected : null,
                   ]}
-                  onPress={() => field.onChange('virtual')}
+                  onPress={() => {
+                    field.onChange('virtual');
+                    setValue('locationText', undefined);
+                  }}
                 >
                   <Text>Virtual</Text>
                 </Pressable>
@@ -270,7 +276,10 @@ export function AppointmentsScreen({
                     styles.tag,
                     field.value === 'in_person' ? styles.tagSelected : null,
                   ]}
-                  onPress={() => field.onChange('in_person')}
+                  onPress={() => {
+                    field.onChange('in_person');
+                    setValue('videoUrl', undefined);
+                  }}
                 >
                   <Text>In-person</Text>
                 </Pressable>
@@ -278,37 +287,43 @@ export function AppointmentsScreen({
             )}
           />
 
-          <Controller
-            control={control}
-            name="videoUrl"
-            render={({ field }) => (
-              <TextInput
-                style={styles.input}
-                placeholder="Video URL"
-                onChangeText={(value) => field.onChange(value.trim().length > 0 ? value : undefined)}
-                value={field.value ?? ''}
+          {selectedModality === 'virtual' ? (
+            <>
+              <Controller
+                control={control}
+                name="videoUrl"
+                render={({ field }) => (
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Video URL (optional)"
+                    onChangeText={(value) => field.onChange(value.trim().length > 0 ? value : undefined)}
+                    value={field.value ?? ''}
+                  />
+                )}
               />
-            )}
-          />
-          {errors.videoUrl?.message ? (
-            <Text style={styles.fieldError}>{errors.videoUrl.message}</Text>
-          ) : null}
-
-          <Controller
-            control={control}
-            name="locationText"
-            render={({ field }) => (
-              <TextInput
-                style={styles.input}
-                placeholder="Location"
-                onChangeText={field.onChange}
-                value={field.value}
+              {errors.videoUrl?.message ? (
+                <Text style={styles.fieldError}>{errors.videoUrl.message}</Text>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Controller
+                control={control}
+                name="locationText"
+                render={({ field }) => (
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Location (optional)"
+                    onChangeText={(value) => field.onChange(value.trim().length > 0 ? value : undefined)}
+                    value={field.value ?? ''}
+                  />
+                )}
               />
-            )}
-          />
-          {errors.locationText?.message ? (
-            <Text style={styles.fieldError}>{errors.locationText.message}</Text>
-          ) : null}
+              {errors.locationText?.message ? (
+                <Text style={styles.fieldError}>{errors.locationText.message}</Text>
+              ) : null}
+            </>
+          )}
           {errors.endAtUtc?.message ? (
             <Text style={styles.fieldError}>{errors.endAtUtc.message}</Text>
           ) : null}
