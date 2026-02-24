@@ -23,163 +23,172 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
+  const frameStyle = Platform.OS === 'web' ? styles.webFrame : styles.frame;
+
   if (needsPasswordReset) {
     return (
-      <SafeAreaView
-        style={[styles.safeArea, Platform.OS === 'web' ? styles.safeAreaWeb : null]}
-        edges={['top', 'bottom']}
-      >
-        <View style={Platform.OS === 'web' ? styles.webFrame : undefined}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+        <View style={frameStyle}>
           <GlobalRecruiterBanner />
-          <ScrollView contentContainerStyle={styles.scrollContent}>
-            <View style={styles.container}>
-            <Text style={styles.title}>Set a new password</Text>
-            <Text style={styles.body}>
-              Your reset link is valid. Enter a new password to continue.
-            </Text>
-
-            {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
-            {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
-
-            <PasswordInput
-              placeholder="New password"
-              style={styles.input}
-              value={newPassword}
-              onChangeText={setNewPassword}
-              showStrength
-            />
-            <PasswordInput
-              placeholder="Confirm new password"
-              style={styles.input}
-              value={confirmNewPassword}
-              onChangeText={setConfirmNewPassword}
-            />
-
-            <Pressable
-              style={[styles.button, (busy || !newPassword || !confirmNewPassword) && styles.buttonDisabled]}
-              disabled={busy || !newPassword || !confirmNewPassword}
-              accessibilityState={{ disabled: busy || !newPassword || !confirmNewPassword }}
-              onPress={async () => {
-                setBusy(true);
-                setMessage('');
-                clearAuthNotice();
-                try {
-                  if (newPassword !== confirmNewPassword) {
-                    throw new Error('Passwords do not match');
-                  }
-                  await updatePassword(newPassword);
-                  setMessage('Password updated successfully.');
-                } catch (error) {
-                  setMessage((error as Error).message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
+          <View style={styles.center}>
+            <ScrollView
+              style={styles.scrollView}
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
             >
-              <Text style={styles.buttonText}>{busy ? 'Updating password...' : 'Update password'}</Text>
-            </Pressable>
+              <View style={styles.form}>
+                <Text style={styles.title}>Set a new password</Text>
+                <Text style={styles.body}>
+                  Your reset link is valid. Enter a new password to continue.
+                </Text>
 
-            {message ? <Text style={styles.message}>{message}</Text> : null}
-            </View>
-          </ScrollView>
+                {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
+                {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
+
+                <PasswordInput
+                  placeholder="New password"
+                  style={styles.input}
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  showStrength
+                />
+                <PasswordInput
+                  placeholder="Confirm new password"
+                  style={styles.input}
+                  value={confirmNewPassword}
+                  onChangeText={setConfirmNewPassword}
+                />
+
+                <Pressable
+                  style={[styles.button, (busy || !newPassword || !confirmNewPassword) && styles.buttonDisabled]}
+                  disabled={busy || !newPassword || !confirmNewPassword}
+                  accessibilityState={{ disabled: busy || !newPassword || !confirmNewPassword }}
+                  onPress={async () => {
+                    setBusy(true);
+                    setMessage('');
+                    clearAuthNotice();
+                    try {
+                      if (newPassword !== confirmNewPassword) {
+                        throw new Error('Passwords do not match');
+                      }
+                      await updatePassword(newPassword);
+                      setMessage('Password updated successfully.');
+                    } catch (error) {
+                      setMessage((error as Error).message);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  <Text style={styles.buttonText}>{busy ? 'Updating password...' : 'Update password'}</Text>
+                </Pressable>
+
+                {message ? <Text style={styles.message}>{message}</Text> : null}
+              </View>
+            </ScrollView>
+          </View>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView
-      style={[styles.safeArea, Platform.OS === 'web' ? styles.safeAreaWeb : null]}
-      edges={['top', 'bottom']}
-    >
-      <View style={Platform.OS === 'web' ? styles.webFrame : undefined}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <View style={frameStyle}>
         <GlobalRecruiterBanner />
-        <ScrollView contentContainerStyle={styles.signInScrollContent}>
-          <View style={[styles.container, styles.centeredContainer]}>
-          <Text style={styles.title}>Sign in</Text>
-          <Text style={styles.body}>Sign in with your email address and password.</Text>
-
-          {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
-          {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
-
-          <TextInput
-            autoCapitalize="none"
-            keyboardType="email-address"
-            placeholder="Email"
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-          />
-
-          <PasswordInput
-            placeholder="Password"
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-          />
-
-          <Pressable
-            style={[styles.button, (busy || !email.trim() || !password) && styles.buttonDisabled]}
-            disabled={busy || !email.trim() || !password}
-            accessibilityState={{ disabled: busy || !email.trim() || !password }}
-            onPress={async () => {
-              setBusy(true);
-              setMessage('');
-              clearAuthNotice();
-              try {
-                await signInWithEmailPassword(email, password);
-                setMessage('Signing in...');
-              } catch (error) {
-                setMessage((error as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
+        <View style={styles.center}>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
-            <Text style={styles.buttonText}>Sign in with email</Text>
-          </Pressable>
+            <View style={styles.form}>
+              <Text style={styles.title}>Sign in</Text>
+              <Text style={styles.body}>Sign in with your email address and password.</Text>
 
-          <Pressable
-            style={styles.linkButton}
-            disabled={busy || !email.trim()}
-            accessibilityState={{ disabled: busy || !email.trim() }}
-            onPress={async () => {
-              setBusy(true);
-              setMessage('');
-              clearAuthNotice();
-              try {
-                await requestPasswordReset(email);
-                const redirectHint =
-                  __DEV__ && authRedirectUrl?.startsWith('exp://')
-                    ? ` Reset callback: ${authRedirectUrl}`
-                    : '';
-                setMessage(
-                  `Password reset link sent to your email. Open it on this device.${redirectHint}`,
-                );
-              } catch (error) {
-                setMessage((error as Error).message);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-          <Text style={styles.linkText}>Forgot password? Send reset email</Text>
-          </Pressable>
+              {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
+              {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
 
-          {__DEV__ && authRedirectUrl?.startsWith('exp://') ? (
-            <Text style={styles.devNote}>
-              Dev note: Supabase password recovery does not honor Expo Go exp:// callbacks. Use a
-              development build (zenithlegal://auth/callback) for mobile password reset.
-            </Text>
-          ) : null}
+              <TextInput
+                autoCapitalize="none"
+                keyboardType="email-address"
+                placeholder="Email"
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+              />
 
-          {message ? <Text style={styles.message}>{message}</Text> : null}
+              <PasswordInput
+                placeholder="Password"
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+              />
 
-          <Pressable onPress={onBack} style={styles.linkButton}>
-            <Text style={styles.linkText}>New candidate? Start intake</Text>
-          </Pressable>
-          </View>
-        </ScrollView>
+              <Pressable
+                style={[styles.button, (busy || !email.trim() || !password) && styles.buttonDisabled]}
+                disabled={busy || !email.trim() || !password}
+                accessibilityState={{ disabled: busy || !email.trim() || !password }}
+                onPress={async () => {
+                  setBusy(true);
+                  setMessage('');
+                  clearAuthNotice();
+                  try {
+                    await signInWithEmailPassword(email, password);
+                    setMessage('Signing in...');
+                  } catch (error) {
+                    setMessage((error as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                <Text style={styles.buttonText}>Sign in with email</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.linkButton}
+                disabled={busy || !email.trim()}
+                accessibilityState={{ disabled: busy || !email.trim() }}
+                onPress={async () => {
+                  setBusy(true);
+                  setMessage('');
+                  clearAuthNotice();
+                  try {
+                    await requestPasswordReset(email);
+                    const redirectHint =
+                      __DEV__ && authRedirectUrl?.startsWith('exp://')
+                        ? ` Reset callback: ${authRedirectUrl}`
+                        : '';
+                    setMessage(
+                      `Password reset link sent to your email. Open it on this device.${redirectHint}`,
+                    );
+                  } catch (error) {
+                    setMessage((error as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                <Text style={styles.linkText}>Forgot password? Send reset email</Text>
+              </Pressable>
+
+              {__DEV__ && authRedirectUrl?.startsWith('exp://') ? (
+                <Text style={styles.devNote}>
+                  Dev note: Supabase password recovery does not honor Expo Go exp:// callbacks. Use a
+                  development build (zenithlegal://auth/callback) for mobile password reset.
+                </Text>
+              ) : null}
+
+              {message ? <Text style={styles.message}>{message}</Text> : null}
+
+              <Pressable onPress={onBack} style={styles.linkButton}>
+                <Text style={styles.linkText}>New candidate? Start intake</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -204,9 +213,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
   },
-  container: {
-    gap: 8,
-    padding: 16,
+  center: {
+    flex: 1,
+    justifyContent: 'center',
   },
   error: {
     color: '#B91C1C',
@@ -217,6 +226,13 @@ const styles = StyleSheet.create({
     color: '#92400E',
     fontSize: 12,
     marginTop: -2,
+  },
+  form: {
+    gap: 8,
+    padding: 16,
+  },
+  frame: {
+    flex: 1,
   },
   input: {
     backgroundColor: '#ffffff',
@@ -242,13 +258,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8FAFC',
     flex: 1,
   },
-  safeAreaWeb: {
-    alignItems: 'center',
+  scrollView: {
+    flex: 1,
   },
   scrollContent: {
-    paddingBottom: 24,
-  },
-  signInScrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
     paddingBottom: 24,
@@ -264,13 +277,9 @@ const styles = StyleSheet.create({
     borderColor: '#CBD5E1',
     borderRadius: 16,
     borderWidth: 1,
-    flexGrow: 1,
-    flexShrink: 1,
+    flex: 1,
     maxWidth: 1100,
     overflow: 'hidden',
     width: '67%',
-  },
-  centeredContainer: {
-    justifyContent: 'center',
   },
 });
