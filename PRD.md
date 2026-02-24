@@ -29,6 +29,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Email magic link sign-in.
 - SMS OTP verification.
 - Password reset flow.
+- Invalid or revoked persisted sessions are cleared on app startup (users are returned to sign-in instead of hitting a startup auth refresh error loop).
 - Role-based routing: candidate tabs vs staff tabs after sign-in.
 
 ### Candidate Intake and Onboarding
@@ -69,6 +70,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Push token registration.
 - Notification preferences per user.
 - `dispatch_notifications` edge function can enqueue notification events and process queued push notification deliveries (Expo Push API).
+- Automatic recurring processor scheduling is not fully wired yet (queued deliveries require processor invocation until scheduler/automation is added).
 - Notification events: appointment created/updated, assignment status change, message received.
 
 ### Admin Dashboard (web)

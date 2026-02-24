@@ -157,18 +157,18 @@
 
 **Consequences:** `authorize_firm_submission` now branches `declined` behavior by current assignment status. Admin web user deletion uses a dedicated staff-only edge function and rejects staff/self deletion in this workflow.
 
-### [2026-02-24] Candidate self-service in-app account deletion for store compliance
+### [2026-02-24] Mobile auth clears invalid persisted refresh tokens on startup
 
-**Decision:** Add a candidate self-service account deletion action in the mobile Profile screen that directly deletes the authenticated account (hard delete), rather than only creating a support request.
+**Decision:** When Supabase auth session recovery returns an invalid refresh-token error (`Invalid Refresh Token`, `Refresh Token Not Found`), the mobile app clears the persisted local auth session and returns the user to sign-in instead of continuing retry/error loops.
 
 **Options considered:**
-1. Support-request-only deletion (email/contact staff) -- lower engineering work, but weaker app-store compliance for in-app deletion expectations
-2. In-app self-service hard delete via authenticated edge function -- stronger user control and aligns with Apple/Google in-app deletion expectations (chosen)
-3. Soft-delete/deactivate account -- reversible, but requires schema + product lifecycle changes
+1. Surface the raw Supabase error and require manual reinstall/sign-out -- low code change, poor UX and recurring LogBox errors
+2. Detect invalid refresh-token errors and perform local sign-out/session clear (chosen)
+3. Always clear persisted auth state on any `getSession()` error -- simpler, but too destructive for transient network errors
 
-**Rationale:** App stores increasingly expect account deletion to be initiated in-app, not routed exclusively through support. A direct authenticated edge function keeps the workflow simple while preserving necessary historical references by nulling non-cascading foreign keys before deleting the auth user.
+**Rationale:** Account deletion and token revocation are legitimate flows that leave stale refresh tokens on device storage. Supabase attempts recovery on startup and can log console errors repeatedly until the stale token is removed. Targeted detection preserves good sessions while fixing the bad-token loop.
 
-**Consequences:** `delete_my_account` edge function exists and is deployed. Candidate Profile UI now includes a typed confirmation + destructive action. Some historical records may remain with identifiers removed/nullified where required for integrity/compliance.
+**Consequences:** Mobile auth bootstrap and `ensureValidSession()` now clear local persisted auth state for invalid refresh-token failures and fail open to the sign-in screen. Other auth/network errors still surface normally.
 
 ### [2026-02-24] Push-first notification dispatch in `dispatch_notifications`
 

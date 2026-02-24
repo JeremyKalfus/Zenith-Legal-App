@@ -35,6 +35,7 @@ pnpm-debug.log*
 coverage/
 dist/
 build/
+test-results/
 
 # IDE
 .vscode/

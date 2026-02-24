@@ -1,6 +1,6 @@
 # Zenith Legal App Monorepo
 
-Production-oriented monorepo for Zenith Legal mobile + admin platform.
+Production-oriented monorepo for Zenith Legal mobile + admin platform (candidate app, staff app flows, and admin web dashboard).
 
 ## Workspace Layout
 
@@ -51,7 +51,12 @@ npm run verify
 - [x] Supabase initial schema + RLS + edge function contracts
 - [x] Mobile role-based navigation skeleton and core screens
 - [x] Admin operations dashboard skeleton
+- [x] Staff/candidate messaging (Stream Chat; inbox-first staff flows on mobile + admin web)
+- [x] Candidate firm authorization workflow (decline-delete for waiting assignments; cancel for authorized assignments)
+- [x] Candidate and admin account deletion flows (candidate self-service + staff candidate-only delete)
+- [x] Push notification queue processing via Expo Push API (`dispatch_notifications` processor mode)
 - [ ] Vendor credential wiring for end-to-end runtime (requires secrets)
+- [ ] Notification email provider + scheduled dispatch automation (push processor is implemented; automation still pending)
 - [ ] Device-level release signing and EAS submit credentials
 
 ## Git Workflow

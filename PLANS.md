@@ -53,6 +53,7 @@
 - Push notifications delivered to candidate devices.
 - Email notifications sent for appointment events.
 - `notification_deliveries.status` updated to `'sent'` or `'failed'`.
+- Processor invocation is automated on a schedule (not manual-only).
 
 ### 2. Wire calendar sync
 
