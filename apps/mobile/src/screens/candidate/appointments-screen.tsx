@@ -5,6 +5,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { appointmentSchema, type AppointmentInput, type AppointmentStatus } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
 import { supabase, ensureValidSession } from '../../lib/supabase';
+import { uiColors } from '../../theme/colors';
+import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 
 type AppointmentRecord = {
   id: string;
@@ -103,7 +105,12 @@ export function AppointmentsScreen() {
       <Text style={styles.body}>Default reminders trigger at 24h and 1h.</Text>
 
       <Pressable
-        style={styles.primaryCta}
+        style={interactivePressableStyle({
+          base: styles.primaryCta,
+          hoverStyle: sharedPressableFeedback.hover,
+          focusStyle: sharedPressableFeedback.focus,
+          pressedStyle: sharedPressableFeedback.pressed,
+        })}
         onPress={() => setShowForm((value) => !value)}
       >
         <Text style={styles.primaryCtaText}>
@@ -209,7 +216,14 @@ export function AppointmentsScreen() {
           ) : null}
 
           <Pressable
-            style={[styles.primaryCta, submitting && styles.primaryCtaDisabled]}
+            style={interactivePressableStyle({
+              base: styles.primaryCta,
+              disabled: submitting,
+              disabledStyle: styles.primaryCtaDisabled,
+              hoverStyle: sharedPressableFeedback.hover,
+              focusStyle: sharedPressableFeedback.focus,
+              pressedStyle: sharedPressableFeedback.pressed,
+            })}
             disabled={submitting}
             onPress={handleSubmit(
               async (values) => {
@@ -360,7 +374,7 @@ const styles = StyleSheet.create({
   },
   primaryCta: {
     alignItems: 'center',
-    backgroundColor: '#0C4A6E',
+    backgroundColor: uiColors.primary,
     borderRadius: 10,
     padding: 12,
   },
@@ -368,7 +382,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   primaryCtaText: {
-    color: '#F8FAFC',
+    color: uiColors.primaryText,
     fontWeight: '700',
   },
   row: {

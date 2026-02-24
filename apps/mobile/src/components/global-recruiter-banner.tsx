@@ -1,5 +1,6 @@
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRecruiterContact } from '../context/recruiter-contact-context';
+import { uiColors } from '../theme/colors';
 
 const ZENITH_RECRUITER_PHONE_DISPLAY = '(202) 486-3535';
 const ZENITH_RECRUITER_PHONE_DIAL = '+12024863535';
@@ -53,8 +54,8 @@ export function GlobalRecruiterBanner() {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#041C32',
-    borderBottomColor: '#0C7B93',
+    backgroundColor: uiColors.bannerBackground,
+    borderBottomColor: uiColors.bannerBorder,
     borderBottomWidth: 1,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -69,11 +70,12 @@ const styles = StyleSheet.create({
   row: {
     alignItems: 'center',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     justifyContent: 'space-between',
   },
   link: {
-    color: '#CFFAFE',
+    color: uiColors.bannerLink,
     fontSize: 14,
     fontWeight: '600',
     textDecorationLine: 'underline',

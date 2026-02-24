@@ -13,6 +13,8 @@ import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'r
 import { PasswordInput } from '../../components/password-input';
 import { ScreenShell } from '../../components/screen-shell';
 import { useAuth } from '../../context/auth-context';
+import { uiColors } from '../../theme/colors';
+import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 
 type CandidateProfileFormValues = z.input<typeof candidateIntakeSchema>;
 const COLLAPSED_BUBBLE_ROWS_HEIGHT = 34;
@@ -338,7 +340,14 @@ export function ProfileScreen() {
             ) : null}
 
             <Pressable
-              style={[styles.primaryButton, busy && styles.buttonDisabled]}
+              style={interactivePressableStyle({
+                base: styles.primaryButton,
+                disabled: busy,
+                disabledStyle: styles.buttonDisabled,
+                hoverStyle: sharedPressableFeedback.hover,
+                focusStyle: sharedPressableFeedback.focus,
+                pressedStyle: sharedPressableFeedback.pressed,
+              })}
               disabled={busy}
               accessibilityState={{ disabled: busy }}
               onPress={handleSubmit(async (values) => {
@@ -425,10 +434,14 @@ export function ProfileScreen() {
               editable={!deleteBusy}
             />
             <Pressable
-              style={[
-                styles.deleteAccountButton,
-                (deleteBusy || deleteConfirmText.trim().toUpperCase() !== 'DELETE') && styles.buttonDisabled,
-              ]}
+              style={interactivePressableStyle({
+                base: styles.deleteAccountButton,
+                disabled: deleteBusy || deleteConfirmText.trim().toUpperCase() !== 'DELETE',
+                disabledStyle: styles.buttonDisabled,
+                hoverStyle: sharedPressableFeedback.hover,
+                focusStyle: sharedPressableFeedback.focus,
+                pressedStyle: sharedPressableFeedback.pressed,
+              })}
               disabled={deleteBusy || deleteConfirmText.trim().toUpperCase() !== 'DELETE'}
               accessibilityState={{
                 disabled: deleteBusy || deleteConfirmText.trim().toUpperCase() !== 'DELETE',
@@ -468,7 +481,13 @@ export function ProfileScreen() {
             {profileLoadError ?? 'Profile information is not available yet.'}
           </Text>
           <Pressable
-            style={styles.retryButton}
+            style={interactivePressableStyle({
+              base: styles.retryButton,
+              disabled: isSigningOut,
+              hoverStyle: sharedPressableFeedback.hover,
+              focusStyle: sharedPressableFeedback.focus,
+              pressedStyle: sharedPressableFeedback.pressed,
+            })}
             disabled={isSigningOut}
             onPress={() => {
               void refreshProfile();
@@ -482,7 +501,14 @@ export function ProfileScreen() {
       {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
 
       <Pressable
-        style={[styles.logout, isSigningOut && styles.buttonDisabled]}
+        style={interactivePressableStyle({
+          base: styles.logout,
+          disabled: isSigningOut,
+          disabledStyle: styles.buttonDisabled,
+          hoverStyle: sharedPressableFeedback.hover,
+          focusStyle: sharedPressableFeedback.focus,
+          pressedStyle: sharedPressableFeedback.pressed,
+        })}
         disabled={isSigningOut}
         accessibilityState={{ disabled: isSigningOut }}
         onPress={() => {
@@ -513,12 +539,12 @@ const styles = StyleSheet.create({
   },
   deleteAccountButton: {
     alignItems: 'center',
-    backgroundColor: '#B91C1C',
+    backgroundColor: uiColors.danger,
     borderRadius: 10,
     padding: 12,
   },
   deleteAccountButtonText: {
-    color: '#FFFFFF',
+    color: uiColors.dangerText,
     fontWeight: '700',
   },
   checkbox: {
@@ -556,12 +582,12 @@ const styles = StyleSheet.create({
   },
   logout: {
     alignItems: 'center',
-    backgroundColor: '#7F1D1D',
+    backgroundColor: uiColors.danger,
     borderRadius: 10,
     padding: 12,
   },
   logoutText: {
-    color: '#ffffff',
+    color: uiColors.dangerText,
     fontWeight: '700',
   },
   message: {
@@ -600,12 +626,12 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: '#0F766E',
+    backgroundColor: uiColors.primary,
     borderRadius: 10,
     padding: 12,
   },
   primaryButtonText: {
-    color: '#ffffff',
+    color: uiColors.primaryText,
     fontWeight: '700',
   },
   retryButton: {

@@ -20,6 +20,8 @@ import {
   unassignFirmFromCandidate,
   updateCandidateAssignmentStatus,
 } from '../../features/staff-candidate-management';
+import { uiColors } from '../../theme/colors';
+import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 
 type StatusModalState = {
   assignmentId: string;
@@ -189,7 +191,14 @@ export function StaffCandidateFirmsScreen({
 
                 <View style={styles.rowActions}>
                   <Pressable
-                    style={[styles.primaryButtonSmall, rowBusy && styles.buttonDisabled]}
+                    style={interactivePressableStyle({
+                      base: styles.primaryButtonSmall,
+                      disabled: rowBusy || !!busyAction?.startsWith('assign:'),
+                      disabledStyle: styles.buttonDisabled,
+                      hoverStyle: sharedPressableFeedback.hover,
+                      focusStyle: sharedPressableFeedback.focus,
+                      pressedStyle: sharedPressableFeedback.pressed,
+                    })}
                     disabled={rowBusy || busyAction?.startsWith('assign:')}
                     onPress={() =>
                       setStatusModal({
@@ -205,7 +214,14 @@ export function StaffCandidateFirmsScreen({
                   </Pressable>
 
                   <Pressable
-                    style={[styles.dangerButtonSmall, rowBusy && styles.buttonDisabled]}
+                    style={interactivePressableStyle({
+                      base: styles.dangerButtonSmall,
+                      disabled: rowBusy || !!busyAction?.startsWith('assign:'),
+                      disabledStyle: styles.buttonDisabled,
+                      hoverStyle: sharedPressableFeedback.hover,
+                      focusStyle: sharedPressableFeedback.focus,
+                      pressedStyle: sharedPressableFeedback.pressed,
+                    })}
                     disabled={rowBusy || busyAction?.startsWith('assign:')}
                     onPress={() => handleUnassign(assignment)}
                   >
@@ -236,10 +252,14 @@ export function StaffCandidateFirmsScreen({
             <View key={firm.id} style={styles.assignRow}>
               <Text style={styles.assignFirmName}>{firm.name}</Text>
               <Pressable
-                style={[
-                  styles.primaryButtonSmall,
-                  busyAction === `assign:${firm.id}` && styles.buttonDisabled,
-                ]}
+                style={interactivePressableStyle({
+                  base: styles.primaryButtonSmall,
+                  disabled: busyAction !== null,
+                  disabledStyle: styles.buttonDisabled,
+                  hoverStyle: sharedPressableFeedback.hover,
+                  focusStyle: sharedPressableFeedback.focus,
+                  pressedStyle: sharedPressableFeedback.pressed,
+                })}
                 disabled={busyAction !== null}
                 onPress={() => void handleAssign(firm)}
               >
@@ -301,7 +321,16 @@ export function StaffCandidateFirmsScreen({
                 <Text style={styles.secondaryButtonModalText}>Cancel</Text>
               </Pressable>
               <Pressable
-                style={styles.primaryButtonModal}
+                style={interactivePressableStyle({
+                  base: styles.primaryButtonModal,
+                  disabled:
+                    !statusModal ||
+                    statusModal.selectedStatus === USER_ONLY_AUTHORIZED_STATUS ||
+                    !!busyAction?.startsWith('status:'),
+                  hoverStyle: sharedPressableFeedback.hover,
+                  focusStyle: sharedPressableFeedback.focus,
+                  pressedStyle: sharedPressableFeedback.pressed,
+                })}
                 disabled={
                   !statusModal ||
                   statusModal.selectedStatus === USER_ONLY_AUTHORIZED_STATUS ||
@@ -325,7 +354,9 @@ const styles = StyleSheet.create({
   assignFirmName: {
     color: '#0F172A',
     flex: 1,
+    flexShrink: 1,
     fontWeight: '600',
+    minWidth: 0,
     paddingRight: 8,
   },
   assignRow: {
@@ -335,7 +366,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
+    justifyContent: 'space-between',
     padding: 10,
   },
   body: {
@@ -371,12 +404,14 @@ const styles = StyleSheet.create({
     borderColor: '#FECACA',
     borderRadius: 8,
     borderWidth: 1,
+    flexShrink: 1,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   dangerButtonSmallText: {
     color: '#991B1B',
     fontWeight: '700',
+    textAlign: 'center',
   },
   emptyText: {
     color: '#64748B',
@@ -397,6 +432,7 @@ const styles = StyleSheet.create({
   },
   modalActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginTop: 12,
   },
@@ -428,9 +464,10 @@ const styles = StyleSheet.create({
   },
   primaryButtonModal: {
     alignItems: 'center',
-    backgroundColor: '#0F766E',
+    backgroundColor: uiColors.primary,
     borderRadius: 10,
     flex: 1,
+    minWidth: 140,
     padding: 12,
   },
   primaryButtonModalText: {
@@ -439,17 +476,20 @@ const styles = StyleSheet.create({
   },
   primaryButtonSmall: {
     alignItems: 'center',
-    backgroundColor: '#0F766E',
+    backgroundColor: uiColors.primary,
     borderRadius: 8,
+    flexShrink: 1,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
   primaryButtonSmallText: {
     color: '#FFFFFF',
     fontWeight: '700',
+    textAlign: 'center',
   },
   rowActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     marginTop: 10,
   },
@@ -473,6 +513,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     flex: 1,
+    minWidth: 140,
     padding: 12,
   },
   secondaryButtonModalText: {

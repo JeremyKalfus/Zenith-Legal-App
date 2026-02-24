@@ -5,6 +5,8 @@ import { ScreenShell } from '../../components/screen-shell';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/auth-context';
 import type { CandidateFirmAssignment } from '../../types/domain';
+import { uiColors } from '../../theme/colors';
+import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 
 async function extractFunctionInvokeErrorMessage(error: unknown, data: unknown): Promise<string> {
   if (typeof data === 'object' && data && 'error' in data) {
@@ -164,7 +166,15 @@ export function DashboardScreen({
         status stages.
       </Text>
 
-      <Pressable style={styles.primaryCta} onPress={onOpenMessages}>
+      <Pressable
+        style={interactivePressableStyle({
+          base: styles.primaryCta,
+          hoverStyle: sharedPressableFeedback.hover,
+          focusStyle: sharedPressableFeedback.focus,
+          pressedStyle: sharedPressableFeedback.pressed,
+        })}
+        onPress={onOpenMessages}
+      >
         <Text style={styles.primaryCtaText}>One-click message the Zenith team</Text>
       </Pressable>
 
@@ -185,10 +195,14 @@ export function DashboardScreen({
               <View style={styles.authRow}>
                 {assignment.status_enum === 'Waiting on your authorization to contact/submit' ? (
                   <Pressable
-                    style={[
-                      styles.authorizeButton,
-                      busyAssignmentId === assignment.id && styles.buttonDisabled,
-                    ]}
+                    style={interactivePressableStyle({
+                      base: styles.authorizeButton,
+                      disabled: busyAssignmentId === assignment.id,
+                      disabledStyle: styles.buttonDisabled,
+                      hoverStyle: sharedPressableFeedback.hover,
+                      focusStyle: sharedPressableFeedback.focus,
+                      pressedStyle: sharedPressableFeedback.pressed,
+                    })}
                     disabled={busyAssignmentId === assignment.id}
                     onPress={() => {
                       void handleAuthorizationDecision(assignment.id, 'authorized');
@@ -204,10 +218,14 @@ export function DashboardScreen({
                   </View>
                 )}
                 <Pressable
-                  style={[
-                    styles.declineButton,
-                    busyAssignmentId === assignment.id && styles.buttonDisabled,
-                  ]}
+                  style={interactivePressableStyle({
+                    base: styles.declineButton,
+                    disabled: busyAssignmentId === assignment.id,
+                    disabledStyle: styles.buttonDisabled,
+                    hoverStyle: sharedPressableFeedback.hover,
+                    focusStyle: sharedPressableFeedback.focus,
+                    pressedStyle: sharedPressableFeedback.pressed,
+                  })}
                   disabled={busyAssignmentId === assignment.id}
                   onPress={() => {
                     void handleAuthorizationDecision(assignment.id, 'declined');
@@ -237,13 +255,13 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   authorizeButton: {
-    backgroundColor: '#0F766E',
+    backgroundColor: uiColors.primary,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   authorizeText: {
-    color: '#ffffff',
+    color: uiColors.primaryText,
     fontWeight: '600',
   },
   authorizedBadge: {
@@ -298,12 +316,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   primaryCta: {
-    backgroundColor: '#0C4A6E',
+    backgroundColor: uiColors.primary,
     borderRadius: 10,
     padding: 12,
   },
   primaryCtaText: {
-    color: '#F8FAFC',
+    color: uiColors.primaryText,
     fontWeight: '700',
     textAlign: 'center',
   },

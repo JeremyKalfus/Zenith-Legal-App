@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/auth-context';
 import { useSendCooldown } from '../../hooks/use-send-cooldown';
 import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
+import { uiColors } from '../../theme/colors';
+import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 
 export function VerifyScreen() {
   const {
@@ -104,10 +106,14 @@ export function VerifyScreen() {
           ) : null}
 
           <Pressable
-            style={[
-              styles.button,
-              (busy || !authMethods.emailOtpEnabled || emailCooldown.isCoolingDown) && styles.buttonDisabled,
-            ]}
+            style={interactivePressableStyle({
+              base: styles.button,
+              disabled: busy || !authMethods.emailOtpEnabled || emailCooldown.isCoolingDown,
+              disabledStyle: styles.buttonDisabled,
+              hoverStyle: sharedPressableFeedback.hover,
+              focusStyle: sharedPressableFeedback.focus,
+              pressedStyle: sharedPressableFeedback.pressed,
+            })}
             disabled={busy || !authMethods.emailOtpEnabled || emailCooldown.isCoolingDown}
             accessibilityState={{
               disabled: busy || !authMethods.emailOtpEnabled || emailCooldown.isCoolingDown,
@@ -171,7 +177,14 @@ export function VerifyScreen() {
               : 'SMS verification is unavailable because no mobile number was provided.'}
           </Text>
           <Pressable
-            style={[styles.button, smsVerifyDisabled && styles.buttonDisabled]}
+            style={interactivePressableStyle({
+              base: styles.button,
+              disabled: smsVerifyDisabled,
+              disabledStyle: styles.buttonDisabled,
+              hoverStyle: sharedPressableFeedback.hover,
+              focusStyle: sharedPressableFeedback.focus,
+              pressedStyle: sharedPressableFeedback.pressed,
+            })}
             disabled={smsVerifyDisabled}
             accessibilityState={{ disabled: smsVerifyDisabled }}
             onPress={async () => {
@@ -208,7 +221,7 @@ const styles = StyleSheet.create({
   },
   button: {
     alignItems: 'center',
-    backgroundColor: '#0F766E',
+    backgroundColor: uiColors.primary,
     borderRadius: 10,
     marginBottom: 10,
     padding: 12,
@@ -228,7 +241,7 @@ const styles = StyleSheet.create({
     opacity: 0.65,
   },
   buttonText: {
-    color: '#ffffff',
+    color: uiColors.primaryText,
     fontWeight: '600',
   },
   buttonTextSecondary: {
@@ -288,13 +301,15 @@ const styles = StyleSheet.create({
   webFrame: {
     alignSelf: 'center',
     backgroundColor: '#F8FAFC',
-    borderColor: '#CBD5E1',
+    borderColor: '#E2E8F0',
     borderRadius: 16,
     borderWidth: 1,
+    boxShadow: '0px 8px 24px rgba(15, 23, 42, 0.06)',
     flexGrow: 1,
     flexShrink: 1,
     maxWidth: 1100,
     overflow: 'hidden',
-    width: '67%',
+    width: '100%',
+    minWidth: 320,
   },
 });

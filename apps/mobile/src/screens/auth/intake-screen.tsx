@@ -14,6 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { PasswordInput } from '../../components/password-input';
 import { useAuth } from '../../context/auth-context';
 import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
+import { uiColors } from '../../theme/colors';
+import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 
 type CandidateRegistrationFormValues = z.input<typeof candidateRegistrationSchema>;
 const COLLAPSED_BUBBLE_ROWS_HEIGHT = 34;
@@ -307,7 +309,14 @@ export function IntakeScreen({
           ) : null}
 
           <Pressable
-            style={[styles.cta, busy ? styles.ctaDisabled : null]}
+            style={interactivePressableStyle({
+              base: styles.cta,
+              disabled: busy,
+              disabledStyle: styles.ctaDisabled,
+              hoverStyle: sharedPressableFeedback.hover,
+              focusStyle: sharedPressableFeedback.focus,
+              pressedStyle: sharedPressableFeedback.pressed,
+            })}
             disabled={busy}
             accessibilityState={{ disabled: busy }}
             onPress={handleSubmit(async (values) => {
@@ -363,13 +372,13 @@ const styles = StyleSheet.create({
   },
   cta: {
     alignItems: 'center',
-    backgroundColor: '#0F766E',
+    backgroundColor: uiColors.primary,
     borderRadius: 10,
     marginTop: 6,
     padding: 12,
   },
   ctaText: {
-    color: '#ffffff',
+    color: uiColors.primaryText,
     fontWeight: '600',
   },
   ctaDisabled: {
@@ -471,13 +480,15 @@ const styles = StyleSheet.create({
   webFrame: {
     alignSelf: 'center',
     backgroundColor: '#F8FAFC',
-    borderColor: '#CBD5E1',
+    borderColor: '#E2E8F0',
     borderRadius: 16,
     borderWidth: 1,
+    boxShadow: '0px 8px 24px rgba(15, 23, 42, 0.06)',
     flexGrow: 1,
     flexShrink: 1,
     maxWidth: 1100,
     overflow: 'hidden',
-    width: '67%',
+    width: '100%',
+    minWidth: 320,
   },
 });

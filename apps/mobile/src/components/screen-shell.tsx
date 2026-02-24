@@ -35,21 +35,23 @@ const styles = StyleSheet.create({
   webFrame: {
     alignSelf: 'center',
     backgroundColor: '#F8FAFC',
-    borderColor: '#CBD5E1',
+    borderColor: '#E2E8F0',
     borderRadius: 16,
     borderWidth: 1,
+    boxShadow: '0px 8px 24px rgba(15, 23, 42, 0.06)',
     flexGrow: 1,
     flexShrink: 1,
     maxWidth: 1100,
     overflow: 'hidden',
-    width: '67%',
+    width: '100%',
+    minWidth: 320,
   },
   content: {
     paddingBottom: 24,
   },
   inner: {
     gap: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 18,
     paddingTop: 16,
   },
 });

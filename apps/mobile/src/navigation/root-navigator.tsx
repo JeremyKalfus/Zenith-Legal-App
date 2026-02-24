@@ -7,6 +7,8 @@ import { StaffTabs } from './staff-tabs';
 import { IntakeScreen } from '../screens/auth/intake-screen';
 import { SignInScreen } from '../screens/auth/sign-in-screen';
 import { useAuth } from '../context/auth-context';
+import { uiColors } from '../theme/colors';
+import { interactivePressableStyle, sharedPressableFeedback } from '../theme/pressable';
 
 const Stack = createNativeStackNavigator();
 
@@ -77,7 +79,13 @@ export function RootNavigator() {
               'Your session is active, but account profile data is still unavailable.'}
           </Text>
           <Pressable
-            style={styles.primaryButton}
+            style={interactivePressableStyle({
+              base: styles.primaryButton,
+              disabled: isSigningOut,
+              hoverStyle: sharedPressableFeedback.hover,
+              focusStyle: sharedPressableFeedback.focus,
+              pressedStyle: sharedPressableFeedback.pressed,
+            })}
             disabled={isSigningOut}
             onPress={() => {
               void refreshProfile();
@@ -116,14 +124,14 @@ const styles = StyleSheet.create({
   },
   primaryButton: {
     alignItems: 'center',
-    backgroundColor: '#0F766E',
+    backgroundColor: uiColors.primary,
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 12,
     width: '100%',
   },
   primaryButtonText: {
-    color: '#FFFFFF',
+    color: uiColors.primaryText,
     fontWeight: '700',
   },
   recoveryBody: {

@@ -1,6 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ScreenShell } from '../../components/screen-shell';
 import { useAuth } from '../../context/auth-context';
+import { uiColors } from '../../theme/colors';
+import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 
 export function StaffProfileScreen() {
   const { isSigningOut, profile, signOut } = useAuth();
@@ -17,7 +19,14 @@ export function StaffProfileScreen() {
       </View>
 
       <Pressable
-        style={[styles.logout, isSigningOut && styles.buttonDisabled]}
+        style={interactivePressableStyle({
+          base: styles.logout,
+          disabled: isSigningOut,
+          disabledStyle: styles.buttonDisabled,
+          hoverStyle: sharedPressableFeedback.hover,
+          focusStyle: sharedPressableFeedback.focus,
+          pressedStyle: sharedPressableFeedback.pressed,
+        })}
         disabled={isSigningOut}
         accessibilityState={{ disabled: isSigningOut }}
         onPress={() => {
@@ -44,12 +53,12 @@ const styles = StyleSheet.create({
   },
   logout: {
     alignItems: 'center',
-    backgroundColor: '#7F1D1D',
+    backgroundColor: uiColors.danger,
     borderRadius: 10,
     padding: 12,
   },
   logoutText: {
-    color: '#ffffff',
+    color: uiColors.dangerText,
     fontWeight: '700',
   },
   sectionTitle: {

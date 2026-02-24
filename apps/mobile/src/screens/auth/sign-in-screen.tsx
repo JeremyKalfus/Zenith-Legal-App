@@ -5,6 +5,8 @@ import { PasswordInput } from '../../components/password-input';
 import { useAuth } from '../../context/auth-context';
 import { authRedirectUrl } from '../../lib/supabase';
 import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
+import { uiColors } from '../../theme/colors';
+import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 
 export function SignInScreen({ onBack }: { onBack: () => void }) {
   const {
@@ -61,7 +63,14 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
                 />
 
                 <Pressable
-                  style={[styles.button, (busy || !newPassword || !confirmNewPassword) && styles.buttonDisabled]}
+                  style={interactivePressableStyle({
+                    base: styles.button,
+                    disabled: busy || !newPassword || !confirmNewPassword,
+                    disabledStyle: styles.buttonDisabled,
+                    hoverStyle: sharedPressableFeedback.hover,
+                    focusStyle: sharedPressableFeedback.focus,
+                    pressedStyle: sharedPressableFeedback.pressed,
+                  })}
                   disabled={busy || !newPassword || !confirmNewPassword}
                   accessibilityState={{ disabled: busy || !newPassword || !confirmNewPassword }}
                   onPress={async () => {
@@ -128,7 +137,14 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
               />
 
               <Pressable
-                style={[styles.button, (busy || !email.trim() || !password) && styles.buttonDisabled]}
+                style={interactivePressableStyle({
+                  base: styles.button,
+                  disabled: busy || !email.trim() || !password,
+                  disabledStyle: styles.buttonDisabled,
+                  hoverStyle: sharedPressableFeedback.hover,
+                  focusStyle: sharedPressableFeedback.focus,
+                  pressedStyle: sharedPressableFeedback.pressed,
+                })}
                 disabled={busy || !email.trim() || !password}
                 accessibilityState={{ disabled: busy || !email.trim() || !password }}
                 onPress={async () => {
@@ -202,7 +218,7 @@ const styles = StyleSheet.create({
   },
   button: {
     alignItems: 'center',
-    backgroundColor: '#0F766E',
+    backgroundColor: uiColors.primary,
     borderRadius: 10,
     marginBottom: 10,
     padding: 12,
@@ -211,7 +227,7 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   buttonText: {
-    color: '#ffffff',
+    color: uiColors.primaryText,
     fontWeight: '600',
   },
   center: {
@@ -275,12 +291,14 @@ const styles = StyleSheet.create({
   webFrame: {
     alignSelf: 'center',
     backgroundColor: '#F8FAFC',
-    borderColor: '#CBD5E1',
+    borderColor: '#E2E8F0',
     borderRadius: 16,
     borderWidth: 1,
+    boxShadow: '0px 8px 24px rgba(15, 23, 42, 0.06)',
     flex: 1,
     maxWidth: 1100,
     overflow: 'hidden',
-    width: '67%',
+    width: '100%',
+    minWidth: 320,
   },
 });
