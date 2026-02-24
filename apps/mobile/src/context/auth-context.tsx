@@ -279,6 +279,7 @@ type AuthContextValue = {
   verifySmsOtp: (phone: string, token: string) => Promise<void>;
   persistDraftAfterVerification: () => Promise<void>;
   updateCandidateProfileIntake: (input: CandidateIntake) => Promise<void>;
+  deleteAccount: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   refreshAuthMethods: () => Promise<void>;
@@ -962,6 +963,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const transitionSeq = authTransitionSeqRef.current + 1;
         authTransitionSeqRef.current = transitionSeq;
         await hydrateProfileForSession(session, transitionSeq);
+      },
+      deleteAccount: async () => {
+        if (!session?.user.id) {
+          throw new Error('You must be signed in to delete your account.');
+        }
+
+        await ensureValidSession();
+        const { data, error } = await supabase.functions.invoke('delete_my_account', {
+          body: {},
+        });
+
+        if (error) {
+          throw new Error(await extractFunctionInvokeErrorMessage(error, data));
+        }
+
+        setIsSigningOut(true);
+        authTransitionSeqRef.current += 1;
+        setAuthTransitionVersion((previous) => previous + 1);
+        setNeedsPasswordReset(false);
+        setAuthNotice(null);
+        setProfileLoadError(null);
+        setIsHydratingProfile(false);
+        setProfile(null);
+        setSession(null);
+        try {
+          await supabase.auth.signOut().catch(() => undefined);
+        } finally {
+          setIsSigningOut(false);
+        }
       },
       signOut: async () => {
         setIsSigningOut(true);

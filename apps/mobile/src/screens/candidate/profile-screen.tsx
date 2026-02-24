@@ -9,7 +9,7 @@ import {
 import { z } from 'zod';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { PasswordInput } from '../../components/password-input';
 import { ScreenShell } from '../../components/screen-shell';
 import { useAuth } from '../../context/auth-context';
@@ -43,6 +43,7 @@ export function ProfileScreen() {
     profileLoadError,
     refreshProfile,
     signOut,
+    deleteAccount,
     updateEmail,
     updateCandidateProfileIntake,
     updatePassword,
@@ -58,6 +59,9 @@ export function ProfileScreen() {
   const [passwordMessage, setPasswordMessage] = useState('');
   const [showAllCities, setShowAllCities] = useState(false);
   const [showAllPracticeAreas, setShowAllPracticeAreas] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteMessage, setDeleteMessage] = useState('');
 
   const {
     control,
@@ -103,10 +107,36 @@ export function ProfileScreen() {
     setNewPassword('');
     setConfirmNewPassword('');
     setPasswordMessage('');
+    setDeleteConfirmText('');
+    setDeleteMessage('');
   }, [profile, reset]);
 
   const selectedCities = watch('preferredCities') ?? [];
   const selectedPracticeAreas = watch('practiceAreas') ?? [];
+
+  const confirmDeletePrompt = async (): Promise<boolean> => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      return window.confirm(
+        'Delete your Zenith Legal account permanently? This cannot be undone.',
+      );
+    }
+
+    return new Promise((resolve) => {
+      Alert.alert(
+        'Delete account?',
+        'This permanently deletes your Zenith Legal account and signs you out.',
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+          {
+            text: 'Delete account',
+            style: 'destructive',
+            onPress: () => resolve(true),
+          },
+        ],
+        { cancelable: true, onDismiss: () => resolve(false) },
+      );
+    });
+  };
 
   return (
     <ScreenShell>
@@ -379,6 +409,54 @@ export function ProfileScreen() {
             </Pressable>
             {passwordMessage ? <Text style={styles.message}>{passwordMessage}</Text> : null}
           </View>
+
+          <View style={[styles.card, styles.dangerCard]}>
+            <Text style={styles.sectionTitle}>Delete Account</Text>
+            <Text style={styles.helper}>
+              Delete your account and sign in information directly in the app. This action is permanent.
+            </Text>
+            <Text style={styles.label}>Type DELETE to confirm</Text>
+            <TextInput
+              autoCapitalize="characters"
+              placeholder="DELETE"
+              style={styles.input}
+              value={deleteConfirmText}
+              onChangeText={setDeleteConfirmText}
+              editable={!deleteBusy}
+            />
+            <Pressable
+              style={[
+                styles.deleteAccountButton,
+                (deleteBusy || deleteConfirmText.trim().toUpperCase() !== 'DELETE') && styles.buttonDisabled,
+              ]}
+              disabled={deleteBusy || deleteConfirmText.trim().toUpperCase() !== 'DELETE'}
+              accessibilityState={{
+                disabled: deleteBusy || deleteConfirmText.trim().toUpperCase() !== 'DELETE',
+              }}
+              onPress={async () => {
+                setDeleteMessage('');
+                clearAuthNotice();
+                const confirmed = await confirmDeletePrompt();
+                if (!confirmed) {
+                  return;
+                }
+
+                setDeleteBusy(true);
+                try {
+                  await deleteAccount();
+                } catch (error) {
+                  setDeleteMessage((error as Error).message);
+                } finally {
+                  setDeleteBusy(false);
+                }
+              }}
+            >
+              <Text style={styles.deleteAccountButtonText}>
+                {deleteBusy ? 'Deleting account...' : 'Delete my account permanently'}
+              </Text>
+            </Pressable>
+            {deleteMessage ? <Text style={styles.error}>{deleteMessage}</Text> : null}
+          </View>
         </>
       ) : isHydratingProfile ? (
         <View style={styles.placeholderCard}>
@@ -428,6 +506,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 8,
     padding: 12,
+  },
+  dangerCard: {
+    borderColor: '#FECACA',
+    backgroundColor: '#FEF2F2',
+  },
+  deleteAccountButton: {
+    alignItems: 'center',
+    backgroundColor: '#B91C1C',
+    borderRadius: 10,
+    padding: 12,
+  },
+  deleteAccountButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   checkbox: {
     color: '#0F172A',

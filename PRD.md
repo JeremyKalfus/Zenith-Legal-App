@@ -63,11 +63,12 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ### Profile Management
 - Candidates update email, password, and intake fields.
 - Profile data stored in `users_profile` and `candidate_preferences` tables.
+- Candidates can delete their account in-app from Profile (self-service deletion flow with confirmation).
 
 ### Notifications
 - Push token registration.
 - Notification preferences per user.
-- `dispatch_notifications` edge function processes queued notification deliveries.
+- `dispatch_notifications` edge function can enqueue notification events and process queued push notification deliveries (Expo Push API).
 - Notification events: appointment created/updated, assignment status change, message received.
 
 ### Admin Dashboard (web)
