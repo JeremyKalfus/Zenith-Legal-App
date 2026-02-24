@@ -11,8 +11,10 @@ import * as Linking from 'expo-linking';
 import type { Session } from '@supabase/supabase-js';
 import {
   authRedirectUrl,
+  clearPersistedAuthSession,
   completeAuthSessionFromUrl,
   ensureValidSession,
+  isInvalidRefreshTokenError,
   isAuthCallbackUrl,
   supabase,
 } from '../lib/supabase';
@@ -590,9 +592,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Never block loading UI on settings fetch.
         void refreshAuthMethods();
 
-        const { data } = await supabase.auth.getSession();
+        const { data, error } = await supabase.auth.getSession();
         if (!mounted) {
           return;
+        }
+
+        if (error) {
+          if (isInvalidRefreshTokenError(error)) {
+            await clearPersistedAuthSession();
+          }
+          throw error;
         }
 
         const transitionSeq = authTransitionSeqRef.current + 1;
