@@ -1,8 +1,8 @@
 import Link from 'next/link';
-import { CandidateFirmManager } from '@/components/modules/candidate-firm-manager';
+import { StaffMessagesDashboard } from '@/components/modules/staff-messages-dashboard';
 import { StaffDashboardGuard } from '@/components/modules/staff-dashboard-guard';
 
-export default function CandidateManagementPage() {
+export default function StaffMessagesPage() {
   return (
     <StaffDashboardGuard>
       <main className="mx-auto min-h-screen max-w-7xl px-4 py-8">
@@ -11,17 +11,17 @@ export default function CandidateManagementPage() {
             <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
               Zenith Legal Operations
             </p>
-            <h1 className="text-3xl font-bold text-slate-900">Candidate Firm Manager</h1>
+            <h1 className="text-3xl font-bold text-slate-900">Staff Messages</h1>
             <p className="text-slate-600">
-              Staff-only candidate firm assignments and status controls.
+              Inbox-first candidate DMs for recruiter staff on the admin web app.
             </p>
           </div>
           <div className="flex gap-2">
             <Link
-              href="/dashboard/messages"
+              href="/dashboard/candidates"
               className="inline-flex h-10 items-center rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
-              Open Messages
+              Candidate Manager
             </Link>
             <Link
               href="/dashboard"
@@ -32,7 +32,7 @@ export default function CandidateManagementPage() {
           </div>
         </div>
 
-        <CandidateFirmManager />
+        <StaffMessagesDashboard />
       </main>
     </StaffDashboardGuard>
   );

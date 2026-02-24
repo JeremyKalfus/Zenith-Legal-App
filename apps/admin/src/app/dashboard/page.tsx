@@ -15,12 +15,20 @@ export default function DashboardPage() {
             Candidate workflow modules with staff-only status control and audited actions.
           </p>
           <div className="pt-2">
-            <Link
-              href="/dashboard/candidates"
-              className="inline-flex h-10 items-center rounded-md bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"
-            >
-              Open Candidate Firm Manager
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/dashboard/candidates"
+                className="inline-flex h-10 items-center rounded-md bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800"
+              >
+                Open Candidate Firm Manager
+              </Link>
+              <Link
+                href="/dashboard/messages"
+                className="inline-flex h-10 items-center rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                Open Messages
+              </Link>
+            </div>
           </div>
         </div>
         <OperationsDashboard />
