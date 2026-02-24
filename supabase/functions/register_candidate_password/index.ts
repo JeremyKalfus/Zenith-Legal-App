@@ -115,7 +115,7 @@ const registrationSchema = z
     mobile: optionalMobileInputSchema,
     preferredCities: z.array(z.enum(cityOptions)).default([]),
     otherCityText: optionalTrimmedString(120),
-    practiceArea: z.enum(practiceAreas).optional(),
+    practiceAreas: z.array(z.enum(practiceAreas)).max(3).default([]),
     otherPracticeText: optionalTrimmedString(120),
     acceptedPrivacyPolicy: z.boolean(),
     acceptedCommunicationConsent: z.boolean(),
@@ -143,7 +143,7 @@ const registrationSchema = z
         path: ['otherCityText'],
       });
     }
-    if (value.practiceArea === 'Other' && !value.otherPracticeText) {
+    if (value.practiceAreas.includes('Other') && !value.otherPracticeText) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'otherPracticeText is required when practice area is Other',
@@ -163,14 +163,18 @@ function getEnv(name: string): string {
 async function passwordGrant(params: { email: string; password: string }) {
   const supabaseUrl = getEnv('SUPABASE_URL');
   const anonKey = getEnv('SUPABASE_ANON_KEY');
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    apikey: anonKey,
+  };
+
+  if (!anonKey.startsWith('sb_publishable_')) {
+    headers.Authorization = `Bearer ${anonKey}`;
+  }
 
   const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-    },
+    headers,
     body: JSON.stringify({ email: params.email, password: params.password }),
   });
 
@@ -312,7 +316,8 @@ Deno.serve(async (request) => {
         user_id: createdUserId,
         cities: intake.preferredCities,
         other_city_text: intake.otherCityText || null,
-        practice_area: intake.practiceArea ?? null,
+        practice_areas: intake.practiceAreas,
+        practice_area: intake.practiceAreas[0] ?? null,
         other_practice_text: intake.otherPracticeText || null,
       },
       { onConflict: 'user_id' },

@@ -39,7 +39,7 @@
 
 | Workspace | Path | Stack | Purpose |
 |---|---|---|---|
-| Mobile | `apps/mobile/` | Expo SDK 54, React Native 0.81, React Navigation, react-hook-form, Zod, Stream Chat RN | Candidate and staff mobile app |
+| Mobile | `apps/mobile/` | Expo SDK 54, React Native 0.81, React Navigation, react-hook-form, Zod, stream-chat-expo (native), stream-chat-react (web) | Candidate and staff mobile app; web build via Expo web |
 | Admin | `apps/admin/` | Next.js 16, React 19, Tailwind 4, shadcn primitives, Zod | Recruiter web dashboard |
 | Shared | `packages/shared/` | TypeScript, Zod | Domain types, validation schemas, phone utilities |
 | Backend | `supabase/` | PostgreSQL 15, Deno edge functions, `@supabase/supabase-js@2.57.4` | Database, auth, serverless API |
@@ -55,7 +55,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 | `create_or_update_candidate_profile` | User JWT | Intake profile upsert |
 | `schedule_or_update_appointment` | User JWT | Appointment CRUD |
 | `authorize_firm_submission` | User JWT | Candidate authorizes/declines firm |
-| `chat_auth_bootstrap` | User JWT | Provisions Stream Chat token and channel |
+| `chat_auth_bootstrap` | User JWT | Provisions Stream Chat token; candidates (and staff targeting a candidate) also get/create deterministic `candidate-<user_id>` channel. Staff can omit `user_id` to bootstrap inbox listing without creating/selecting a channel. Returns 404 if `users_profile` row missing (no fallback creation) |
 | `connect_calendar_provider` | User JWT | Calendar OAuth connection |
 | `staff_review_appointment` | Staff JWT | Accept/decline appointment requests (pending -> accepted/declined with overlap detection) |
 | `assign_firm_to_candidate` | Staff JWT | Assign firm to candidate |
@@ -70,10 +70,10 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 
 ## Database Schema
 
-9 migrations in `supabase/migrations/`. Key tables:
+15 migrations in `supabase/migrations/`. Key tables:
 
 - `users_profile` -- User identity and role (candidate/staff)
-- `candidate_preferences` -- Cities, practice area
+- `candidate_preferences` -- Cities, practice_areas (array, max 3), optional practice_area (legacy)
 - `candidate_consents` -- Privacy and communication consents with versioning
 - `firms` -- Law firm directory
 - `candidate_firm_assignments` -- Staff-managed candidate-to-firm assignments
@@ -93,6 +93,8 @@ All tables enforce Row Level Security. Staff-only mutations are routed through e
 - **Magic link**: Supabase built-in email magic link (used for staff).
 - **SMS OTP**: Supabase built-in phone OTP.
 - **Session management**: Expo SecureStore (mobile) or localStorage (web) for token persistence. `autoRefreshToken: true` enabled. Client-side `ensureValidSession()` helper proactively refreshes tokens nearing expiry.
+- **Edge function errors**: Client uses `getFunctionErrorMessage()` to read the actual error from `FunctionsHttpError.context` (Response body); uses `Response.clone()` when available so the body is not consumed. Avoids generic "Edge Function returned a non-2xx status code" when the function returns JSON `{ error: "..." }`.
+- **Chat bootstrap modes**: `chat_auth_bootstrap` supports (1) candidate self-bootstrap, (2) staff bootstrap for a specific candidate channel via `user_id`, and (3) staff token-only bootstrap for inbox channel listing when `user_id` is omitted.
 
 ## Secrets and Configuration
 
@@ -106,13 +108,8 @@ See `docs/secrets.md` for the full inventory. Secrets are provided via:
 
 Required environment variables (placeholders):
 
-```
-SUPABASE_URL=<project-url>
-SUPABASE_ANON_KEY=<anon-key>
-SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
-STREAM_API_KEY=<stream-key>
-STREAM_API_SECRET=<stream-secret>
-```
+- **Supabase:** `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (edge functions get these automatically; mobile/admin use `.env` or equivalent).
+- **Stream Chat:** `STREAM_API_KEY`, `STREAM_API_SECRET` set in Supabase Dashboard → Edge Functions → secrets (for `chat_auth_bootstrap`, `process_chat_webhook`). Client uses `EXPO_PUBLIC_STREAM_API_KEY` (mobile app config or env).
 
 ## Environments
 

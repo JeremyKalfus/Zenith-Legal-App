@@ -74,7 +74,7 @@ export function ProfileScreen() {
       mobile: '',
       preferredCities: [],
       otherCityText: '',
-      practiceArea: undefined,
+      practiceAreas: [],
       otherPracticeText: '',
       acceptedPrivacyPolicy: false,
       acceptedCommunicationConsent: true,
@@ -92,7 +92,7 @@ export function ProfileScreen() {
       mobile: profile.mobile ?? '',
       preferredCities: profile.preferredCities ?? [],
       otherCityText: profile.otherCityText ?? '',
-      practiceArea: profile.practiceArea ?? undefined,
+      practiceAreas: profile.practiceAreas ?? [],
       otherPracticeText: profile.otherPracticeText ?? '',
       acceptedPrivacyPolicy: profile.acceptedPrivacyPolicy,
       acceptedCommunicationConsent: true,
@@ -106,7 +106,7 @@ export function ProfileScreen() {
   }, [profile, reset]);
 
   const selectedCities = watch('preferredCities') ?? [];
-  const selectedPractice = watch('practiceArea');
+  const selectedPracticeAreas = watch('practiceAreas') ?? [];
 
   return (
     <ScreenShell>
@@ -239,15 +239,26 @@ export function ProfileScreen() {
             <Text style={styles.label}>Practice Area (choose 0-3)</Text>
             <Controller
               control={control}
-              name="practiceArea"
+              name="practiceAreas"
               render={({ field }) => (
                 <View style={[styles.wrap, !showAllPracticeAreas && styles.wrapCollapsed]}>
                   {PRACTICE_AREAS.map((area) => (
                     <MultiSelectOption
                       key={area}
                       label={area}
-                      selected={field.value === area}
-                      onToggle={() => field.onChange(field.value === area ? undefined : area)}
+                      selected={(field.value ?? []).includes(area)}
+                      onToggle={() => {
+                        const current = field.value ?? [];
+                        const alreadySelected = current.includes(area);
+                        if (alreadySelected) {
+                          field.onChange(current.filter((value) => value !== area));
+                          return;
+                        }
+                        if (current.length >= 3) {
+                          return;
+                        }
+                        field.onChange([...current, area]);
+                      }}
                     />
                   ))}
                 </View>
@@ -261,9 +272,9 @@ export function ProfileScreen() {
                 {showAllPracticeAreas ? 'Show less' : 'See more'}
               </Text>
             </Pressable>
-            {errors.practiceArea ? <Text style={styles.error}>{errors.practiceArea.message}</Text> : null}
+            {errors.practiceAreas ? <Text style={styles.error}>{errors.practiceAreas.message}</Text> : null}
 
-            {selectedPractice === 'Other' ? (
+            {selectedPracticeAreas.includes('Other') ? (
               <Controller
                 control={control}
                 name="otherPracticeText"

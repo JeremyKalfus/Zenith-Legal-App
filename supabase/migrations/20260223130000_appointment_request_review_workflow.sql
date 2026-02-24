@@ -1,21 +1,27 @@
 create extension if not exists btree_gist;
 
-alter type public.appointment_status rename to appointment_status_old;
-
-create type public.appointment_status as enum ('pending', 'accepted', 'declined', 'cancelled');
+alter type public.appointment_status add value if not exists 'pending';
+alter type public.appointment_status add value if not exists 'accepted';
+alter type public.appointment_status add value if not exists 'declined';
+alter type public.appointment_status add value if not exists 'cancelled';
 
 alter table public.appointments
-  alter column status drop default,
-  alter column status type public.appointment_status
-    using (
-      case
-        when status::text = 'scheduled' then 'accepted'
-        else status::text
-      end::public.appointment_status
-    ),
   alter column status set default 'pending';
 
-drop type public.appointment_status_old;
+do $$
+begin
+  if exists (
+    select 1
+    from pg_enum
+    where enumtypid = 'public.appointment_status'::regtype
+      and enumlabel = 'scheduled'
+  ) then
+    update public.appointments
+    set status = 'accepted'
+    where status::text = 'scheduled';
+  end if;
+end
+$$;
 
 -- Preflight overlap check before enforcing the accepted-only exclusion constraint.
 -- If this raises, resolve the overlapping accepted appointments first and re-run.
@@ -45,9 +51,12 @@ for insert
 with check (candidate_user_id = auth.uid() and created_by_user_id = auth.uid());
 
 alter table public.appointments
+  drop constraint if exists appointments_no_overlapping_accepted_per_candidate;
+
+alter table public.appointments
   add constraint appointments_no_overlapping_accepted_per_candidate
-  exclude using gist (
-    candidate_user_id with =,
-    tstzrange(start_at_utc, end_at_utc, '[)') with &&
-  )
-  where (status = 'accepted');
+    exclude using gist (
+      candidate_user_id with =,
+      tstzrange(start_at_utc, end_at_utc, '[)') with &&
+    )
+    where (status = 'accepted');

@@ -19,7 +19,7 @@ describe('candidate intake schema', () => {
 
     expect(result.name).toBeUndefined();
     expect(result.mobile).toBeUndefined();
-    expect(result.practiceArea).toBeUndefined();
+    expect(result.practiceAreas).toEqual([]);
   });
 
   it('requires text when city Other is selected', () => {
@@ -33,6 +33,36 @@ describe('candidate intake schema', () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.flatten().fieldErrors.otherCityText).toBeTruthy();
+    }
+  });
+
+  it('requires text when practice area Other is selected', () => {
+    const result = candidateIntakeSchema.safeParse({
+      email: 'jane@example.com',
+      preferredCities: [],
+      practiceAreas: ['Other'],
+      acceptedPrivacyPolicy: true,
+      acceptedCommunicationConsent: true,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.otherPracticeText).toBeTruthy();
+    }
+  });
+
+  it('rejects more than three practice areas', () => {
+    const result = candidateIntakeSchema.safeParse({
+      email: 'jane@example.com',
+      preferredCities: [],
+      practiceAreas: ['Antitrust', 'White Collar', "Int'l arb", "Int'l reg"],
+      acceptedPrivacyPolicy: true,
+      acceptedCommunicationConsent: true,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.practiceAreas).toBeTruthy();
     }
   });
 
@@ -180,27 +210,29 @@ describe('appointment schema', () => {
     }
   });
 
-  it('rejects virtual appointment without videoUrl', () => {
+  it('accepts virtual appointment without videoUrl', () => {
     const result = appointmentSchema.safeParse({
       ...validInput,
       videoUrl: undefined,
     });
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.flatten().fieldErrors.videoUrl?.[0]).toContain('video URL');
-    }
+    expect(result.success).toBe(true);
   });
 
-  it('rejects in-person appointment without locationText', () => {
+  it('accepts in-person appointment without locationText', () => {
     const result = appointmentSchema.safeParse({
       ...validInput,
       modality: 'in_person',
       videoUrl: undefined,
     });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects invalid videoUrl format', () => {
+    const result = appointmentSchema.safeParse({
+      ...validInput,
+      videoUrl: 'not-a-url',
+    });
     expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.flatten().fieldErrors.locationText?.[0]).toContain('location');
-    }
   });
 
   it('rejects missing timezoneLabel', () => {

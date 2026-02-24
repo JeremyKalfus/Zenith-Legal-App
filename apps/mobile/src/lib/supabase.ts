@@ -1,21 +1,41 @@
 import 'react-native-url-polyfill/auto';
+import { Platform } from 'react-native';
 import { createClient } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
-import * as SecureStore from 'expo-secure-store';
 import { env } from '../config/env';
 
-const ExpoSecureStoreAdapter = {
-  getItem: (key: string) => SecureStore.getItemAsync(key),
-  setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
-  removeItem: (key: string) => SecureStore.deleteItemAsync(key),
-};
+function createStorageAdapter() {
+  if (Platform.OS === 'web') {
+    return {
+      getItem: (key: string) => Promise.resolve(localStorage.getItem(key)),
+      setItem: (key: string, value: string) => {
+        localStorage.setItem(key, value);
+        return Promise.resolve();
+      },
+      removeItem: (key: string) => {
+        localStorage.removeItem(key);
+        return Promise.resolve();
+      },
+    };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const SecureStore = require('expo-secure-store') as typeof import('expo-secure-store');
+  return {
+    getItem: (key: string) => SecureStore.getItemAsync(key),
+    setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value),
+    removeItem: (key: string) => SecureStore.deleteItemAsync(key),
+  };
+}
+
+const storageAdapter = createStorageAdapter();
 
 const projectRef = env.supabaseUrl.split('//')[1]?.split('.')[0] ?? '';
 const redirectTo = projectRef ? Linking.createURL('/auth/callback') : undefined;
 
 export const supabase = createClient(env.supabaseUrl, env.supabaseAnonKey, {
   auth: {
-    storage: ExpoSecureStoreAdapter,
+    storage: storageAdapter,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,

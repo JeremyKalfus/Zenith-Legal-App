@@ -1,3 +1,6 @@
+drop policy if exists "authorizations_candidate_update"
+on public.candidate_authorizations;
+
 create policy "authorizations_candidate_update"
 on public.candidate_authorizations
 for update

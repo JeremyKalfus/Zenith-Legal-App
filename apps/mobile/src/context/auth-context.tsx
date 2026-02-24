@@ -1,8 +1,10 @@
 import {
   normalizePhoneNumber,
   PHONE_VALIDATION_MESSAGES,
+  PRACTICE_AREAS,
   type CandidateRegistration,
   type CandidateIntake,
+  type PracticeArea,
 } from '@zenith/shared';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import * as Linking from 'expo-linking';
@@ -292,7 +294,8 @@ type ProfileFetchResult =
 type CandidatePreferencesRow = {
   cities: CandidateProfile['preferredCities'] | null;
   other_city_text: string | null;
-  practice_area: CandidateProfile['practiceArea'];
+  practice_areas: CandidateProfile['practiceAreas'] | null;
+  practice_area: string | null;
   other_practice_text: string | null;
 };
 
@@ -300,6 +303,10 @@ type CandidateConsentsRow = {
   privacy_policy_accepted: boolean;
   communication_consent_accepted: boolean;
 };
+
+function isPracticeArea(value: string): value is PracticeArea {
+  return (PRACTICE_AREAS as readonly string[]).includes(value);
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -333,7 +340,7 @@ async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
           .maybeSingle(),
         supabase
           .from('candidate_preferences')
-          .select('cities, other_city_text, practice_area, other_practice_text')
+          .select('cities, other_city_text, practice_areas, practice_area, other_practice_text')
           .eq('user_id', userId)
           .maybeSingle(),
         supabase
@@ -388,7 +395,13 @@ async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
         ...profileRow,
         preferredCities: Array.isArray(preferences?.cities) ? preferences.cities : [],
         otherCityText: preferences?.other_city_text ?? null,
-        practiceArea: preferences?.practice_area ?? null,
+        practiceAreas: Array.isArray(preferences?.practice_areas)
+          ? preferences.practice_areas.filter(isPracticeArea)
+          : preferences?.practice_area
+            ? isPracticeArea(preferences.practice_area)
+              ? [preferences.practice_area]
+              : []
+            : [],
         otherPracticeText: preferences?.other_practice_text ?? null,
         acceptedPrivacyPolicy: consents?.privacy_policy_accepted ?? false,
         acceptedCommunicationConsent: consents?.communication_consent_accepted ?? false,

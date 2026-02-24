@@ -18,7 +18,8 @@
 
 - [ ] All items from Feature Change checklist.
 - [ ] Edge function uses `getCurrentUserId()` or `assertStaff()` for auth (not raw `getUser()`).
-- [ ] Error responses use proper HTTP status codes (401 for auth, 403 for forbidden, 400/422 for validation).
+- [ ] Error responses use `errorResponse(message, status)` from `_shared/http.ts` so clients can read `{ error: "..." }` via `getFunctionErrorMessage()`.
+- [ ] HTTP status codes: 401 auth, 403 forbidden, 404 not found, 400/422 validation, 500 server error.
 - [ ] `supabase/config.toml` updated if a new function is added (set `verify_jwt = false`).
 - [ ] Edge functions deployed to hosted Supabase: `supabase functions deploy`.
 - [ ] Audit events written for privileged operations via `writeAuditEvent()`.
@@ -59,7 +60,7 @@
 - [ ] All edge functions deployed to target environment.
 - [ ] Database migrations applied to target Supabase project.
 - [ ] Mobile smoke test on iOS and Android.
-- [ ] Chat send/receive tested.
+- [ ] Chat send/receive tested (web: Messages tab with stream-chat-react; native: Stream Chat SDK).
 - [ ] Appointment create/update and staff review tested.
 - [ ] Staff status updates reflected in candidate dashboard.
 - [ ] No console errors or unhandled promise rejections.

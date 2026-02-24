@@ -11,8 +11,11 @@
 - [x] Appointment creation and viewing for candidates
 - [x] Staff appointment review workflow (pending/accepted/declined, edge function, mobile + admin UI)
 - [x] Admin appointment management (accept/decline in dashboard)
-- [x] Error handling standardization (shared `getFunctionErrorMessage` utility)
+- [x] Error handling standardization (shared `getFunctionErrorMessage` utility; response-body extraction via `error.context` / `Response.clone()`)
 - [x] Test coverage expansion (41 tests across 6 files)
+- [x] Stream messaging on web (stream-chat-react, CDN CSS, `chat_auth_bootstrap` secrets; no users_profile fallback)
+- [x] Practice areas multi-select (0–3; `practice_areas` column, shared schema and edge functions updated)
+- [x] Staff mobile messaging (shared candidate channels, staff inbox-first navigation, web + native)
 - [ ] Vendor credential wiring for end-to-end runtime (requires secrets)
 - [ ] Device-level release signing and EAS submit credentials
 
@@ -26,12 +29,11 @@
 ### Medium Priority
 
 3. **Observability wiring** -- Sentry DSN and PostHog key integration points are defined but not connected.
-4. **Staff mobile messaging** -- `staff-messages-screen.tsx` exists but needs Stream Chat integration matching the candidate flow.
-5. **Admin README** -- Replace default Next.js boilerplate README with project-specific documentation.
+4. **Admin README** -- Replace default Next.js boilerplate README with project-specific documentation.
 
 ## Blockers and Dependencies
 
-- **Vendor secrets required** for: Stream Chat (messaging runtime), notification dispatch (push/email providers), calendar OAuth (Google/Microsoft client IDs), Sentry, PostHog.
+- **Vendor secrets required** for: notification dispatch (push/email providers), calendar OAuth (Google/Microsoft client IDs), Sentry, PostHog. Stream Chat (`STREAM_API_KEY`, `STREAM_API_SECRET`) are set in Supabase edge function secrets for messaging.
 - **EAS credentials required** for: iOS TestFlight and Android Play Internal Testing builds.
 - **Staging Supabase project** needed before promoting beyond dev.
 
@@ -57,9 +59,9 @@
 
 ### 3. Staff mobile messaging
 
-**Scope:** Wire `staff-messages-screen.tsx` to Stream Chat with the same pattern as the candidate messaging flow.
+**Scope:** Wire `staff-messages-screen.tsx` to Stream Chat with the same pattern as the candidate messaging flow (web and native). Candidate web flow uses `messages-screen.web.tsx` with stream-chat-react and `chat_auth_bootstrap`.
 
 **Verification:**
-- Staff can send and receive messages.
+- Staff can send and receive messages on mobile and (if applicable) web.
 - Stream Chat token provisioned via `chat_auth_bootstrap`.
 - `npm run lint` and `npm run typecheck` pass.

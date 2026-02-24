@@ -22,22 +22,6 @@ const appointmentSchema = z
         path: ['endAtUtc'],
       });
     }
-
-    if (value.modality === 'virtual' && !value.videoUrl) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'videoUrl required for virtual appointments',
-        path: ['videoUrl'],
-      });
-    }
-
-    if (value.modality === 'in_person' && !value.locationText) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'locationText required for in-person appointments',
-        path: ['locationText'],
-      });
-    }
   });
 
 const schema = appointmentSchema.extend({

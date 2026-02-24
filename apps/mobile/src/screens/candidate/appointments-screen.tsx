@@ -41,20 +41,27 @@ export function AppointmentsScreen() {
   const [appointments, setAppointments] = useState<AppointmentRecord[]>([]);
   const [serverMessage, setServerMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const { control, handleSubmit, reset } = useForm<AppointmentInput>({
+  const {
+    control,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { errors },
+  } = useForm<AppointmentInput>({
     resolver: zodResolver(appointmentSchema),
     defaultValues: {
       title: '',
       modality: 'virtual',
-      locationText: '',
-      videoUrl: '',
       startAtUtc: new Date(Date.now() + 3600_000).toISOString(),
       endAtUtc: new Date(Date.now() + 7200_000).toISOString(),
       timezoneLabel:
         Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
     },
   });
+
+  const selectedModality = watch('modality');
 
   const loadAppointments = useCallback(async () => {
     const { data, error } = await supabase
@@ -110,12 +117,17 @@ export function AppointmentsScreen() {
             control={control}
             name="title"
             render={({ field }) => (
-              <TextInput
-                style={styles.input}
-                placeholder="Title"
-                onChangeText={field.onChange}
-                value={field.value}
-              />
+              <>
+                <TextInput
+                  style={[styles.input, errors.title ? styles.inputError : null]}
+                  placeholder="Title"
+                  onChangeText={field.onChange}
+                  value={field.value}
+                />
+                {errors.title ? (
+                  <Text style={styles.fieldError}>{errors.title.message ?? 'Title is required'}</Text>
+                ) : null}
+              </>
             )}
           />
 
@@ -161,58 +173,80 @@ export function AppointmentsScreen() {
             )}
           />
 
-          <Controller
-            control={control}
-            name="videoUrl"
-            render={({ field }) => (
-              <TextInput
-                style={styles.input}
-                placeholder="Video URL (required for virtual)"
-                onChangeText={field.onChange}
-                value={field.value ?? ''}
-              />
-            )}
-          />
+          {selectedModality === 'virtual' ? (
+            <Controller
+              control={control}
+              name="videoUrl"
+              render={({ field }) => (
+                <>
+                  <TextInput
+                    style={[styles.input, errors.videoUrl ? styles.inputError : null]}
+                    placeholder="Video URL (optional)"
+                    onChangeText={(text) => field.onChange(text || undefined)}
+                    value={field.value ?? ''}
+                  />
+                  {errors.videoUrl ? (
+                    <Text style={styles.fieldError}>{errors.videoUrl.message}</Text>
+                  ) : null}
+                </>
+              )}
+            />
+          ) : null}
 
-          <Controller
-            control={control}
-            name="locationText"
-            render={({ field }) => (
-              <TextInput
-                style={styles.input}
-                placeholder="Location (required for in-person)"
-                onChangeText={field.onChange}
-                value={field.value ?? ''}
-              />
-            )}
-          />
+          {selectedModality === 'in_person' ? (
+            <Controller
+              control={control}
+              name="locationText"
+              render={({ field }) => (
+                <TextInput
+                  style={styles.input}
+                  placeholder="Location (optional)"
+                  onChangeText={(text) => field.onChange(text || undefined)}
+                  value={field.value ?? ''}
+                />
+              )}
+            />
+          ) : null}
 
           <Pressable
-            style={styles.primaryCta}
-            onPress={handleSubmit(async (values) => {
-              try {
-                await ensureValidSession();
+            style={[styles.primaryCta, submitting && styles.primaryCtaDisabled]}
+            disabled={submitting}
+            onPress={handleSubmit(
+              async (values) => {
+                try {
+                  setSubmitting(true);
+                  setServerMessage('');
+                  await ensureValidSession();
 
-                const { error } = await supabase.functions.invoke(
-                  'schedule_or_update_appointment',
-                  { body: values },
-                );
+                  const { error } = await supabase.functions.invoke(
+                    'schedule_or_update_appointment',
+                    { body: values },
+                  );
 
-                if (error) {
-                  setServerMessage(error.message);
-                  return;
+                  if (error) {
+                    setServerMessage(error.message);
+                    return;
+                  }
+
+                  setServerMessage('Appointment request submitted.');
+                  setShowForm(false);
+                  reset();
+                  await loadAppointments();
+                } catch (err) {
+                  setServerMessage((err as Error).message);
+                } finally {
+                  setSubmitting(false);
                 }
-
-                setServerMessage('Appointment request submitted.');
-                setShowForm(false);
-                reset();
-                await loadAppointments();
-              } catch (err) {
-                setServerMessage((err as Error).message);
-              }
-            })}
+              },
+              (formErrors) => {
+                const firstError = Object.values(formErrors)[0];
+                setServerMessage(firstError?.message ?? 'Please fix the highlighted fields.');
+              },
+            )}
           >
-            <Text style={styles.primaryCtaText}>Submit request</Text>
+            <Text style={styles.primaryCtaText}>
+              {submitting ? 'Submitting…' : 'Submit request'}
+            </Text>
           </Pressable>
         </View>
       ) : null}
@@ -305,12 +339,20 @@ const styles = StyleSheet.create({
     gap: 10,
     padding: 12,
   },
+  fieldError: {
+    color: '#DC2626',
+    fontSize: 12,
+    marginTop: -4,
+  },
   input: {
     backgroundColor: '#ffffff',
     borderColor: '#CBD5E1',
     borderRadius: 8,
     borderWidth: 1,
     padding: 10,
+  },
+  inputError: {
+    borderColor: '#DC2626',
   },
   textArea: {
     minHeight: 60,
@@ -321,6 +363,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#0C4A6E',
     borderRadius: 10,
     padding: 12,
+  },
+  primaryCtaDisabled: {
+    opacity: 0.6,
   },
   primaryCtaText: {
     color: '#F8FAFC',

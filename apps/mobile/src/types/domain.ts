@@ -9,7 +9,7 @@ export type CandidateProfile = {
   onboarding_complete: boolean;
   preferredCities: CityOption[];
   otherCityText: string | null;
-  practiceArea: PracticeArea | null;
+  practiceAreas: PracticeArea[];
   otherPracticeText: string | null;
   acceptedPrivacyPolicy: boolean;
   acceptedCommunicationConsent: boolean;

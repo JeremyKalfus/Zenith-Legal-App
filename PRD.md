@@ -32,7 +32,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Role-based routing: candidate tabs vs staff tabs after sign-in.
 
 ### Candidate Intake and Onboarding
-- Multi-field intake form: name, email, mobile, preferred cities (14 options + Other), practice area (16 options + Other), privacy policy consent, communication consent.
+- Multi-field intake form: name, email, mobile, preferred cities (14 options + Other), practice areas (0–3 of 16 options + Other), privacy policy consent, communication consent.
 - Intake data persisted via `create_or_update_candidate_profile` edge function.
 - Onboarding-complete flag gates access to main app screens.
 
@@ -44,13 +44,15 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Staff can unassign firms via `staff_unassign_firm_from_candidate`.
 
 ### Messaging
-- Stream Chat integration for real-time messaging.
-- One deterministic channel per candidate: `candidate-<user_id>`.
-- `chat_auth_bootstrap` edge function provisions Stream tokens and channels.
+- Stream Chat integration for real-time messaging (native: stream-chat-expo; web: stream-chat-react with CDN CSS injection).
+- One deterministic channel per candidate: `candidate-<user_id>`; channel members are the candidate plus all staff.
+- Staff Messages tab is inbox-first and lists existing candidate DM channels (channels with at least one message); any staff member can reply in the shared candidate channel.
+- `chat_auth_bootstrap` edge function provisions Stream tokens and channel; requires an existing `users_profile` row (no auto-creation).
 - `process_chat_webhook` handles inbound webhook events from Stream.
+- Client calls `ensureValidSession()` before bootstrap; errors from the function are surfaced via `getFunctionErrorMessage` (response body extraction).
 
 ### Appointments
-- Candidates request appointments with title, description, modality (virtual/in-person), location, video URL, start/end times, timezone.
+- Candidates request appointments with title, description, modality (virtual/in-person), optional location (in-person) and video URL (virtual), start/end times, timezone.
 - Appointment requests start in `pending` status.
 - Staff reviews and accepts or declines via `staff_review_appointment`.
 - Overlap detection prevents conflicting accepted appointments.

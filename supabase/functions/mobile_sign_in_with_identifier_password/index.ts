@@ -69,14 +69,18 @@ function getEnv(name: string): string {
 async function passwordGrant(params: { email: string; password: string }) {
   const supabaseUrl = getEnv('SUPABASE_URL');
   const anonKey = getEnv('SUPABASE_ANON_KEY');
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    apikey: anonKey,
+  };
+
+  if (!anonKey.startsWith('sb_publishable_')) {
+    headers.Authorization = `Bearer ${anonKey}`;
+  }
 
   const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-    },
+    headers,
     body: JSON.stringify({ email: params.email, password: params.password }),
   });
 

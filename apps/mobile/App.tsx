@@ -1,5 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { Platform, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider } from './src/context/auth-context';
 import { RecruiterContactProvider } from './src/context/recruiter-contact-context';
 import { assertRequiredEnv } from './src/config/env';
@@ -25,10 +26,17 @@ export default function App() {
     );
   }
 
-  return appContent;
+  return (
+    <GestureHandlerRootView style={styles.nativeRoot}>
+      {appContent}
+    </GestureHandlerRootView>
+  );
 }
 
 const styles = StyleSheet.create({
+  nativeRoot: {
+    flex: 1,
+  },
   webPage: {
     backgroundColor: '#E2E8F0',
     flex: 1,

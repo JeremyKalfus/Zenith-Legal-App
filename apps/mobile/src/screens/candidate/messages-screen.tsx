@@ -1,20 +1,24 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { Channel, Chat, MessageInput, MessageList, OverlayProvider } from 'stream-chat-expo';
-import { getChatClient } from '../../lib/chat';
+import { ensureChatUserConnected, getChatClient } from '../../lib/chat';
 import { useAuth } from '../../context/auth-context';
-import { supabase } from '../../lib/supabase';
+import { getFunctionErrorMessage } from '../../lib/function-error';
+import { ensureValidSession, supabase } from '../../lib/supabase';
 import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
 
 export function MessagesScreen({
   showRecruiterBanner = true,
+  candidateUserId,
 }: {
   showRecruiterBanner?: boolean;
+  candidateUserId?: string;
 }) {
   const { session, profile } = useAuth();
   const [channelId, setChannelId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const connectedRef = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -26,30 +30,49 @@ export function MessagesScreen({
       }
 
       try {
+        await ensureValidSession();
         const { data, error } = await supabase.functions.invoke('chat_auth_bootstrap', {
           body: {
-            user_id: session.user.id,
+            user_id: candidateUserId ?? session.user.id,
           },
         });
 
         if (error) {
-          throw error;
+          const message = await getFunctionErrorMessage(
+            error,
+            'Unable to connect to chat. Please try again.',
+          );
+          if (isMounted) {
+            setErrorMessage(message);
+          }
+          return;
         }
 
         const response = data as {
           token: string;
-          channel_id: string;
+          channel_id?: string;
           user_name: string;
+          user_image?: string;
         };
 
-        const client = getChatClient();
-        await client.connectUser(
-          {
-            id: session.user.id,
-            name: response.user_name || profile.name || undefined,
-          },
-          response.token,
-        );
+        if (!response.channel_id) {
+          if (isMounted) {
+            setErrorMessage('Unable to load chat channel.');
+          }
+          return;
+        }
+
+        if (!connectedRef.current) {
+          await ensureChatUserConnected(
+            {
+              id: session.user.id,
+              name: response.user_name || profile.name || undefined,
+              image: response.user_image,
+            },
+            response.token,
+          );
+          connectedRef.current = true;
+        }
 
         if (isMounted) {
           setChannelId(response.channel_id);
@@ -57,7 +80,11 @@ export function MessagesScreen({
         }
       } catch (error) {
         if (isMounted) {
-          setErrorMessage((error as Error).message);
+          const message = await getFunctionErrorMessage(
+            error,
+            'Unable to connect to chat. Please try again.',
+          );
+          setErrorMessage(message);
         }
       } finally {
         if (isMounted) {
@@ -71,7 +98,7 @@ export function MessagesScreen({
     return () => {
       isMounted = false;
     };
-  }, [profile, session?.user]);
+  }, [candidateUserId, profile, session?.user]);
 
   const channel = useMemo(() => {
     if (!channelId) {

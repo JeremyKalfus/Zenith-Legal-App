@@ -68,7 +68,7 @@ const candidateIntakeSchema = z
     mobile: optionalMobileInputSchema,
     preferredCities: z.array(z.enum(cityOptions)).default([]),
     otherCityText: optionalTrimmedString(120),
-    practiceArea: z.enum(practiceAreas).optional(),
+    practiceAreas: z.array(z.enum(practiceAreas)).max(3).default([]),
     otherPracticeText: optionalTrimmedString(120),
     acceptedPrivacyPolicy: z.boolean(),
     acceptedCommunicationConsent: z.boolean(),
@@ -98,7 +98,7 @@ const candidateIntakeSchema = z
       });
     }
 
-    if (value.practiceArea === 'Other' && !value.otherPracticeText) {
+    if (value.practiceAreas.includes('Other') && !value.otherPracticeText) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'otherPracticeText is required when practice area is Other',
@@ -157,7 +157,8 @@ Deno.serve(async (request) => {
         user_id: userId,
         cities: intake.preferredCities,
         other_city_text: intake.otherCityText || null,
-        practice_area: intake.practiceArea ?? null,
+        practice_areas: intake.practiceAreas,
+        practice_area: intake.practiceAreas[0] ?? null,
         other_practice_text: intake.otherPracticeText || null,
       },
       { onConflict: 'user_id' },

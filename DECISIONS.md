@@ -107,6 +107,43 @@
 
 **Consequences:** Adds a small latency overhead per authenticated call (local session check). Refresh only happens when the token is within 60 seconds of expiry.
 
+### [2026-02-24] No users_profile fallback in chat_auth_bootstrap
+
+**Decision:** Do not auto-create a `users_profile` row inside `chat_auth_bootstrap` when one is missing. Return 404 "User profile not found" instead.
+
+**Options considered:**
+1. Fallback: create a minimal profile from `auth.admin.getUserById()` inside the chat function when missing.
+2. No fallback: require profile to exist; fix root cause (profile must be created via register or intake).
+
+**Rationale:** Fallback hides the real issue (user reached Messages without a profile). The app only shows candidate tabs when `profile` is loaded, so in normal flow the profile exists. If 404 appears, the fix is to ensure the correct auth/session is sent or the profile was created via the proper registration/intake path, not to paper over it in the chat function.
+
+**Consequences:** Chat requires an existing `users_profile` row. Clients must call `ensureValidSession()` before bootstrap; errors are surfaced via `getFunctionErrorMessage()` so users see the actual backend message (e.g. "User profile not found") instead of a generic non-2xx message.
+
+### [2026-02-24] Edge function error message extraction from response body
+
+**Decision:** Use `getFunctionErrorMessage()` to read the error message from the edge function response body (`FunctionsHttpError.context`), using `Response.clone()` when available so the body is not consumed.
+
+**Options considered:**
+1. Show only `error.message` from the Supabase client (generic "Edge Function returned a non-2xx status code").
+2. Parse `error.context` (the Response) and extract `{ error: "..." }` from the body; use clone() so multiple reads work.
+
+**Rationale:** Users need to see the actual reason the function failed (e.g. "User profile not found", "Unauthorized: missing Authorization header"). The Supabase JS client puts the Response on `error.context`; reading it once (or from a clone) and returning `payload.error` gives actionable feedback.
+
+**Consequences:** All invoke call sites that show errors to users should use `getFunctionErrorMessage(error, fallback)`. Do not throw a new `Error(message)` after extraction when the original error has `context`, so the same error object is not replaced and body extraction remains possible.
+
+### [2026-02-24] Dual-mode `chat_auth_bootstrap` for staff inbox vs thread bootstrap
+
+**Decision:** Allow staff callers to invoke `chat_auth_bootstrap` without `user_id` to receive only a Stream token/user payload (for inbox channel listing). Keep channel provisioning behavior when a candidate `user_id` is provided.
+
+**Options considered:**
+1. Require `user_id` for all staff calls -- simple contract, but blocks inbox-first staff messaging UX
+2. Add dual-mode behavior (token-only without `user_id`, channel bootstrap with `user_id`) -- slightly more branching, supports inbox + thread flows
+3. Create a second edge function just for staff inbox token bootstrap -- clearer separation, more surface area to maintain
+
+**Rationale:** Staff messaging now uses an inbox-first flow. Staff need to connect to Stream and query existing candidate channels before selecting a thread. Dual-mode behavior preserves the existing candidate path and avoids introducing a second function with duplicate auth and Stream token logic.
+
+**Consequences:** `chat_auth_bootstrap` responses are conditional: `channel_id` is omitted for staff token-only bootstrap. Client code must treat `channel_id` as optional and only require it when opening a specific thread.
+
 ## Pending Decisions
 
 - **Notification delivery providers** -- Which push notification service (Expo Push, FCM, APNs) and email provider (Resend, SendGrid) to use for `dispatch_notifications`.

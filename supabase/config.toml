@@ -28,9 +28,6 @@ verify_jwt = false
 [functions.schedule_or_update_appointment]
 verify_jwt = false
 
-[functions.staff_review_appointment]
-verify_jwt = false
-
 [functions.create_or_update_candidate_profile]
 verify_jwt = false
 

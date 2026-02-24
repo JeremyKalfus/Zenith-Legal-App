@@ -6,7 +6,7 @@ Agents operating in this repository have full access to:
 
 - Read any file in the repository.
 - Create, modify, and delete files as needed.
-- Run shell commands: linting (`npm run lint`), typechecking (`npm run typecheck`), tests (`npm run test`), dev servers (`npm run dev:mobile`, `npm run dev:admin`), Supabase CLI commands, and any other repo scripts.
+- Run shell commands: linting (`npm run lint`), typechecking (`npm run typecheck`), tests (`npm run test`), dev servers (e.g. `npm run dev:mobile` or `npx expo start --web` in apps/mobile, `npm run dev:admin` in apps/admin), Supabase CLI commands, and any other repo scripts.
 - Install dependencies via `npm install`.
 - Deploy Supabase edge functions via `supabase functions deploy`.
 - Update these root documentation files as the project evolves.

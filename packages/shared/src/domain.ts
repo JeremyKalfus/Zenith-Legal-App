@@ -42,6 +42,7 @@ export const PRACTICE_AREAS = [
   'Other',
 ] as const;
 export type PracticeArea = (typeof PRACTICE_AREAS)[number];
+const practiceAreaSchema = z.enum(PRACTICE_AREAS);
 
 export const FIRM_STATUSES = [
   'Waiting on your authorization to contact/submit',
@@ -108,7 +109,7 @@ export const candidateIntakeSchema = z
     mobile: optionalMobileInputSchema,
     preferredCities: z.array(z.enum(CITY_OPTIONS)).default([]),
     otherCityText: optionalTrimmedString(120),
-    practiceArea: z.enum(PRACTICE_AREAS).optional(),
+    practiceAreas: z.array(practiceAreaSchema).max(3, 'Choose up to 3 practice areas').default([]),
     otherPracticeText: optionalTrimmedString(120),
     acceptedPrivacyPolicy: z.boolean().refine((value) => value, {
       message: 'Privacy policy acceptance is required',
@@ -127,7 +128,7 @@ export const candidateIntakeSchema = z
       });
     }
 
-    if (data.practiceArea === 'Other' && !data.otherPracticeText) {
+    if (data.practiceAreas.includes('Other') && !data.otherPracticeText) {
       ctx.addIssue({
         path: ['otherPracticeText'],
         code: z.ZodIssueCode.custom,
@@ -171,11 +172,11 @@ export type AppointmentModality = z.infer<typeof appointmentModalitySchema>;
 
 export const appointmentSchema = z
   .object({
-    title: trimmedString.min(1).max(120),
+    title: trimmedString.min(1, 'Title is required').max(120),
     description: trimmedString.max(2000).optional(),
     modality: appointmentModalitySchema,
     locationText: trimmedString.max(255).optional(),
-    videoUrl: trimmedString.url().max(500).optional(),
+    videoUrl: trimmedString.url('Must be a valid URL').max(500).optional(),
     startAtUtc: z.string().datetime(),
     endAtUtc: z.string().datetime(),
     timezoneLabel: trimmedString.min(1).max(64),
@@ -188,22 +189,6 @@ export const appointmentSchema = z
         path: ['endAtUtc'],
         code: z.ZodIssueCode.custom,
         message: 'End time must be after start time',
-      });
-    }
-
-    if (data.modality === 'virtual' && !data.videoUrl) {
-      ctx.addIssue({
-        path: ['videoUrl'],
-        code: z.ZodIssueCode.custom,
-        message: 'Virtual appointments require a video URL',
-      });
-    }
-
-    if (data.modality === 'in_person' && !data.locationText) {
-      ctx.addIssue({
-        path: ['locationText'],
-        code: z.ZodIssueCode.custom,
-        message: 'In-person appointments require a location',
       });
     }
   });

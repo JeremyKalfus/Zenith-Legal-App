@@ -63,7 +63,7 @@ export function IntakeScreen({
       mobile: '',
       preferredCities: [],
       otherCityText: '',
-      practiceArea: undefined,
+      practiceAreas: [],
       otherPracticeText: '',
       acceptedPrivacyPolicy: false,
       acceptedCommunicationConsent: true,
@@ -73,7 +73,7 @@ export function IntakeScreen({
   });
 
   const selectedCities = watch('preferredCities') ?? [];
-  const selectedPractice = watch('practiceArea');
+  const selectedPracticeAreas = watch('practiceAreas') ?? [];
 
   return (
     <SafeAreaView
@@ -194,15 +194,26 @@ export function IntakeScreen({
           <Text style={styles.label}>Practice Area (choose 0-3)</Text>
           <Controller
             control={control}
-            name="practiceArea"
+            name="practiceAreas"
             render={({ field }) => (
               <View style={[styles.wrap, !showAllPracticeAreas && styles.wrapCollapsed]}>
                 {PRACTICE_AREAS.map((area) => (
                   <MultiSelectOption
                     key={area}
                     label={area}
-                    selected={field.value === area}
-                    onToggle={() => field.onChange(field.value === area ? undefined : area)}
+                    selected={(field.value ?? []).includes(area)}
+                    onToggle={() => {
+                      const current = field.value ?? [];
+                      const alreadySelected = current.includes(area);
+                      if (alreadySelected) {
+                        field.onChange(current.filter((value) => value !== area));
+                        return;
+                      }
+                      if (current.length >= 3) {
+                        return;
+                      }
+                      field.onChange([...current, area]);
+                    }}
                   />
                 ))}
               </View>
@@ -216,11 +227,11 @@ export function IntakeScreen({
               {showAllPracticeAreas ? 'Show less' : 'See more'}
             </Text>
           </Pressable>
-          {errors.practiceArea ? (
-            <Text style={styles.error}>{errors.practiceArea.message}</Text>
+          {errors.practiceAreas ? (
+            <Text style={styles.error}>{errors.practiceAreas.message}</Text>
           ) : null}
 
-          {selectedPractice === 'Other' ? (
+          {selectedPracticeAreas.includes('Other') ? (
             <Controller
               control={control}
               name="otherPracticeText"
