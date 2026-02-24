@@ -415,9 +415,6 @@ export function ProfileScreen() {
             <Text style={styles.helper}>
               Delete your account and sign in information directly in the app. This action is permanent.
             </Text>
-            <Text style={styles.helper}>
-              Some records may be retained where required for legal, security, fraud prevention, or compliance purposes.
-            </Text>
             <Text style={styles.label}>Type DELETE to confirm</Text>
             <TextInput
               autoCapitalize="characters"
