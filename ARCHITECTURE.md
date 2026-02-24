@@ -53,6 +53,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 | `register_candidate_password` | Public | Candidate registration |
 | `mobile_sign_in_with_identifier_password` | Public | Password sign-in |
 | `create_or_update_candidate_profile` | User JWT | Intake profile upsert |
+| `delete_my_account` | User JWT | Candidate self-service account deletion (hard delete auth user + cascaded app data; non-cascading refs nulled first) |
 | `schedule_or_update_appointment` | User JWT | Appointment CRUD |
 | `authorize_firm_submission` | User JWT | Candidate authorizes/declines firm |
 | `chat_auth_bootstrap` | User JWT | Provisions Stream Chat token; candidates (and staff targeting a candidate) also get/create deterministic `candidate-<user_id>` channel. Staff can omit `user_id` to bootstrap inbox listing without creating/selecting a channel. Returns 404 if `users_profile` row missing (no fallback creation) |

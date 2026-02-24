@@ -63,6 +63,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ### Profile Management
 - Candidates update email, password, and intake fields.
 - Profile data stored in `users_profile` and `candidate_preferences` tables.
+- Candidates can delete their account in-app from Profile (self-service deletion flow with confirmation).
 
 ### Notifications
 - Push token registration.

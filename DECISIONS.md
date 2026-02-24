@@ -157,6 +157,19 @@
 
 **Consequences:** `authorize_firm_submission` now branches `declined` behavior by current assignment status. Admin web user deletion uses a dedicated staff-only edge function and rejects staff/self deletion in this workflow.
 
+### [2026-02-24] Candidate self-service in-app account deletion for store compliance
+
+**Decision:** Add a candidate self-service account deletion action in the mobile Profile screen that directly deletes the authenticated account (hard delete), rather than only creating a support request.
+
+**Options considered:**
+1. Support-request-only deletion (email/contact staff) -- lower engineering work, but weaker app-store compliance for in-app deletion expectations
+2. In-app self-service hard delete via authenticated edge function -- stronger user control and aligns with Apple/Google in-app deletion expectations (chosen)
+3. Soft-delete/deactivate account -- reversible, but requires schema + product lifecycle changes
+
+**Rationale:** App stores increasingly expect account deletion to be initiated in-app, not routed exclusively through support. A direct authenticated edge function keeps the workflow simple while preserving necessary historical references by nulling non-cascading foreign keys before deleting the auth user.
+
+**Consequences:** `delete_my_account` edge function exists and is deployed. Candidate Profile UI now includes a typed confirmation + destructive action. Some historical records may remain with identifiers removed/nullified where required for integrity/compliance.
+
 ## Pending Decisions
 
 - **Notification delivery providers** -- Which push notification service (Expo Push, FCM, APNs) and email provider (Resend, SendGrid) to use for `dispatch_notifications`.

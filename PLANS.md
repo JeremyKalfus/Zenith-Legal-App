@@ -18,6 +18,7 @@
 - [x] Staff mobile messaging (shared candidate channels, staff inbox-first navigation, web + native)
 - [x] Admin web staff messaging inbox + candidate deletion workflow (candidate-only hard delete)
 - [x] Candidate dashboard authorization UX semantics (waiting decline deletes assignment; authorized decline labeled cancel)
+- [x] Candidate self-service in-app account deletion flow (Profile screen + `delete_my_account` edge function)
 - [ ] Vendor credential wiring for end-to-end runtime (requires secrets)
 - [ ] Device-level release signing and EAS submit credentials
 
