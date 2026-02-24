@@ -11,7 +11,7 @@ export default function HomePage() {
         </p>
         <h1 className="text-3xl font-bold text-slate-900">Recruiter Admin Portal</h1>
         <p className="text-slate-600">
-          Invite-only operations dashboard for candidates, assignments, statuses, and
+          Password-protected operations dashboard for candidates, assignments, statuses, and
           appointments.
         </p>
       </div>

@@ -1,5 +1,6 @@
 import { FIRM_STATUSES, type FirmStatus } from '@zenith/shared';
 import { supabase } from '../lib/supabase';
+import { getFunctionErrorMessage } from '../lib/function-error';
 
 export type StaffCandidateListItem = {
   id: string;
@@ -24,11 +25,6 @@ export type StaffCandidateAssignmentRow = {
     id: string;
     name: string;
   };
-};
-
-type FunctionErrorPayload = {
-  code?: string;
-  error?: string;
 };
 
 type FunctionSuccess<T> = {
@@ -115,41 +111,6 @@ export async function listCandidateAssignments(
         },
       }];
     });
-}
-
-async function getFunctionErrorMessage(error: unknown): Promise<string> {
-  const errorObject = error as {
-    message?: string;
-    context?: { json?: () => Promise<unknown> };
-  } | null;
-
-  if (errorObject?.context?.json) {
-    try {
-      const payload = (await errorObject.context.json()) as FunctionErrorPayload;
-      if (payload.code === 'duplicate_assignment') {
-        return 'This firm is already assigned to this candidate.';
-      }
-      if (payload.code === 'assignment_not_found') {
-        return 'That assignment could not be found. Refresh and try again.';
-      }
-      if (payload.code === 'candidate_not_found') {
-        return 'That candidate could not be found. Refresh and try again.';
-      }
-      if (payload.code === 'firm_not_found') {
-        return 'That firm could not be found. Refresh and try again.';
-      }
-      if (payload.code === 'firm_inactive') {
-        return 'That firm is inactive and cannot be assigned.';
-      }
-      if (typeof payload.error === 'string') {
-        return payload.error;
-      }
-    } catch {
-      // fall through
-    }
-  }
-
-  return errorObject?.message ?? 'Could not save your change.';
 }
 
 export async function assignFirmToCandidate(

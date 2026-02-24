@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { appointmentSchema, type AppointmentInput, type AppointmentStatus } from '@zenith/shared';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { ScreenShell } from '../../components/screen-shell';
-import { ensureValidSession, supabase } from '../../lib/supabase';
+import { supabase, ensureValidSession } from '../../lib/supabase';
 
 type AppointmentRecord = {
   id: string;
-  candidate_user_id: string;
   title: string;
   description: string | null;
   start_at_utc: string;
@@ -18,36 +16,19 @@ type AppointmentRecord = {
   location_text: string | null;
   video_url: string | null;
   status: AppointmentStatus;
-  candidate_name?: string | null;
-  candidate_email?: string | null;
 };
 
-type PickerState = { field: 'start' | 'end'; mode: 'date' | 'time' } | null;
+const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
+  pending: { bg: '#FEF3C7', text: '#92400E', label: 'Pending Review' },
+  accepted: { bg: '#D1FAE5', text: '#065F46', label: 'Accepted' },
+  declined: { bg: '#FEE2E2', text: '#991B1B', label: 'Declined' },
+  cancelled: { bg: '#F1F5F9', text: '#64748B', label: 'Cancelled' },
+  scheduled: { bg: '#DBEAFE', text: '#1E40AF', label: 'Scheduled' },
+};
 
-function formatDateLabel(value: string | undefined): string {
-  if (!value) {
-    return 'Select date';
-  }
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Select date' : date.toLocaleDateString();
-}
-
-function formatTimeLabel(value: string | undefined): string {
-  if (!value) {
-    return 'Select time';
-  }
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? 'Select time'
-    : date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-}
-
-function formatCardDateTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return iso;
-  }
-  return date.toLocaleString([], {
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString(undefined, {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
@@ -56,120 +37,29 @@ function formatCardDateTime(iso: string): string {
   });
 }
 
-function mergeDatePart(baseIso: string, selected: Date): string {
-  const next = new Date(baseIso);
-  next.setFullYear(selected.getFullYear(), selected.getMonth(), selected.getDate());
-  return next.toISOString();
-}
-
-function mergeTimePart(baseIso: string, selected: Date): string {
-  const next = new Date(baseIso);
-  next.setHours(selected.getHours(), selected.getMinutes(), 0, 0);
-  return next.toISOString();
-}
-
-async function extractFunctionInvokeErrorMessage(error: unknown, data?: unknown): Promise<string> {
-  let rawMessage = '';
-
-  if (typeof data === 'object' && data && 'error' in data) {
-    const payloadMessage = (data as { error?: unknown }).error;
-    if (typeof payloadMessage === 'string' && payloadMessage.trim()) {
-      rawMessage = payloadMessage;
-    }
-  }
-
-  if (!rawMessage && typeof error === 'object' && error && 'context' in error) {
-    const context = (error as { context?: unknown }).context;
-    if (context instanceof Response) {
-      try {
-        const json = (await context.clone().json()) as { error?: unknown; message?: unknown };
-        if (typeof json.error === 'string' && json.error.trim()) {
-          rawMessage = json.error;
-        } else if (typeof json.message === 'string' && json.message.trim()) {
-          rawMessage = json.message;
-        }
-      } catch {
-        try {
-          const text = await context.clone().text();
-          if (text.trim()) {
-            rawMessage = text;
-          }
-        } catch {
-          // Fall back below.
-        }
-      }
-    }
-  }
-
-  if (!rawMessage && error instanceof Error && error.message.trim()) {
-    rawMessage = error.message;
-  }
-
-  if (!rawMessage) {
-    return 'Request failed';
-  }
-
-  const lower = rawMessage.toLowerCase();
-  if (lower.includes('invalid jwt') || lower.includes('jwt expired')) {
-    return 'Your session has expired. Please sign in again and retry.';
-  }
-
-  return rawMessage;
-}
-
-export function AppointmentsScreen({
-  showRecruiterBanner = true,
-  mode = 'candidate',
-}: {
-  showRecruiterBanner?: boolean;
-  mode?: 'candidate' | 'staff';
-}) {
-  const isStaffMode = mode === 'staff';
+export function AppointmentsScreen() {
   const [appointments, setAppointments] = useState<AppointmentRecord[]>([]);
   const [serverMessage, setServerMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [reviewingAppointmentId, setReviewingAppointmentId] = useState<string | null>(null);
-  const [reviewingDecision, setReviewingDecision] = useState<'accepted' | 'declined' | null>(null);
-  const [pickerState, setPickerState] = useState<PickerState>(null);
 
-  const {
-    control,
-    handleSubmit,
-    reset,
-    watch,
-    setValue,
-    formState: { errors },
-  } = useForm<AppointmentInput>({
+  const { control, handleSubmit, reset } = useForm<AppointmentInput>({
     resolver: zodResolver(appointmentSchema),
     defaultValues: {
       title: '',
-      description: undefined,
       modality: 'virtual',
       locationText: '',
-      videoUrl: undefined,
+      videoUrl: '',
       startAtUtc: new Date(Date.now() + 3600_000).toISOString(),
       endAtUtc: new Date(Date.now() + 7200_000).toISOString(),
       timezoneLabel:
         Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
     },
   });
-  const selectedModality = watch('modality') ?? 'virtual';
-  const startAtUtc = watch('startAtUtc');
-  const endAtUtc = watch('endAtUtc');
-
-  const getValidDate = useCallback((value: string | undefined, fallbackMsOffset: number) => {
-    const parsed = value ? new Date(value) : new Date(Date.now() + fallbackMsOffset);
-    if (Number.isNaN(parsed.getTime())) {
-      return new Date(Date.now() + fallbackMsOffset);
-    }
-    return parsed;
-  }, []);
 
   const loadAppointments = useCallback(async () => {
     const { data, error } = await supabase
       .from('appointments')
-      .select('id,candidate_user_id,title,description,start_at_utc,end_at_utc,modality,location_text,video_url,status')
+      .select('id,title,description,start_at_utc,end_at_utc,modality,location_text,video_url,status')
       .order('start_at_utc', { ascending: true });
 
     if (error) {
@@ -177,140 +67,15 @@ export function AppointmentsScreen({
       return;
     }
 
-    const rows = ((data as AppointmentRecord[]) ?? []).map((appointment) => ({
-      ...appointment,
-      candidate_name: null,
-      candidate_email: null,
-    }));
-
-    if (isStaffMode && rows.length > 0) {
-      const candidateIds = [...new Set(rows.map((appointment) => appointment.candidate_user_id))];
-      const { data: candidateProfiles, error: candidateProfilesError } = await supabase
-        .from('users_profile')
-        .select('id,name,email')
-        .in('id', candidateIds);
-
-      if (candidateProfilesError) {
-        setServerMessage(candidateProfilesError.message);
-        return;
-      }
-
-      const candidateById = new Map(
-        ((candidateProfiles as { id: string; name: string | null; email: string }[] | null) ?? []).map(
-          (candidate) => [candidate.id, candidate],
-        ),
-      );
-
-      setAppointments(
-        rows.map((appointment) => {
-          const candidate = candidateById.get(appointment.candidate_user_id);
-          return {
-            ...appointment,
-            candidate_name: candidate?.name ?? null,
-            candidate_email: candidate?.email ?? null,
-          };
-        }),
-      );
-    } else {
-      setAppointments(rows);
-    }
-
+    setAppointments((data as AppointmentRecord[]) ?? []);
     setServerMessage('');
-  }, [isStaffMode]);
-
-  const reviewAppointment = useCallback(
-    async (appointmentId: string, decision: 'accepted' | 'declined') => {
-      setReviewingAppointmentId(appointmentId);
-      setReviewingDecision(decision);
-      setServerMessage('');
-
-      try {
-        await ensureValidSession();
-      } catch (e) {
-        setServerMessage((e as Error).message);
-        setReviewingAppointmentId(null);
-        setReviewingDecision(null);
-        return;
-      }
-
-      const { error, data } = await supabase.functions.invoke('staff_review_appointment', {
-        body: { appointmentId, decision },
-      });
-
-      if (error) {
-        setServerMessage(await extractFunctionInvokeErrorMessage(error, data));
-        setReviewingAppointmentId(null);
-        setReviewingDecision(null);
-        return;
-      }
-
-      setServerMessage(decision === 'accepted' ? 'Appointment accepted.' : 'Appointment declined.');
-      setReviewingAppointmentId(null);
-      setReviewingDecision(null);
-      await loadAppointments();
-    },
-    [loadAppointments],
-  );
-
-  const handlePickerChange = useCallback(
-    (event: DateTimePickerEvent, selectedDate?: Date) => {
-      if (Platform.OS !== 'ios') {
-        setPickerState(null);
-      }
-
-      if (!pickerState || event.type === 'dismissed' || !selectedDate) {
-        return;
-      }
-
-      const fieldName = pickerState.field === 'start' ? 'startAtUtc' : 'endAtUtc';
-      const fallbackOffset = pickerState.field === 'start' ? 3600_000 : 7200_000;
-      const baseIso = getValidDate(
-        pickerState.field === 'start' ? startAtUtc : endAtUtc,
-        fallbackOffset,
-      ).toISOString();
-      const nextIso =
-        pickerState.mode === 'date'
-          ? mergeDatePart(baseIso, selectedDate)
-          : mergeTimePart(baseIso, selectedDate);
-
-      setValue(fieldName, nextIso, { shouldValidate: true, shouldDirty: true });
-    },
-    [endAtUtc, getValidDate, pickerState, setValue, startAtUtc],
-  );
-
-  function getStatusLabel(status: AppointmentStatus): string {
-    if (status === 'pending') {
-      return 'Pending';
-    }
-    if (status === 'accepted') {
-      return 'Accepted';
-    }
-    if (status === 'declined') {
-      return 'Declined';
-    }
-    return 'Cancelled';
-  }
-
-  function getStatusStyle(status: AppointmentStatus) {
-    if (status === 'accepted') {
-      return styles.statusAccepted;
-    }
-    if (status === 'declined') {
-      return styles.statusDeclined;
-    }
-    if (status === 'cancelled') {
-      return styles.statusCancelled;
-    }
-    return styles.statusPending;
-  }
+  }, []);
 
   useEffect(() => {
     void loadAppointments();
-  }, [loadAppointments]);
 
-  useEffect(() => {
     const channel = supabase
-      .channel(`appointments:${mode}:${Date.now()}`)
+      .channel('appointments-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'appointments' },
@@ -323,31 +88,23 @@ export function AppointmentsScreen({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [loadAppointments, mode]);
-
-  const activePickerValue = pickerState
-    ? pickerState.field === 'start'
-      ? getValidDate(startAtUtc, 3600_000)
-      : getValidDate(endAtUtc, 7200_000)
-    : null;
+  }, [loadAppointments]);
 
   return (
-    <ScreenShell showBanner={showRecruiterBanner}>
+    <ScreenShell>
       <Text style={styles.title}>Appointments</Text>
-      <Text style={styles.subtitle}>Default reminders trigger at 24h and 1h.</Text>
+      <Text style={styles.body}>Default reminders trigger at 24h and 1h.</Text>
 
-      {!isStaffMode ? (
-        <Pressable
-          style={styles.primaryCta}
-          onPress={() => setShowForm((value) => !value)}
-        >
-          <Text style={styles.primaryCtaText}>
-            {showForm ? 'Close form' : 'Request appointment'}
-          </Text>
-        </Pressable>
-      ) : null}
+      <Pressable
+        style={styles.primaryCta}
+        onPress={() => setShowForm((value) => !value)}
+      >
+        <Text style={styles.primaryCtaText}>
+          {showForm ? 'Close form' : 'Request appointment'}
+        </Text>
+      </Pressable>
 
-      {!isStaffMode && showForm ? (
+      {showForm ? (
         <View style={styles.formCard}>
           <Controller
             control={control}
@@ -355,33 +112,27 @@ export function AppointmentsScreen({
             render={({ field }) => (
               <TextInput
                 style={styles.input}
-                placeholder="Title (optional)"
-                onChangeText={(value) => field.onChange(value.trim().length > 0 ? value : undefined)}
-                value={field.value ?? ''}
+                placeholder="Title"
+                onChangeText={field.onChange}
+                value={field.value}
               />
             )}
           />
-          {errors.title?.message ? (
-            <Text style={styles.fieldError}>{errors.title.message}</Text>
-          ) : null}
 
           <Controller
             control={control}
             name="description"
             render={({ field }) => (
               <TextInput
-                style={[styles.input, styles.multilineInput]}
+                style={[styles.input, styles.textArea]}
                 placeholder="Description (optional)"
+                onChangeText={field.onChange}
+                value={field.value ?? ''}
                 multiline
                 numberOfLines={3}
-                onChangeText={(value) => field.onChange(value.trim().length > 0 ? value : undefined)}
-                value={field.value ?? ''}
               />
             )}
           />
-          {errors.description?.message ? (
-            <Text style={styles.fieldError}>{errors.description.message}</Text>
-          ) : null}
 
           <Controller
             control={control}
@@ -393,10 +144,7 @@ export function AppointmentsScreen({
                     styles.tag,
                     field.value === 'virtual' ? styles.tagSelected : null,
                   ]}
-                  onPress={() => {
-                    field.onChange('virtual');
-                    setValue('locationText', undefined);
-                  }}
+                  onPress={() => field.onChange('virtual')}
                 >
                   <Text>Virtual</Text>
                 </Pressable>
@@ -405,10 +153,7 @@ export function AppointmentsScreen({
                     styles.tag,
                     field.value === 'in_person' ? styles.tagSelected : null,
                   ]}
-                  onPress={() => {
-                    field.onChange('in_person');
-                    setValue('videoUrl', undefined);
-                  }}
+                  onPress={() => field.onChange('in_person')}
                 >
                   <Text>In-person</Text>
                 </Pressable>
@@ -416,214 +161,101 @@ export function AppointmentsScreen({
             )}
           />
 
-          {selectedModality === 'virtual' ? (
-            <>
-              <Controller
-                control={control}
-                name="videoUrl"
-                render={({ field }) => (
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Video URL (optional)"
-                    onChangeText={(value) => field.onChange(value.trim().length > 0 ? value : undefined)}
-                    value={field.value ?? ''}
-                  />
-                )}
+          <Controller
+            control={control}
+            name="videoUrl"
+            render={({ field }) => (
+              <TextInput
+                style={styles.input}
+                placeholder="Video URL (required for virtual)"
+                onChangeText={field.onChange}
+                value={field.value ?? ''}
               />
-              {errors.videoUrl?.message ? (
-                <Text style={styles.fieldError}>{errors.videoUrl.message}</Text>
-              ) : null}
-            </>
-          ) : (
-            <>
-              <Controller
-                control={control}
-                name="locationText"
-                render={({ field }) => (
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Location (optional)"
-                    onChangeText={(value) => field.onChange(value.trim().length > 0 ? value : undefined)}
-                    value={field.value ?? ''}
-                  />
-                )}
+            )}
+          />
+
+          <Controller
+            control={control}
+            name="locationText"
+            render={({ field }) => (
+              <TextInput
+                style={styles.input}
+                placeholder="Location (required for in-person)"
+                onChangeText={field.onChange}
+                value={field.value ?? ''}
               />
-              {errors.locationText?.message ? (
-                <Text style={styles.fieldError}>{errors.locationText.message}</Text>
-              ) : null}
-            </>
-          )}
-          <View style={styles.timeSection}>
-            <Text style={styles.sectionLabel}>Start time</Text>
-            <View style={styles.row}>
-              <Pressable
-                style={styles.timeButton}
-                onPress={() => setPickerState({ field: 'start', mode: 'date' })}
-              >
-                <Text style={styles.timeButtonText}>{formatDateLabel(startAtUtc)}</Text>
-              </Pressable>
-              <Pressable
-                style={styles.timeButton}
-                onPress={() => setPickerState({ field: 'start', mode: 'time' })}
-              >
-                <Text style={styles.timeButtonText}>{formatTimeLabel(startAtUtc)}</Text>
-              </Pressable>
-            </View>
-            <Text style={styles.sectionLabel}>End time</Text>
-            <View style={styles.row}>
-              <Pressable
-                style={styles.timeButton}
-                onPress={() => setPickerState({ field: 'end', mode: 'date' })}
-              >
-                <Text style={styles.timeButtonText}>{formatDateLabel(endAtUtc)}</Text>
-              </Pressable>
-              <Pressable
-                style={styles.timeButton}
-                onPress={() => setPickerState({ field: 'end', mode: 'time' })}
-              >
-                <Text style={styles.timeButtonText}>{formatTimeLabel(endAtUtc)}</Text>
-              </Pressable>
-            </View>
-          </View>
-          {activePickerValue && pickerState ? (
-            <DateTimePicker
-              value={activePickerValue}
-              mode={pickerState.mode}
-              display="default"
-              onChange={handlePickerChange}
-            />
-          ) : null}
-          {errors.startAtUtc?.message ? (
-            <Text style={styles.fieldError}>{errors.startAtUtc.message}</Text>
-          ) : null}
-          {errors.endAtUtc?.message ? (
-            <Text style={styles.fieldError}>{errors.endAtUtc.message}</Text>
-          ) : null}
+            )}
+          />
 
           <Pressable
-            style={[styles.primaryCta, submitting ? styles.ctaDisabled : null]}
-            disabled={submitting}
-            onPress={handleSubmit(
-              async (values) => {
-                setSubmitting(true);
-                setServerMessage('');
+            style={styles.primaryCta}
+            onPress={handleSubmit(async (values) => {
+              try {
+                await ensureValidSession();
 
-                try {
-                  await ensureValidSession();
-                } catch (e) {
-                  setServerMessage((e as Error).message);
-                  setSubmitting(false);
-                  return;
-                }
-
-                const { error, data } = await supabase.functions.invoke(
+                const { error } = await supabase.functions.invoke(
                   'schedule_or_update_appointment',
                   { body: values },
                 );
 
                 if (error) {
-                  setServerMessage(await extractFunctionInvokeErrorMessage(error, data));
-                  setSubmitting(false);
+                  setServerMessage(error.message);
                   return;
                 }
 
                 setServerMessage('Appointment request submitted.');
                 setShowForm(false);
-                setSubmitting(false);
                 reset();
                 await loadAppointments();
-              },
-              () => {
-                setServerMessage('Please fix the form errors and try again.');
-              },
-            )}
+              } catch (err) {
+                setServerMessage((err as Error).message);
+              }
+            })}
           >
-            <Text style={styles.primaryCtaText}>
-              {submitting ? 'Submitting...' : 'Submit request'}
-            </Text>
+            <Text style={styles.primaryCtaText}>Submit request</Text>
           </Pressable>
         </View>
       ) : null}
 
-      {serverMessage ? <Text style={styles.serverMessage}>{serverMessage}</Text> : null}
-
-      {appointments.length === 0 && !showForm ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>
-            {isStaffMode
-              ? 'No appointment requests yet.'
-              : 'No appointments yet. Tap "Request appointment" to get started.'}
-          </Text>
-        </View>
+      {serverMessage ? (
+        <Text style={styles.serverMessage}>{serverMessage}</Text>
       ) : null}
 
-      {appointments.map((appointment) => (
-        <View key={appointment.id} style={styles.card}>
-          {isStaffMode ? (
-            <Text style={styles.metaText}>
-              Candidate:{' '}
-              {appointment.candidate_name?.trim() ||
-                appointment.candidate_email?.trim() ||
-                appointment.candidate_user_id}
-            </Text>
-          ) : null}
-          <Text style={styles.cardTitle}>{appointment.title}</Text>
-          {appointment.description ? (
-            <Text style={styles.cardBody}>{appointment.description}</Text>
-          ) : null}
-          <Text style={styles.cardBody}>
-            {appointment.modality === 'virtual' ? 'Virtual' : 'In-person'}
-            {appointment.location_text ? ` · ${appointment.location_text}` : ''}
-          </Text>
-          <Text style={styles.cardTime}>
-            {formatCardDateTime(appointment.start_at_utc)} –{' '}
-            {formatCardDateTime(appointment.end_at_utc)}
-          </Text>
-          <View style={[styles.statusBadge, getStatusStyle(appointment.status)]}>
-            <Text style={styles.statusBadgeText}>{getStatusLabel(appointment.status)}</Text>
-          </View>
-          {isStaffMode && appointment.status === 'pending' ? (
-            <View style={styles.row}>
-              <Pressable
-                style={[
-                  styles.secondaryCta,
-                  styles.acceptCta,
-                  reviewingAppointmentId === appointment.id ? styles.ctaDisabled : null,
-                ]}
-                disabled={reviewingAppointmentId === appointment.id}
-                onPress={() => void reviewAppointment(appointment.id, 'accepted')}
-              >
-                <Text style={styles.secondaryCtaText}>
-                  {reviewingAppointmentId === appointment.id && reviewingDecision === 'accepted'
-                    ? 'Accepting...'
-                    : 'Accept'}
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.secondaryCta,
-                  styles.declineCta,
-                  reviewingAppointmentId === appointment.id ? styles.ctaDisabled : null,
-                ]}
-                disabled={reviewingAppointmentId === appointment.id}
-                onPress={() => void reviewAppointment(appointment.id, 'declined')}
-              >
-                <Text style={styles.secondaryCtaText}>
-                  {reviewingAppointmentId === appointment.id && reviewingDecision === 'declined'
-                    ? 'Declining...'
-                    : 'Decline'}
-                </Text>
-              </Pressable>
+      {appointments.length === 0 ? (
+        <Text style={styles.emptyState}>No appointments yet.</Text>
+      ) : (
+        appointments.map((appointment) => {
+          const statusInfo = STATUS_COLORS[appointment.status] ?? STATUS_COLORS.scheduled;
+          return (
+            <View key={appointment.id} style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>{appointment.title}</Text>
+                <View style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}>
+                  <Text style={[styles.statusText, { color: statusInfo.text }]}>
+                    {statusInfo.label}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.cardTime}>
+                {formatDateTime(appointment.start_at_utc)} – {formatDateTime(appointment.end_at_utc)}
+              </Text>
+              <Text style={styles.cardDetail}>
+                {appointment.modality === 'virtual' ? 'Virtual' : 'In-person'}
+                {appointment.location_text ? ` · ${appointment.location_text}` : ''}
+              </Text>
+              {appointment.description ? (
+                <Text style={styles.cardDescription}>{appointment.description}</Text>
+              ) : null}
             </View>
-          ) : null}
-        </View>
-      ))}
+          );
+        })
+      )}
     </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  subtitle: {
+  body: {
     color: '#475569',
   },
   card: {
@@ -634,37 +266,35 @@ const styles = StyleSheet.create({
     gap: 4,
     padding: 12,
   },
+  cardHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
   cardTitle: {
     color: '#0F172A',
+    flex: 1,
     fontSize: 15,
     fontWeight: '600',
   },
-  cardBody: {
+  cardTime: {
+    color: '#2563EB',
+    fontSize: 13,
+  },
+  cardDetail: {
     color: '#475569',
     fontSize: 13,
   },
-  cardTime: {
-    color: '#334155',
+  cardDescription: {
+    color: '#64748B',
     fontSize: 13,
-    fontWeight: '500',
-  },
-  ctaDisabled: {
-    opacity: 0.6,
-  },
-  declineCta: {
-    backgroundColor: '#991B1B',
+    marginTop: 2,
   },
   emptyState: {
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 24,
-  },
-  emptyStateText: {
-    color: '#64748B',
+    color: '#94A3B8',
     fontSize: 14,
+    fontStyle: 'italic',
+    paddingVertical: 16,
     textAlign: 'center',
   },
   formCard: {
@@ -682,18 +312,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 10,
   },
-  multilineInput: {
-    minHeight: 72,
+  textArea: {
+    minHeight: 60,
     textAlignVertical: 'top',
-  },
-  fieldError: {
-    color: '#B91C1C',
-    fontSize: 12,
-    marginTop: -4,
-  },
-  metaText: {
-    color: '#334155',
-    fontSize: 12,
   },
   primaryCta: {
     alignItems: 'center',
@@ -705,66 +326,25 @@ const styles = StyleSheet.create({
     color: '#F8FAFC',
     fontWeight: '700',
   },
-  secondaryCta: {
-    alignItems: 'center',
-    borderRadius: 10,
-    flex: 1,
-    padding: 10,
-  },
-  secondaryCtaText: {
-    color: '#F8FAFC',
-    fontWeight: '700',
-  },
   row: {
     flexDirection: 'row',
     gap: 8,
   },
-  sectionLabel: {
-    color: '#334155',
-    fontSize: 12,
-    fontWeight: '600',
-  },
   serverMessage: {
-    color: '#0F172A',
-  },
-  statusAccepted: {
-    backgroundColor: '#DCFCE7',
-  },
-  statusBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  statusBadgeText: {
-    color: '#0F172A',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  statusCancelled: {
-    backgroundColor: '#E2E8F0',
-  },
-  statusDeclined: {
-    backgroundColor: '#FEE2E2',
-  },
-  statusPending: {
-    backgroundColor: '#FEF3C7',
-  },
-  timeButton: {
-    alignItems: 'center',
-    backgroundColor: '#F8FAFC',
-    borderColor: '#CBD5E1',
+    backgroundColor: '#F1F5F9',
     borderRadius: 8,
-    borderWidth: 1,
-    flex: 1,
+    color: '#0F172A',
+    fontSize: 14,
     padding: 10,
   },
-  timeButtonText: {
-    color: '#0F172A',
-    fontWeight: '600',
+  statusBadge: {
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
-  timeSection: {
-    gap: 8,
+  statusText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   tag: {
     backgroundColor: '#E2E8F0',
@@ -779,8 +359,5 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     fontSize: 24,
     fontWeight: '700',
-  },
-  acceptCta: {
-    backgroundColor: '#166534',
   },
 });

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { FIRM_STATUSES, type FirmStatus } from '@zenith/shared';
 import { supabaseClient } from '@/lib/supabase-client';
+import { getFunctionErrorMessage } from '@/lib/function-error';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
@@ -28,46 +29,6 @@ type AssignmentRow = {
   status_updated_at: string;
   firms: { id: string; name: string } | { id: string; name: string }[] | null;
 };
-
-type FunctionErrorPayload = {
-  code?: string;
-  error?: string;
-};
-
-async function getFunctionErrorMessage(error: unknown): Promise<string> {
-  const errorObject = error as {
-    message?: string;
-    context?: { json?: () => Promise<unknown>; text?: () => Promise<string> };
-  } | null;
-
-  if (errorObject?.context?.json) {
-    try {
-      const payload = (await errorObject.context.json()) as FunctionErrorPayload;
-      if (payload.code === 'duplicate_assignment') {
-        return 'This firm is already assigned to this candidate.';
-      }
-      if (payload.code === 'assignment_not_found') {
-        return 'That assignment could not be found. Refresh and try again.';
-      }
-      if (payload.code === 'candidate_not_found') {
-        return 'The selected candidate could not be found.';
-      }
-      if (payload.code === 'firm_not_found') {
-        return 'The selected firm could not be found.';
-      }
-      if (payload.code === 'firm_inactive') {
-        return 'That firm is inactive and cannot be assigned.';
-      }
-      if (typeof payload.error === 'string') {
-        return payload.error;
-      }
-    } catch {
-      // fall through
-    }
-  }
-
-  return errorObject?.message ?? 'Could not save your change.';
-}
 
 function normalizeFirmRelation(
   relation: AssignmentRow['firms'],

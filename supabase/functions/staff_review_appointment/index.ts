@@ -4,28 +4,9 @@ import { assertStaff, createAuthedClient, createServiceClient } from '../_shared
 import { writeAuditEvent } from '../_shared/audit.ts';
 
 const schema = z.object({
-  appointmentId: z.string().uuid(),
+  appointment_id: z.string().uuid(),
   decision: z.enum(['accepted', 'declined']),
 });
-
-type AppointmentStatus = 'pending' | 'accepted' | 'declined' | 'cancelled';
-
-type AppointmentRow = {
-  id: string;
-  candidate_user_id: string;
-  status: AppointmentStatus;
-  start_at_utc: string;
-  end_at_utc: string;
-  [key: string]: unknown;
-};
-
-function isAcceptedOverlapConstraintError(message: string | undefined): boolean {
-  if (!message) {
-    return false;
-  }
-
-  return message.includes('appointments_no_overlapping_accepted_per_candidate');
-}
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -34,35 +15,32 @@ Deno.serve(async (request) => {
 
   try {
     const authHeader = request.headers.get('Authorization');
-    const staffUserId = await assertStaff(authHeader);
-    const client = createAuthedClient(authHeader);
+    const actorUserId = await assertStaff(authHeader);
     const serviceClient = createServiceClient();
     const payload = schema.parse(await request.json());
 
-    const { data: appointmentData, error: appointmentError } = await client
+    const { data: appointment, error: fetchError } = await serviceClient
       .from('appointments')
       .select('*')
-      .eq('id', payload.appointmentId)
+      .eq('id', payload.appointment_id)
       .single();
 
-    if (appointmentError || !appointmentData) {
-      return errorResponse(appointmentError?.message ?? 'Appointment not found', 404);
+    if (fetchError || !appointment) {
+      return errorResponse('Appointment not found', 404, 'appointment_not_found');
     }
 
-    const appointment = appointmentData as AppointmentRow;
-
-    if (appointment.status === 'cancelled') {
-      return errorResponse('Cancelled appointments cannot be reviewed', 400);
-    }
-
-    if (appointment.status === payload.decision) {
-      return jsonResponse({ success: true, appointment });
+    if (appointment.status !== 'pending') {
+      return errorResponse(
+        `Cannot review appointment with status "${appointment.status}"`,
+        422,
+        'invalid_status_transition',
+      );
     }
 
     if (payload.decision === 'accepted') {
-      const { data: conflicts, error: conflictError } = await client
+      const { data: conflicts, error: conflictError } = await serviceClient
         .from('appointments')
-        .select('id')
+        .select('id,start_at_utc,end_at_utc')
         .eq('candidate_user_id', appointment.candidate_user_id)
         .eq('status', 'accepted')
         .neq('id', appointment.id)
@@ -76,40 +54,67 @@ Deno.serve(async (request) => {
 
       if (conflicts && conflicts.length > 0) {
         return errorResponse(
-          'Cannot accept this appointment because the candidate already has an accepted appointment in this time window.',
+          'Accepting this appointment would create a scheduling conflict',
           409,
+          'appointment_conflict',
         );
       }
     }
 
-    const { data: updatedData, error: updateError } = await client
+    const { data: updated, error: updateError } = await serviceClient
       .from('appointments')
       .update({ status: payload.decision })
-      .eq('id', appointment.id)
+      .eq('id', payload.appointment_id)
       .select('*')
       .single();
 
-    if (updateError || !updatedData) {
-      if (isAcceptedOverlapConstraintError(updateError?.message)) {
-        return errorResponse(
-          'Cannot accept this appointment because the candidate already has an accepted appointment in this time window.',
-          409,
-        );
-      }
-      return errorResponse(updateError?.message ?? 'Unable to review appointment', 400);
+    if (updateError || !updated) {
+      return errorResponse(
+        updateError?.message ?? 'Unable to update appointment',
+        400,
+        'status_update_failed',
+      );
     }
+
+    await serviceClient.from('notification_deliveries').insert([
+      {
+        user_id: appointment.candidate_user_id,
+        channel: 'push',
+        event_type: 'appointment.updated',
+        payload: {
+          appointment_id: appointment.id,
+          decision: payload.decision,
+        },
+        status: 'queued',
+      },
+      {
+        user_id: appointment.candidate_user_id,
+        channel: 'email',
+        event_type: 'appointment.updated',
+        payload: {
+          appointment_id: appointment.id,
+          decision: payload.decision,
+        },
+        status: 'queued',
+      },
+    ]);
 
     await writeAuditEvent({
       client: serviceClient,
-      actorUserId: staffUserId,
-      action: payload.decision === 'accepted' ? 'accept_appointment' : 'decline_appointment',
+      actorUserId,
+      action: 'staff_review_appointment',
       entityType: 'appointments',
-      entityId: appointment.id,
-      beforeJson: appointment,
-      afterJson: updatedData as Record<string, unknown>,
+      entityId: payload.appointment_id,
+      beforeJson: appointment as Record<string, unknown>,
+      afterJson: updated as Record<string, unknown>,
     });
 
-    return jsonResponse({ success: true, appointment: updatedData });
+    return jsonResponse({
+      success: true,
+      appointment: updated,
+      previous_status: appointment.status,
+      new_status: payload.decision,
+    });
   } catch (error) {
     const message = (error as Error).message;
     if (message === 'Forbidden: staff access required') {

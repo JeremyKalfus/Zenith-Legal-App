@@ -63,3 +63,6 @@ verify_jwt = false
 
 [functions.process_chat_webhook]
 verify_jwt = false
+
+[functions.staff_review_appointment]
+verify_jwt = false
