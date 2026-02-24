@@ -253,6 +253,43 @@ export function CandidateFirmManager() {
     [loadAssignments, selectedCandidateId],
   );
 
+  const handleDeleteCandidate = useCallback(async () => {
+    if (!selectedCandidate) {
+      setStatusMessage('Select a candidate before deleting.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete candidate account for ${selectedCandidate.name || 'this candidate'} (${selectedCandidate.email})?\n\nThis permanently deletes the account and cascades app data.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setBusyAction('delete-candidate');
+    setStatusMessage(null);
+
+    try {
+      const { error } = await supabaseClient.functions.invoke('staff_delete_user', {
+        body: { user_id: selectedCandidate.id },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setStatusMessage('Candidate deleted.');
+      setAssignments([]);
+      setPendingStatuses({});
+      setSelectedCandidateId((current) => (current === selectedCandidate.id ? '' : current));
+      await loadBaseData();
+    } catch (error) {
+      setStatusMessage(await getFunctionErrorMessage(error));
+    } finally {
+      setBusyAction(null);
+    }
+  }, [loadBaseData, selectedCandidate]);
+
   return (
     <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
       <Card>
@@ -294,12 +331,26 @@ export function CandidateFirmManager() {
 
       <Card>
         <CardHeader>
-          <CardTitle>{selectedCandidate?.name ?? 'Candidate details'}</CardTitle>
-          <CardDescription>
-            {selectedCandidate
-              ? `${selectedCandidate.email} • ${selectedCandidate.mobile}`
-              : 'Select a candidate to manage assignments.'}
-          </CardDescription>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle>{selectedCandidate?.name ?? 'Candidate details'}</CardTitle>
+              <CardDescription>
+                {selectedCandidate
+                  ? `${selectedCandidate.email} • ${selectedCandidate.mobile}`
+                  : 'Select a candidate to manage assignments.'}
+              </CardDescription>
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={!selectedCandidate || busyAction !== null}
+              onClick={() => {
+                void handleDeleteCandidate();
+              }}
+            >
+              {busyAction === 'delete-candidate' ? 'Deleting...' : 'Delete Candidate'}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {statusMessage ? (

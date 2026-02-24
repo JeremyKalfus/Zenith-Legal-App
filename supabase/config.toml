@@ -63,3 +63,6 @@ verify_jwt = false
 
 [functions.staff_review_appointment]
 verify_jwt = false
+
+[functions.staff_delete_user]
+verify_jwt = false
