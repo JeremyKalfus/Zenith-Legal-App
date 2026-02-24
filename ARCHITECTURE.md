@@ -65,7 +65,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 | `staff_delete_user` | Staff JWT | Hard-delete candidate user accounts from admin workflow (candidate-only scope) |
 | `bulk_paste_ingest_firms` | Staff JWT | Bulk firm data import |
 | `staff_handle_data_request` | Staff JWT | Process support/data requests |
-| `dispatch_notifications` | Internal | Process notification queue |
+| `dispatch_notifications` | Internal | Dual-mode notification function: enqueue events into `notification_deliveries` or process queued push deliveries via Expo Push API (email provider integration pending) |
 | `process_chat_webhook` | Webhook signature | Handle Stream Chat events |
 
 **JWT handling:** All functions set `verify_jwt = false` in `supabase/config.toml` to bypass gateway-level JWT verification (required due to the project's JWT signing key format). Auth is enforced internally via `getCurrentUserId()` which extracts the Bearer token and calls `getUser(token)`.

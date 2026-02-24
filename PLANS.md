@@ -19,6 +19,7 @@
 - [x] Admin web staff messaging inbox + candidate deletion workflow (candidate-only hard delete)
 - [x] Candidate dashboard authorization UX semantics (waiting decline deletes assignment; authorized decline labeled cancel)
 - [x] Candidate self-service in-app account deletion flow (Profile screen + `delete_my_account` edge function)
+- [x] Push notification dispatch queue processor (Expo Push API send + queued delivery status updates)
 - [ ] Vendor credential wiring for end-to-end runtime (requires secrets)
 - [ ] Device-level release signing and EAS submit credentials
 
@@ -26,7 +27,7 @@
 
 ### High Priority
 
-1. **Notification dispatch implementation** -- `dispatch_notifications` edge function exists; push/email delivery channels need vendor integration (requires secrets).
+1. **Notification dispatch implementation (email provider + scheduling hardening)** -- Push queue processing is implemented via Expo Push API; email delivery provider integration and production scheduling/automation still need completion.
 2. **Calendar sync implementation** -- `connect_calendar_provider` edge function and schema tables exist; OAuth flows and event sync logic need completion.
 
 ### Medium Priority
@@ -36,15 +37,15 @@
 
 ## Blockers and Dependencies
 
-- **Vendor secrets required** for: notification dispatch (push/email providers), calendar OAuth (Google/Microsoft client IDs), Sentry, PostHog. Stream Chat (`STREAM_API_KEY`, `STREAM_API_SECRET`) are set in Supabase edge function secrets for messaging.
+- **Vendor secrets required** for: notification dispatch email provider (push via Expo Push API does not require a provider secret), calendar OAuth (Google/Microsoft client IDs), Sentry, PostHog. Stream Chat (`STREAM_API_KEY`, `STREAM_API_SECRET`) are set in Supabase edge function secrets for messaging.
 - **EAS credentials required** for: iOS TestFlight and Android Play Internal Testing builds.
 - **Staging Supabase project** needed before promoting beyond dev.
 
 ## Next 3 Tasks
 
-### 1. Wire notification dispatch (requires vendor secrets)
+### 1. Finish notification dispatch (email provider + processor automation)
 
-**Scope:** Implement the notification processor in `dispatch_notifications` that reads `notification_deliveries` with `status = 'queued'` and sends via Expo Push API (push) or email provider (email).
+**Scope:** Complete notification dispatch by adding email delivery provider integration and wiring a scheduler/automation to invoke `dispatch_notifications` in processor mode regularly. Push queue processing via Expo Push API is implemented.
 
 **Verification:**
 - Push notifications delivered to candidate devices.
@@ -60,11 +61,11 @@
 - Accepted appointments appear in connected calendars.
 - `npm run verify` passes.
 
-### 3. Staff mobile messaging
+### 3. Observability wiring
 
-**Scope:** Wire `staff-messages-screen.tsx` to Stream Chat with the same pattern as the candidate messaging flow (web and native). Candidate web flow uses `messages-screen.web.tsx` with stream-chat-react and `chat_auth_bootstrap`.
+**Scope:** Connect Sentry DSN and PostHog key integration points in mobile/admin so errors and key product events are captured in production environments.
 
 **Verification:**
-- Staff can send and receive messages on mobile and (if applicable) web.
-- Stream Chat token provisioned via `chat_auth_bootstrap`.
-- `npm run lint` and `npm run typecheck` pass.
+- Runtime errors are sent to Sentry in staging/production.
+- Core onboarding/appointment/messaging events are tracked in PostHog.
+- `npm run verify` passes.

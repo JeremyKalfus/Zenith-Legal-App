@@ -68,7 +68,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ### Notifications
 - Push token registration.
 - Notification preferences per user.
-- `dispatch_notifications` edge function processes queued notification deliveries.
+- `dispatch_notifications` edge function can enqueue notification events and process queued push notification deliveries (Expo Push API).
 - Notification events: appointment created/updated, assignment status change, message received.
 
 ### Admin Dashboard (web)

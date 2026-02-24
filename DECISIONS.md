@@ -170,6 +170,19 @@
 
 **Consequences:** `delete_my_account` edge function exists and is deployed. Candidate Profile UI now includes a typed confirmation + destructive action. Some historical records may remain with identifiers removed/nullified where required for integrity/compliance.
 
+### [2026-02-24] Push-first notification dispatch in `dispatch_notifications`
+
+**Decision:** Implement queued push notification processing in `dispatch_notifications` via Expo Push API first, while preserving the existing event-enqueue behavior and deferring email provider delivery integration.
+
+**Options considered:**
+1. Implement both push + email providers in one pass -- complete but blocked on choosing/configuring an email vendor
+2. Implement push queue processing first and keep email rows queued until provider integration (chosen)
+3. Replace the existing enqueue function with a processor-only function -- simpler internals but breaks compatibility with the current payload shape
+
+**Rationale:** Push notifications can ship immediately using Expo Push API without new vendor secrets, which unblocks end-to-end notification delivery for mobile users. Keeping `dispatch_notifications` dual-mode avoids breaking internal callers while email delivery is completed later.
+
+**Consequences:** `dispatch_notifications` supports processor mode (default) for queued push deliveries and enqueue mode for `{ events: [...] }` payloads. Email deliveries remain queued until provider integration is added.
+
 ## Pending Decisions
 
 - **Notification delivery providers** -- Which push notification service (Expo Push, FCM, APNs) and email provider (Resend, SendGrid) to use for `dispatch_notifications`.
