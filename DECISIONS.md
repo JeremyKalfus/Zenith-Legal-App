@@ -144,6 +144,19 @@
 
 **Consequences:** `chat_auth_bootstrap` responses are conditional: `channel_id` is omitted for staff token-only bootstrap. Client code must treat `channel_id` as optional and only require it when opening a specific thread.
 
+### [2026-02-24] Candidate waiting-status decline deletes assignment; admin user deletion is candidate-only
+
+**Decision:** A candidate declining a firm while the assignment is in `Waiting on your authorization to contact/submit` deletes the assignment row instead of keeping a declined placeholder. Admin web user deletion is limited to candidate accounts (hard delete via Supabase auth admin API).
+
+**Options considered:**
+1. Keep declined waiting assignments and add a new declined status -- preserves history but requires schema/UI expansion
+2. Hide declined waiting assignments only on candidate dashboard -- preserves data but adds hidden/archive semantics
+3. Delete waiting assignments on decline; keep authorized-state decline as cancel -- simplest UX and no schema change (chosen)
+
+**Rationale:** The requested UX is "decline should delete it from the user's list" for waiting assignments. Deleting the assignment directly satisfies this without introducing new status values or hidden-state logic. Limiting admin deletion to candidates matches the requested scope and reduces risk around staff account administration.
+
+**Consequences:** `authorize_firm_submission` now branches `declined` behavior by current assignment status. Admin web user deletion uses a dedicated staff-only edge function and rejects staff/self deletion in this workflow.
+
 ## Pending Decisions
 
 - **Notification delivery providers** -- Which push notification service (Expo Push, FCM, APNs) and email provider (Resend, SendGrid) to use for `dispatch_notifications`.

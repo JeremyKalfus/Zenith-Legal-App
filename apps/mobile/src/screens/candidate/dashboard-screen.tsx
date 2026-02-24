@@ -214,7 +214,11 @@ export function DashboardScreen({
                   }}
                 >
                   <Text style={styles.declineText}>
-                    {busyAssignmentId === assignment.id ? 'Saving...' : 'Decline'}
+                    {busyAssignmentId === assignment.id
+                      ? 'Saving...'
+                      : assignment.status_enum === 'Authorized, will submit soon'
+                        ? 'Cancel'
+                        : 'Decline'}
                   </Text>
                 </Pressable>
               </View>

@@ -61,6 +61,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 | `assign_firm_to_candidate` | Staff JWT | Assign firm to candidate |
 | `staff_update_assignment_status` | Staff JWT | Update assignment status |
 | `staff_unassign_firm_from_candidate` | Staff JWT | Remove firm assignment |
+| `staff_delete_user` | Staff JWT | Hard-delete candidate user accounts from admin workflow (candidate-only scope) |
 | `bulk_paste_ingest_firms` | Staff JWT | Bulk firm data import |
 | `staff_handle_data_request` | Staff JWT | Process support/data requests |
 | `dispatch_notifications` | Internal | Process notification queue |
@@ -95,6 +96,7 @@ All tables enforce Row Level Security. Staff-only mutations are routed through e
 - **Session management**: Expo SecureStore (mobile) or localStorage (web) for token persistence. `autoRefreshToken: true` enabled. Client-side `ensureValidSession()` helper proactively refreshes tokens nearing expiry.
 - **Edge function errors**: Client uses `getFunctionErrorMessage()` to read the actual error from `FunctionsHttpError.context` (Response body); uses `Response.clone()` when available so the body is not consumed. Avoids generic "Edge Function returned a non-2xx status code" when the function returns JSON `{ error: "..." }`.
 - **Chat bootstrap modes**: `chat_auth_bootstrap` supports (1) candidate self-bootstrap, (2) staff bootstrap for a specific candidate channel via `user_id`, and (3) staff token-only bootstrap for inbox channel listing when `user_id` is omitted.
+- **Admin web staff messaging**: Admin dashboard staff users use the same `chat_auth_bootstrap` token-only inbox bootstrap + candidate-channel bootstrap flow as the main app, powered by Stream Chat (`NEXT_PUBLIC_STREAM_API_KEY` on admin web).
 
 ## Secrets and Configuration
 

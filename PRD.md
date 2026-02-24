@@ -39,7 +39,9 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ### Firm Assignments
 - Staff assigns firms to candidates via `assign_firm_to_candidate`.
 - Candidates see assigned firms on their dashboard.
-- Candidates authorize or decline firm submissions via `authorize_firm_submission`.
+- Candidates authorize firm submissions via `authorize_firm_submission`.
+- Candidates declining while status is `Waiting on your authorization to contact/submit` removes that firm assignment from the dashboard (assignment deleted).
+- Candidates can cancel a prior authorization while status is `Authorized, will submit soon` (UI label `Cancel`; backend reverts status to waiting).
 - Staff updates assignment status via `staff_update_assignment_status`.
 - Staff can unassign firms via `staff_unassign_firm_from_candidate`.
 
@@ -71,6 +73,8 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ### Admin Dashboard (web)
 - Staff login via Supabase auth.
 - Operations dashboard with candidate management.
+- Staff Messages page with inbox-first candidate DM channels (Stream Chat web thread view + reply).
+- Candidate management includes candidate account hard delete (candidate-only scope).
 - Candidate-firm assignment manager.
 - Bulk firm ingest via paste.
 

@@ -16,6 +16,8 @@
 - [x] Stream messaging on web (stream-chat-react, CDN CSS, `chat_auth_bootstrap` secrets; no users_profile fallback)
 - [x] Practice areas multi-select (0–3; `practice_areas` column, shared schema and edge functions updated)
 - [x] Staff mobile messaging (shared candidate channels, staff inbox-first navigation, web + native)
+- [x] Admin web staff messaging inbox + candidate deletion workflow (candidate-only hard delete)
+- [x] Candidate dashboard authorization UX semantics (waiting decline deletes assignment; authorized decline labeled cancel)
 - [ ] Vendor credential wiring for end-to-end runtime (requires secrets)
 - [ ] Device-level release signing and EAS submit credentials
 
