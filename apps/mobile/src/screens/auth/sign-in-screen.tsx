@@ -99,6 +99,7 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
         <GlobalRecruiterBanner />
         <View style={styles.center}>
           <ScrollView
+            style={styles.scrollView}
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}

@@ -49,10 +49,49 @@ export const supabase = createClient(env.supabaseUrl, env.supabaseAnonKey, {
 
 export const authRedirectUrl = redirectTo;
 
+function getAuthErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  if (typeof error === 'object' && error && 'message' in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === 'string') {
+      return message;
+    }
+  }
+  return '';
+}
+
+export function isInvalidRefreshTokenError(error: unknown): boolean {
+  const message = getAuthErrorMessage(error).toLowerCase();
+  return (
+    message.includes('invalid refresh token') ||
+    message.includes('refresh token not found') ||
+    message.includes('refresh_token_not_found')
+  );
+}
+
+export async function clearPersistedAuthSession(): Promise<void> {
+  // Local sign-out avoids a failing network sign-out call when the refresh token is already invalid.
+  await supabase.auth.signOut({ scope: 'local' }).catch(() => undefined);
+}
+
 export async function ensureValidSession() {
   const {
     data: { session },
+    error: getSessionError,
   } = await supabase.auth.getSession();
+
+  if (getSessionError) {
+    if (isInvalidRefreshTokenError(getSessionError)) {
+      await clearPersistedAuthSession();
+      throw new Error('Your session has expired. Please sign in again.');
+    }
+    throw getSessionError;
+  }
 
   if (!session) {
     throw new Error('You are not signed in. Please sign in and try again.');
@@ -64,6 +103,9 @@ export async function ensureValidSession() {
   if (nowSeconds >= expiresAt - 60) {
     const { data, error } = await supabase.auth.refreshSession();
     if (error || !data.session) {
+      if (error && isInvalidRefreshTokenError(error)) {
+        await clearPersistedAuthSession();
+      }
       throw new Error('Your session has expired. Please sign in again.');
     }
     return data.session;
