@@ -10,6 +10,7 @@
     "dev:mobile": "npm run start -w @zenith/mobile",
     "dev:admin": "npm run dev -w @zenith/admin",
     "dev": "npm run dev:mobile",
+    "postinstall": "patch-package",
     "dns:discover": "bash ./scripts/auth/discover-dns-provider.sh",
     "supabase:auth:get-config": "bash ./scripts/supabase/get-auth-config.sh",
     "supabase:auth:patch-config": "bash ./scripts/supabase/patch-auth-config.sh",
@@ -29,6 +30,7 @@
     "node": ">=20"
   },
   "devDependencies": {
-    "next": "^16.1.6"
+    "next": "^16.1.6",
+    "patch-package": "^8.0.1"
   }
 }

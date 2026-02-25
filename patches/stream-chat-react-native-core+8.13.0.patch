@@ -1,0 +1,42 @@
+diff --git a/node_modules/stream-chat-react-native-core/lib/commonjs/components/AttachmentPicker/components/AttachmentPickerItem.js b/node_modules/stream-chat-react-native-core/lib/commonjs/components/AttachmentPicker/components/AttachmentPickerItem.js
+index ca007f8..7d6a8f3 100644
+--- a/node_modules/stream-chat-react-native-core/lib/commonjs/components/AttachmentPicker/components/AttachmentPickerItem.js
++++ b/node_modules/stream-chat-react-native-core/lib/commonjs/components/AttachmentPicker/components/AttachmentPickerItem.js
+@@ -180,7 +180,8 @@ var renderAttachmentPickerItem = exports.renderAttachmentPickerItem = function r
+   var asset = item.asset,
+     ImageOverlaySelectedComponent = item.ImageOverlaySelectedComponent,
+     numberOfAttachmentPickerImageColumns = item.numberOfAttachmentPickerImageColumns;
+-  var isVideoType = asset.type.includes('video');
++  var assetType = typeof asset.type === 'string' ? asset.type : '';
++  var isVideoType = assetType.includes('video');
+   if (isVideoType) {
+     return (0, _jsxRuntime.jsx)(AttachmentVideo, {
+       asset: asset,
+diff --git a/node_modules/stream-chat-react-native-core/lib/module/components/AttachmentPicker/components/AttachmentPickerItem.js b/node_modules/stream-chat-react-native-core/lib/module/components/AttachmentPicker/components/AttachmentPickerItem.js
+index ca007f8..7d6a8f3 100644
+--- a/node_modules/stream-chat-react-native-core/lib/module/components/AttachmentPicker/components/AttachmentPickerItem.js
++++ b/node_modules/stream-chat-react-native-core/lib/module/components/AttachmentPicker/components/AttachmentPickerItem.js
+@@ -180,7 +180,8 @@ var renderAttachmentPickerItem = exports.renderAttachmentPickerItem = function r
+   var asset = item.asset,
+     ImageOverlaySelectedComponent = item.ImageOverlaySelectedComponent,
+     numberOfAttachmentPickerImageColumns = item.numberOfAttachmentPickerImageColumns;
+-  var isVideoType = asset.type.includes('video');
++  var assetType = typeof asset.type === 'string' ? asset.type : '';
++  var isVideoType = assetType.includes('video');
+   if (isVideoType) {
+     return (0, _jsxRuntime.jsx)(AttachmentVideo, {
+       asset: asset,
+diff --git a/node_modules/stream-chat-react-native-core/src/components/AttachmentPicker/components/AttachmentPickerItem.tsx b/node_modules/stream-chat-react-native-core/src/components/AttachmentPicker/components/AttachmentPickerItem.tsx
+index fb3bc84..c7e556f 100644
+--- a/node_modules/stream-chat-react-native-core/src/components/AttachmentPicker/components/AttachmentPickerItem.tsx
++++ b/node_modules/stream-chat-react-native-core/src/components/AttachmentPicker/components/AttachmentPickerItem.tsx
+@@ -168,7 +168,8 @@ export const renderAttachmentPickerItem = ({ item }: { item: AttachmentPickerIte
+    * Native iOS - Gives `image` or `video`
+    * Expo Android/iOS - Gives `photo` or `video`
+    **/
+-  const isVideoType = asset.type.includes('video');
++  const assetType = typeof asset.type === 'string' ? asset.type : '';
++  const isVideoType = assetType.includes('video');
+ 
+   if (isVideoType) {
+     return (
