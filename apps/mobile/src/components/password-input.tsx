@@ -11,6 +11,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { getPasswordStrength } from '../lib/password-strength';
+import { uiColors } from '../theme/colors';
 
 type PasswordInputProps = Omit<TextInputProps, 'secureTextEntry'> & {
   containerStyle?: StyleProp<ViewStyle>;
@@ -97,7 +98,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   toggleText: {
-    color: '#0F766E',
+    color: uiColors.primary,
     fontSize: 12,
     fontWeight: '700',
   },

@@ -560,7 +560,7 @@ const styles = StyleSheet.create({
     marginTop: -4,
   },
   expandButtonText: {
-    color: '#0F766E',
+    color: uiColors.primary,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -601,7 +601,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   optionSelected: {
-    backgroundColor: '#0F766E',
+    backgroundColor: uiColors.primary,
   },
   optionText: {
     color: '#0F172A',

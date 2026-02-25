@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
     marginTop: -4,
   },
   expandButtonText: {
-    color: '#0F766E',
+    color: uiColors.primary,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -443,7 +443,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   linkText: {
-    color: '#0F766E',
+    color: uiColors.primary,
     fontWeight: '600',
     textAlign: 'center',
   },
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   optionSelected: {
-    backgroundColor: '#0E7490',
+    backgroundColor: uiColors.primary,
   },
   optionText: {
     color: '#0F172A',

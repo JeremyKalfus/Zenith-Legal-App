@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   linkText: {
-    color: '#0F766E',
+    color: uiColors.primary,
     fontWeight: '600',
     textAlign: 'center',
   },
