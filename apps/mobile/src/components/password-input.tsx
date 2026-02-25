@@ -10,7 +10,6 @@ import {
   View,
   ViewStyle,
 } from 'react-native';
-import { getPasswordStrength } from '../lib/password-strength';
 import { uiColors } from '../theme/colors';
 
 type PasswordInputProps = Omit<TextInputProps, 'secureTextEntry'> & {
@@ -28,14 +27,12 @@ export function PasswordInput({
   toggleLabelShow = 'Show',
   toggleLabelHide = 'Hide',
   toggleTextStyle,
-  showStrength = false,
+  showStrength: _showStrength = false,
   style,
   ...inputProps
 }: PasswordInputProps) {
   const [isVisible, setIsVisible] = useState(false);
   const toggleLabel = isVisible ? toggleLabelHide : toggleLabelShow;
-  const inputValue = typeof inputProps.value === 'string' ? inputProps.value : '';
-  const strength = showStrength ? getPasswordStrength(inputValue) : null;
 
   return (
     <View style={[styles.container, containerStyle]}>
@@ -57,25 +54,6 @@ export function PasswordInput({
         >
           <Text style={[styles.toggleText, toggleTextStyle]}>{toggleLabel}</Text>
         </Pressable>
-      ) : null}
-      {strength ? (
-        <View style={styles.strengthWrap}>
-          <View style={styles.strengthBarTrack}>
-            <View
-              style={[
-                styles.strengthBarFill,
-                {
-                  width: `${Math.max(20, strength.score * 25)}%`,
-                  backgroundColor: strength.color,
-                },
-              ]}
-            />
-          </View>
-          <Text style={[styles.strengthLabel, { color: strength.color }]}>
-            Password strength: {strength.label}
-          </Text>
-          <Text style={styles.strengthHelper}>{strength.helperText}</Text>
-        </View>
       ) : null}
     </View>
   );
@@ -101,30 +79,5 @@ const styles = StyleSheet.create({
     color: uiColors.primary,
     fontSize: 12,
     fontWeight: '700',
-  },
-  strengthWrap: {
-    marginTop: -4,
-    marginBottom: 6,
-  },
-  strengthBarTrack: {
-    backgroundColor: '#E2E8F0',
-    borderRadius: 999,
-    height: 6,
-    overflow: 'hidden',
-    width: '100%',
-  },
-  strengthBarFill: {
-    borderRadius: 999,
-    height: '100%',
-  },
-  strengthLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 6,
-  },
-  strengthHelper: {
-    color: '#64748B',
-    fontSize: 12,
-    marginTop: 2,
   },
 });
