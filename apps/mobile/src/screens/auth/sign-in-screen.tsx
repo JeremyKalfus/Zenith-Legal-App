@@ -215,7 +215,7 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
 
 const styles = StyleSheet.create({
   body: {
-    color: '#475569',
+    color: uiColors.textSecondary,
     marginBottom: 16,
   },
   button: {
@@ -237,12 +237,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   error: {
-    color: '#B91C1C',
+    color: uiColors.error,
     fontSize: 12,
     marginTop: -2,
   },
   devNote: {
-    color: '#92400E',
+    color: uiColors.warning,
     fontSize: 12,
     marginTop: -2,
   },
@@ -254,8 +254,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   input: {
-    backgroundColor: '#ffffff',
-    borderColor: '#CBD5E1',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
     borderRadius: 8,
     borderWidth: 1,
     marginBottom: 10,
@@ -270,11 +270,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   message: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     marginTop: 8,
   },
   safeArea: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: uiColors.background,
     flex: 1,
   },
   scrollView: {
@@ -286,14 +286,14 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   title: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 22,
     fontWeight: '700',
   },
   webFrame: {
     alignSelf: 'center',
-    backgroundColor: '#F8FAFC',
-    borderColor: '#E2E8F0',
+    backgroundColor: uiColors.background,
+    borderColor: uiColors.border,
     borderRadius: 16,
     borderWidth: 1,
     boxShadow: '0px 8px 24px rgba(15, 23, 42, 0.06)',

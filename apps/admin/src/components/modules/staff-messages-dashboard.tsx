@@ -13,8 +13,8 @@ import {
   getStreamChatConfigError,
   isStreamChatConfigured,
 } from '@/lib/chat';
-import type { StaffMessageInboxItem } from '@/features/staff-messaging';
-import { mapChannelsToStaffInboxItems } from '@/features/staff-messaging';
+import type { StaffMessageInboxItem } from '@zenith/shared';
+import { formatRelativeTimestamp, mapChannelsToStaffInboxItems } from '@zenith/shared';
 
 const STREAM_CSS_URL =
   'https://cdn.jsdelivr.net/npm/stream-chat-react@13.14.0/dist/css/v2/index.css';
@@ -32,35 +32,13 @@ function useStreamChatCSS() {
   }, []);
 }
 
-function formatRelativeTimestamp(isoTimestamp: string): string {
-  const date = new Date(isoTimestamp);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-
-  const now = new Date();
-  const sameDay = now.toDateString() === date.toDateString();
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-
-  if (sameDay) {
-    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  }
-
-  if (yesterday.toDateString() === date.toDateString()) {
-    return 'Yesterday';
-  }
-
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-}
-
 type ChatBootstrapResponse = {
   token: string;
   user_name: string;
   user_image?: string;
 };
 
-export function StaffMessagesDashboard() {
+function useStaffMessagesDashboard() {
   useStreamChatCSS();
 
   const [conversations, setConversations] = useState<StaffMessageInboxItem[]>([]);
@@ -174,6 +152,40 @@ export function StaffMessagesDashboard() {
     }
   }, [errorMessage, selectedConversation, sessionUserId]);
 
+  const handleRefresh = useCallback(() => {
+    void loadInbox(true);
+  }, [loadInbox]);
+
+  const handleSelectChannel = useCallback((channelId: string) => {
+    setSelectedChannelId(channelId);
+  }, []);
+
+  return {
+    conversations,
+    selectedChannelId,
+    isLoading,
+    isRefreshing,
+    errorMessage,
+    selectedConversation,
+    selectedChannel,
+    handleRefresh,
+    handleSelectChannel,
+  };
+}
+
+export function StaffMessagesDashboard() {
+  const {
+    conversations,
+    selectedChannelId,
+    isLoading,
+    isRefreshing,
+    errorMessage,
+    selectedConversation,
+    selectedChannel,
+    handleRefresh,
+    handleSelectChannel,
+  } = useStaffMessagesDashboard();
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -185,9 +197,7 @@ export function StaffMessagesDashboard() {
         </div>
         <Button
           variant="secondary"
-          onClick={() => {
-            void loadInbox(true);
-          }}
+          onClick={handleRefresh}
           disabled={isRefreshing}
         >
           {isRefreshing ? 'Refreshing...' : 'Refresh inbox'}
@@ -231,7 +241,7 @@ export function StaffMessagesDashboard() {
                         ? 'border-sky-300 bg-sky-50'
                         : 'border-slate-200 bg-white hover:bg-slate-50',
                     ].join(' ')}
-                    onClick={() => setSelectedChannelId(conversation.channelId)}
+                    onClick={() => handleSelectChannel(conversation.channelId)}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="line-clamp-1 text-sm font-semibold text-slate-900">

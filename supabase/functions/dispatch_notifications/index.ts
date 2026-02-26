@@ -238,6 +238,102 @@ async function sendExpoPushBatch(
   return (await response.json()) as ExpoPushResponse;
 }
 
+async function revokeStaleTokens(
+  serviceClient: ReturnType<typeof createServiceClient>,
+  tickets: NonNullable<ExpoPushResponse['data']>,
+  tokenRows: PushTokenRow[],
+): Promise<boolean> {
+  let hasSuccess = false;
+
+  for (let i = 0; i < tickets.length; i += 1) {
+    const ticket = tickets[i];
+    if (ticket?.status === 'ok') {
+      hasSuccess = true;
+      continue;
+    }
+    const tokenRow = tokenRows[i];
+    if (ticket?.details?.error === 'DeviceNotRegistered' && tokenRow) {
+      await revokeDeviceToken(serviceClient, tokenRow.expo_push_token);
+    }
+  }
+
+  return hasSuccess;
+}
+
+type DeliveryResult = { outcome: 'sent' | 'failed' | 'skipped'; detail: Record<string, unknown> };
+
+async function processSingleDelivery(
+  serviceClient: ReturnType<typeof createServiceClient>,
+  delivery: DeliveryRow,
+  tokensByUser: Map<string, PushTokenRow[]>,
+): Promise<DeliveryResult> {
+  const claimed = await claimQueuedPushDelivery(serviceClient, delivery.id);
+  if (!claimed) {
+    return { outcome: 'skipped', detail: { id: delivery.id, status: 'skipped', reason: 'not_queued_anymore' } };
+  }
+
+  try {
+    const validTokenRows = (tokensByUser.get(delivery.user_id ?? '') ?? []).filter((row) =>
+      isExpoPushToken(row.expo_push_token),
+    );
+
+    if (validTokenRows.length === 0) {
+      await markDeliveryStatus(serviceClient, delivery.id, 'failed');
+      return { outcome: 'failed', detail: { id: delivery.id, status: 'failed', reason: 'no_valid_push_tokens' } };
+    }
+
+    const message = buildPushMessage(delivery.event_type, delivery.payload ?? {});
+    const expoResponse = await sendExpoPushBatch(
+      validTokenRows.map((row) => ({
+        to: row.expo_push_token,
+        title: message.title,
+        body: message.body,
+        data: { event_type: delivery.event_type, delivery_id: delivery.id, ...(delivery.payload ?? {}) },
+        sound: 'default',
+      })),
+    );
+
+    const hasSuccess = await revokeStaleTokens(serviceClient, expoResponse.data ?? [], validTokenRows);
+    const finalStatus = hasSuccess ? 'sent' : 'failed';
+    await markDeliveryStatus(serviceClient, delivery.id, finalStatus);
+    return {
+      outcome: finalStatus,
+      detail: {
+        id: delivery.id,
+        status: finalStatus,
+        token_count: validTokenRows.length,
+        ...(hasSuccess ? {} : { expo_errors: expoResponse.errors ?? [] }),
+      },
+    };
+  } catch (error) {
+    await markDeliveryStatus(serviceClient, delivery.id, 'failed').catch(() => undefined);
+    return { outcome: 'failed', detail: { id: delivery.id, status: 'failed', reason: (error as Error).message } };
+  }
+}
+
+async function fetchTokensByUser(
+  serviceClient: ReturnType<typeof createServiceClient>,
+  userIds: string[],
+): Promise<Map<string, PushTokenRow[]>> {
+  const { data: tokenRows, error: tokenError } = await serviceClient
+    .from('push_tokens')
+    .select('id,user_id,expo_push_token')
+    .in('user_id', userIds)
+    .is('revoked_at', null);
+
+  if (tokenError) {
+    throw new Error(tokenError.message);
+  }
+
+  const tokensByUser = new Map<string, PushTokenRow[]>();
+  for (const row of (tokenRows ?? []) as PushTokenRow[]) {
+    const list = tokensByUser.get(row.user_id) ?? [];
+    list.push(row);
+    tokensByUser.set(row.user_id, list);
+  }
+  return tokensByUser;
+}
+
 async function processQueuedPushDeliveries(payload: z.infer<typeof processSchema>) {
   const serviceClient = createServiceClient();
   const limit = payload.limit ?? 50;
@@ -256,7 +352,6 @@ async function processQueuedPushDeliveries(payload: z.infer<typeof processSchema
 
   const allQueuedRows = (queuedRows ?? []) as DeliveryRow[];
   const deliveries = allQueuedRows.filter((row) => !!row.user_id);
-  const missingUserIdSkippedCount = allQueuedRows.length - deliveries.length;
 
   if (deliveries.length === 0) {
     return jsonResponse({
@@ -272,106 +367,24 @@ async function processQueuedPushDeliveries(payload: z.infer<typeof processSchema
   }
 
   const userIds = Array.from(new Set(deliveries.map((row) => row.user_id!).filter(Boolean)));
-  const { data: tokenRows, error: tokenError } = await serviceClient
-    .from('push_tokens')
-    .select('id,user_id,expo_push_token')
-    .in('user_id', userIds)
-    .is('revoked_at', null);
-
-  if (tokenError) {
-    return errorResponse(tokenError.message, 500);
-  }
-
-  const tokensByUser = new Map<string, PushTokenRow[]>();
-  for (const row of (tokenRows ?? []) as PushTokenRow[]) {
-    const list = tokensByUser.get(row.user_id) ?? [];
-    list.push(row);
-    tokensByUser.set(row.user_id, list);
+  let tokensByUser: Map<string, PushTokenRow[]>;
+  try {
+    tokensByUser = await fetchTokensByUser(serviceClient, userIds);
+  } catch (error) {
+    return errorResponse((error as Error).message, 500);
   }
 
   let sentCount = 0;
   let failedCount = 0;
-  let skippedCount = missingUserIdSkippedCount;
+  let skippedCount = allQueuedRows.length - deliveries.length;
   const results: Array<Record<string, unknown>> = [];
 
   for (const delivery of deliveries) {
-    const claimed = await claimQueuedPushDelivery(serviceClient, delivery.id);
-    if (!claimed) {
-      skippedCount += 1;
-      results.push({ id: delivery.id, status: 'skipped', reason: 'not_queued_anymore' });
-      continue;
-    }
-
-    try {
-      const rowsForUser = tokensByUser.get(delivery.user_id ?? '') ?? [];
-      const validTokenRows = rowsForUser.filter((row) => isExpoPushToken(row.expo_push_token));
-
-      if (validTokenRows.length === 0) {
-        await markDeliveryStatus(serviceClient, delivery.id, 'failed');
-        failedCount += 1;
-        results.push({ id: delivery.id, status: 'failed', reason: 'no_valid_push_tokens' });
-        continue;
-      }
-
-      const message = buildPushMessage(delivery.event_type, delivery.payload ?? {});
-      const expoResponse = await sendExpoPushBatch(
-        validTokenRows.map((row) => ({
-          to: row.expo_push_token,
-          title: message.title,
-          body: message.body,
-          data: {
-            event_type: delivery.event_type,
-            delivery_id: delivery.id,
-            ...(delivery.payload ?? {}),
-          },
-          sound: 'default',
-        })),
-      );
-
-      const ticketResults = expoResponse.data ?? [];
-      let deliveryHasSuccess = false;
-
-      for (let i = 0; i < ticketResults.length; i += 1) {
-        const ticket = ticketResults[i];
-        const tokenRow = validTokenRows[i];
-
-        if (ticket?.status === 'ok') {
-          deliveryHasSuccess = true;
-          continue;
-        }
-
-        if (ticket?.details?.error === 'DeviceNotRegistered' && tokenRow) {
-          await revokeDeviceToken(serviceClient, tokenRow.expo_push_token);
-        }
-      }
-
-      if (deliveryHasSuccess) {
-        await markDeliveryStatus(serviceClient, delivery.id, 'sent');
-        sentCount += 1;
-        results.push({
-          id: delivery.id,
-          status: 'sent',
-          token_count: validTokenRows.length,
-        });
-      } else {
-        await markDeliveryStatus(serviceClient, delivery.id, 'failed');
-        failedCount += 1;
-        results.push({
-          id: delivery.id,
-          status: 'failed',
-          token_count: validTokenRows.length,
-          expo_errors: expoResponse.errors ?? [],
-        });
-      }
-    } catch (error) {
-      await markDeliveryStatus(serviceClient, delivery.id, 'failed').catch(() => undefined);
-      failedCount += 1;
-      results.push({
-        id: delivery.id,
-        status: 'failed',
-        reason: (error as Error).message,
-      });
-    }
+    const { outcome, detail } = await processSingleDelivery(serviceClient, delivery, tokensByUser);
+    if (outcome === 'sent') sentCount += 1;
+    else if (outcome === 'failed') failedCount += 1;
+    else skippedCount += 1;
+    results.push(detail);
   }
 
   const { count: emailQueuedCount } = await serviceClient

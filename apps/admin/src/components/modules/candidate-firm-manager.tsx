@@ -39,7 +39,7 @@ function normalizeFirmRelation(
   return Array.isArray(relation) ? (relation[0] ?? null) : relation;
 }
 
-export function CandidateFirmManager() {
+function useCandidateFirmManager() {
   const [candidates, setCandidates] = useState<CandidateListItem[]>([]);
   const [firms, setFirms] = useState<FirmListItem[]>([]);
   const [assignments, setAssignments] = useState<AssignmentRow[]>([]);
@@ -290,72 +290,208 @@ export function CandidateFirmManager() {
     }
   }, [loadBaseData, selectedCandidate]);
 
+  const handlePendingStatusChange = useCallback((assignmentId: string, value: FirmStatus) => {
+    setPendingStatuses((previous) => ({
+      ...previous,
+      [assignmentId]: value,
+    }));
+  }, []);
+
+  return {
+    candidateQuery,
+    setCandidateQuery,
+    firmQuery,
+    setFirmQuery,
+    selectedCandidateId,
+    setSelectedCandidateId,
+    selectedFirmId,
+    setSelectedFirmId,
+    isLoadingCandidates,
+    isLoadingAssignments,
+    busyAction,
+    statusMessage,
+    filteredCandidates,
+    assignableFirms,
+    selectedCandidate,
+    assignments,
+    pendingStatuses,
+    handlePendingStatusChange,
+    handleAssignFirm,
+    handleUpdateStatus,
+    handleUnassign,
+    handleDeleteCandidate,
+    loadAssignments,
+  };
+}
+
+function CandidateListPanel({
+  candidateQuery,
+  onCandidateQueryChange,
+  isLoading,
+  candidates,
+  selectedCandidateId,
+  onSelectCandidate,
+}: {
+  candidateQuery: string;
+  onCandidateQueryChange: (value: string) => void;
+  isLoading: boolean;
+  candidates: CandidateListItem[];
+  selectedCandidateId: string;
+  onSelectCandidate: (id: string) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Candidate Manager</CardTitle>
+        <CardDescription>Select a candidate and manage visible firms + statuses.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <Input
+          placeholder="Search name, email, mobile"
+          value={candidateQuery}
+          onChange={(event) => onCandidateQueryChange(event.target.value)}
+        />
+        <div className="max-h-[480px] overflow-auto rounded-md border border-slate-200">
+          {isLoading ? (
+            <p className="p-3 text-sm text-slate-500">Loading candidates...</p>
+          ) : candidates.length === 0 ? (
+            <p className="p-3 text-sm text-slate-500">No candidates found.</p>
+          ) : (
+            candidates.map((candidate) => (
+              <button
+                key={candidate.id}
+                type="button"
+                className={[
+                  'w-full border-b border-slate-100 px-3 py-3 text-left text-sm last:border-b-0',
+                  candidate.id === selectedCandidateId ? 'bg-sky-50' : 'bg-white hover:bg-slate-50',
+                ].join(' ')}
+                onClick={() => onSelectCandidate(candidate.id)}
+              >
+                <p className="font-semibold text-slate-900">{candidate.name || 'Unnamed Candidate'}</p>
+                <p className="text-slate-600">{candidate.email}</p>
+                <p className="text-xs text-slate-500">{candidate.mobile}</p>
+              </button>
+            ))
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AssignmentCard({
+  assignment,
+  busyAction,
+  pendingStatus,
+  onStatusChange,
+  onUpdateStatus,
+  onUnassign,
+}: {
+  assignment: AssignmentRow;
+  busyAction: string | null;
+  pendingStatus: FirmStatus;
+  onStatusChange: (assignmentId: string, value: FirmStatus) => void;
+  onUpdateStatus: (assignmentId: string) => void;
+  onUnassign: (assignmentId: string, firmName: string) => void;
+}) {
+  const firm = normalizeFirmRelation(assignment.firms);
+  const rowBusy =
+    busyAction === `status:${assignment.id}` ||
+    busyAction === `unassign:${assignment.id}`;
+
+  return (
+    <div className="rounded-md border border-slate-200 p-3">
+      <div className="mb-2 flex items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold text-slate-900">
+            {firm?.name ?? 'Unknown firm'}
+          </p>
+          <p className="text-xs text-slate-500">
+            Updated {new Date(assignment.status_updated_at).toLocaleString()}
+          </p>
+        </div>
+        <Button
+          variant="destructive"
+          size="sm"
+          disabled={rowBusy || busyAction !== null}
+          onClick={() => {
+            void onUnassign(assignment.id, firm?.name ?? 'this firm');
+          }}
+        >
+          {busyAction === `unassign:${assignment.id}` ? 'Removing...' : 'Unassign'}
+        </Button>
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <select
+          className="h-10 flex-1 rounded-md border border-slate-300 px-2 text-sm"
+          value={pendingStatus}
+          disabled={rowBusy || busyAction === 'assign'}
+          onChange={(event) => {
+            onStatusChange(assignment.id, event.target.value as FirmStatus);
+          }}
+        >
+          {FIRM_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </select>
+        <Button
+          size="sm"
+          disabled={rowBusy || busyAction === 'assign'}
+          onClick={() => {
+            void onUpdateStatus(assignment.id);
+          }}
+        >
+          {busyAction === `status:${assignment.id}` ? 'Saving...' : 'Save Status'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function CandidateFirmManager() {
+  const ctx = useCandidateFirmManager();
+
   return (
     <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-      <Card>
-        <CardHeader>
-          <CardTitle>Candidate Manager</CardTitle>
-          <CardDescription>Select a candidate and manage visible firms + statuses.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Input
-            placeholder="Search name, email, mobile"
-            value={candidateQuery}
-            onChange={(event) => setCandidateQuery(event.target.value)}
-          />
-          <div className="max-h-[480px] overflow-auto rounded-md border border-slate-200">
-            {isLoadingCandidates ? (
-              <p className="p-3 text-sm text-slate-500">Loading candidates...</p>
-            ) : filteredCandidates.length === 0 ? (
-              <p className="p-3 text-sm text-slate-500">No candidates found.</p>
-            ) : (
-              filteredCandidates.map((candidate) => (
-                <button
-                  key={candidate.id}
-                  type="button"
-                  className={[
-                    'w-full border-b border-slate-100 px-3 py-3 text-left text-sm last:border-b-0',
-                    candidate.id === selectedCandidateId ? 'bg-sky-50' : 'bg-white hover:bg-slate-50',
-                  ].join(' ')}
-                  onClick={() => setSelectedCandidateId(candidate.id)}
-                >
-                  <p className="font-semibold text-slate-900">{candidate.name || 'Unnamed Candidate'}</p>
-                  <p className="text-slate-600">{candidate.email}</p>
-                  <p className="text-xs text-slate-500">{candidate.mobile}</p>
-                </button>
-              ))
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      <CandidateListPanel
+        candidateQuery={ctx.candidateQuery}
+        onCandidateQueryChange={ctx.setCandidateQuery}
+        isLoading={ctx.isLoadingCandidates}
+        candidates={ctx.filteredCandidates}
+        selectedCandidateId={ctx.selectedCandidateId}
+        onSelectCandidate={ctx.setSelectedCandidateId}
+      />
 
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <CardTitle>{selectedCandidate?.name ?? 'Candidate details'}</CardTitle>
+              <CardTitle>{ctx.selectedCandidate?.name ?? 'Candidate details'}</CardTitle>
               <CardDescription>
-                {selectedCandidate
-                  ? `${selectedCandidate.email} • ${selectedCandidate.mobile}`
+                {ctx.selectedCandidate
+                  ? `${ctx.selectedCandidate.email} • ${ctx.selectedCandidate.mobile}`
                   : 'Select a candidate to manage assignments.'}
               </CardDescription>
             </div>
             <Button
               variant="destructive"
               size="sm"
-              disabled={!selectedCandidate || busyAction !== null}
+              disabled={!ctx.selectedCandidate || ctx.busyAction !== null}
               onClick={() => {
-                void handleDeleteCandidate();
+                void ctx.handleDeleteCandidate();
               }}
             >
-              {busyAction === 'delete-candidate' ? 'Deleting...' : 'Delete Candidate'}
+              {ctx.busyAction === 'delete-candidate' ? 'Deleting...' : 'Delete Candidate'}
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {statusMessage ? (
+          {ctx.statusMessage ? (
             <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-              {statusMessage}
+              {ctx.statusMessage}
             </p>
           ) : null}
 
@@ -365,20 +501,20 @@ export function CandidateFirmManager() {
             </p>
             <Input
               placeholder="Filter firms"
-              value={firmQuery}
-              onChange={(event) => setFirmQuery(event.target.value)}
-              disabled={!selectedCandidateId}
+              value={ctx.firmQuery}
+              onChange={(event) => ctx.setFirmQuery(event.target.value)}
+              disabled={!ctx.selectedCandidateId}
             />
             <select
               className="h-10 w-full rounded-md border border-slate-300 px-2 text-sm disabled:bg-slate-100"
-              value={selectedFirmId}
-              onChange={(event) => setSelectedFirmId(event.target.value)}
-              disabled={!selectedCandidateId || assignableFirms.length === 0}
+              value={ctx.selectedFirmId}
+              onChange={(event) => ctx.setSelectedFirmId(event.target.value)}
+              disabled={!ctx.selectedCandidateId || ctx.assignableFirms.length === 0}
             >
-              {assignableFirms.length === 0 ? (
+              {ctx.assignableFirms.length === 0 ? (
                 <option value="">No assignable firms</option>
               ) : (
-                assignableFirms.map((firm) => (
+                ctx.assignableFirms.map((firm) => (
                   <option key={firm.id} value={firm.id}>
                     {firm.name}
                   </option>
@@ -387,11 +523,11 @@ export function CandidateFirmManager() {
             </select>
             <Button
               onClick={() => {
-                void handleAssignFirm();
+                void ctx.handleAssignFirm();
               }}
-              disabled={!selectedCandidateId || !selectedFirmId || busyAction !== null}
+              disabled={!ctx.selectedCandidateId || !ctx.selectedFirmId || ctx.busyAction !== null}
             >
-              {busyAction === 'assign' ? 'Assigning...' : 'Assign Firm'}
+              {ctx.busyAction === 'assign' ? 'Assigning...' : 'Assign Firm'}
             </Button>
           </div>
 
@@ -404,88 +540,39 @@ export function CandidateFirmManager() {
                 variant="secondary"
                 size="sm"
                 onClick={() => {
-                  void loadAssignments(selectedCandidateId);
+                  void ctx.loadAssignments(ctx.selectedCandidateId);
                 }}
-                disabled={!selectedCandidateId || isLoadingAssignments}
+                disabled={!ctx.selectedCandidateId || ctx.isLoadingAssignments}
               >
-                {isLoadingAssignments ? 'Refreshing...' : 'Refresh'}
+                {ctx.isLoadingAssignments ? 'Refreshing...' : 'Refresh'}
               </Button>
             </div>
 
-            {!selectedCandidateId ? (
+            {!ctx.selectedCandidateId ? (
               <p className="rounded-md border border-slate-200 p-3 text-sm text-slate-500">
                 Select a candidate to load assignments.
               </p>
-            ) : isLoadingAssignments ? (
+            ) : ctx.isLoadingAssignments ? (
               <p className="rounded-md border border-slate-200 p-3 text-sm text-slate-500">
                 Loading assignments...
               </p>
-            ) : assignments.length === 0 ? (
+            ) : ctx.assignments.length === 0 ? (
               <p className="rounded-md border border-slate-200 p-3 text-sm text-slate-500">
                 No assigned firms yet.
               </p>
             ) : (
               <div className="space-y-3">
-                {assignments.map((assignment) => {
-                  const firm = normalizeFirmRelation(assignment.firms);
-                  const rowBusy =
-                    busyAction === `status:${assignment.id}` ||
-                    busyAction === `unassign:${assignment.id}`;
-                  const pendingStatus = pendingStatuses[assignment.id] ?? assignment.status_enum;
-                  return (
-                    <div key={assignment.id} className="rounded-md border border-slate-200 p-3">
-                      <div className="mb-2 flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-slate-900">
-                            {firm?.name ?? 'Unknown firm'}
-                          </p>
-                          <p className="text-xs text-slate-500">
-                            Updated {new Date(assignment.status_updated_at).toLocaleString()}
-                          </p>
-                        </div>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={rowBusy || busyAction !== null}
-                          onClick={() => {
-                            void handleUnassign(assignment.id, firm?.name ?? 'this firm');
-                          }}
-                        >
-                          {busyAction === `unassign:${assignment.id}` ? 'Removing...' : 'Unassign'}
-                        </Button>
-                      </div>
-
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                        <select
-                          className="h-10 flex-1 rounded-md border border-slate-300 px-2 text-sm"
-                          value={pendingStatus}
-                          disabled={rowBusy || busyAction === 'assign'}
-                          onChange={(event) => {
-                            setPendingStatuses((previous) => ({
-                              ...previous,
-                              [assignment.id]: event.target.value as FirmStatus,
-                            }));
-                          }}
-                        >
-                          {FIRM_STATUSES.map((status) => (
-                            <option key={status} value={status}>
-                              {status}
-                            </option>
-                          ))}
-                        </select>
-                        <Button
-                          size="sm"
-                          disabled={rowBusy || busyAction === 'assign'}
-                          onClick={() => {
-                            void handleUpdateStatus(assignment.id);
-                          }}
-                        >
-                          {busyAction === `status:${assignment.id}` ? 'Saving...' : 'Save Status'}
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
+                {ctx.assignments.map((assignment) => (
+                  <AssignmentCard
+                    key={assignment.id}
+                    assignment={assignment}
+                    busyAction={ctx.busyAction}
+                    pendingStatus={ctx.pendingStatuses[assignment.id] ?? assignment.status_enum}
+                    onStatusChange={ctx.handlePendingStatusChange}
+                    onUpdateStatus={ctx.handleUpdateStatus}
+                    onUnassign={ctx.handleUnassign}
+                  />
+                ))}
               </div>
             )}
           </div>

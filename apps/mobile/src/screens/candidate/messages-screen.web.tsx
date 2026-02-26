@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import { uiColors } from '../../theme/colors';
 import {
   Chat,
   Channel,
@@ -179,11 +180,11 @@ const styles = StyleSheet.create({
     minHeight: 500,
   },
   error: {
-    color: '#B91C1C',
+    color: uiColors.error,
     fontSize: 14,
   },
   loadingText: {
-    color: '#64748B',
+    color: uiColors.textMuted,
     marginTop: 8,
   },
 });

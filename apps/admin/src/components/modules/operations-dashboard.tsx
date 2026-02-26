@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { FIRM_STATUSES } from '@zenith/shared';
-import { useForm } from 'react-hook-form';
+import { type UseFormRegister, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
@@ -39,7 +39,7 @@ type SupportRequest = {
   notes: string | null;
 };
 
-export function OperationsDashboard() {
+function useOperationsDashboard() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [firms, setFirms] = useState<Firm[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -162,6 +162,561 @@ export function OperationsDashboard() {
     [assignments],
   );
 
+  const handleCreateFirm = useCallback(async () => {
+    const { error } = await supabaseClient
+      .from('firms')
+      .insert({ name: newFirmName, normalized_name: newFirmName.toLowerCase() });
+    if (error) {
+      setStatusMessage(error.message);
+    } else {
+      setStatusMessage('Firm created.');
+      setNewFirmName('');
+      loadData();
+    }
+  }, [newFirmName, loadData]);
+
+  const handleBulkPaste = useMemo(
+    () =>
+      handleSubmit(async (values) => {
+        const parsed = parseFirmLines(values.lines);
+        const { data, error } = await supabaseClient.functions.invoke(
+          'bulk_paste_ingest_firms',
+          { body: { rows: parsed } },
+        );
+
+        if (error) {
+          setStatusMessage(error.message);
+          return;
+        }
+
+        setStatusMessage(
+          `Ingest complete: ${data.accepted_count ?? 0} accepted, ${data.rejected_count ?? 0} rejected.`,
+        );
+        reset();
+        loadData();
+      }),
+    [handleSubmit, reset, loadData],
+  );
+
+  const handleAssignFirm = useCallback(async () => {
+    const { error } = await supabaseClient.functions.invoke(
+      'assign_firm_to_candidate',
+      { body: { candidate_id: selectedCandidateId, firm_id: selectedFirmId } },
+    );
+
+    if (error) {
+      setStatusMessage(error.message);
+    } else {
+      setStatusMessage('Assignment created.');
+      loadData();
+    }
+  }, [selectedCandidateId, selectedFirmId, loadData]);
+
+  const handleUpdateStatus = useCallback(async () => {
+    const { error } = await supabaseClient.functions.invoke(
+      'staff_update_assignment_status',
+      { body: { assignment_id: selectedAssignmentId, new_status: selectedStatus } },
+    );
+
+    if (error) {
+      setStatusMessage(error.message);
+    } else {
+      setStatusMessage('Status updated.');
+      loadData();
+    }
+  }, [selectedAssignmentId, selectedStatus, loadData]);
+
+  const handleReviewAppointment = useCallback(
+    async (appointmentId: string, decision: 'accepted' | 'declined') => {
+      const { error } = await supabaseClient.functions.invoke(
+        'staff_review_appointment',
+        { body: { appointment_id: appointmentId, decision } },
+      );
+      if (error) {
+        setStatusMessage(error.message);
+      } else {
+        setStatusMessage(decision === 'accepted' ? 'Appointment accepted.' : 'Appointment declined.');
+        loadData();
+      }
+    },
+    [loadData],
+  );
+
+  const handleSaveContact = useCallback(async () => {
+    const { error } = await supabaseClient
+      .from('recruiter_contact_config')
+      .upsert(
+        {
+          id: '00000000-0000-0000-0000-000000000001',
+          phone: contactPhone,
+          email: contactEmail,
+          is_active: true,
+        },
+        { onConflict: 'id' },
+      );
+
+    if (error) {
+      setStatusMessage(error.message);
+    } else {
+      setStatusMessage('Recruiter contact updated.');
+      loadData();
+    }
+  }, [contactPhone, contactEmail, loadData]);
+
+  const handleProcessSupportRequest = useCallback(
+    async (request: SupportRequest) => {
+      const { error } = await supabaseClient.functions.invoke(
+        'staff_handle_data_request',
+        {
+          body: {
+            request_id: request.id,
+            action: request.request_type,
+            notes: request.notes,
+          },
+        },
+      );
+
+      if (error) {
+        setStatusMessage(error.message);
+      } else {
+        setStatusMessage('Support request handled.');
+        loadData();
+      }
+    },
+    [loadData],
+  );
+
+  return {
+    candidates,
+    firms,
+    assignments,
+    auditEvents,
+    appointments,
+    supportRequests,
+    selectedCandidateId,
+    setSelectedCandidateId,
+    selectedFirmId,
+    setSelectedFirmId,
+    selectedAssignmentId,
+    setSelectedAssignmentId,
+    selectedStatus,
+    setSelectedStatus,
+    contactPhone,
+    setContactPhone,
+    contactEmail,
+    setContactEmail,
+    statusMessage,
+    newFirmName,
+    setNewFirmName,
+    register,
+    assignmentRows,
+    loadData,
+    handleCreateFirm,
+    handleBulkPaste,
+    handleAssignFirm,
+    handleUpdateStatus,
+    handleReviewAppointment,
+    handleSaveContact,
+    handleProcessSupportRequest,
+  };
+}
+
+function CandidateDirectoryCard({ candidates }: { candidates: Candidate[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Candidate Directory</CardTitle>
+        <CardDescription>Recruiter-only visibility into candidates.</CardDescription>
+      </CardHeader>
+      <CardContent className="max-h-64 overflow-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="text-xs uppercase text-slate-500">
+              <th className="px-2 py-2">Name</th>
+              <th className="px-2 py-2">Email</th>
+            </tr>
+          </thead>
+          <tbody>
+            {candidates.map((candidate) => (
+              <tr key={candidate.id} className="border-b border-slate-100 text-sm">
+                <td className="px-2 py-2">{candidate.name}</td>
+                <td className="px-2 py-2">{candidate.email}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
+  );
+}
+
+function FirmIngestCard({
+  newFirmName,
+  setNewFirmName,
+  handleCreateFirm,
+  handleBulkPaste,
+  register,
+}: {
+  newFirmName: string;
+  setNewFirmName: (v: string) => void;
+  handleCreateFirm: () => void;
+  handleBulkPaste: (e: React.FormEvent) => void;
+  register: UseFormRegister<BulkPasteInput>;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Firm Master + Bulk Paste Ingest</CardTitle>
+        <CardDescription>Ingest firm catalog without CSV.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex gap-2">
+          <Input
+            placeholder="Create single firm"
+            value={newFirmName}
+            onChange={(event) => setNewFirmName(event.target.value)}
+          />
+          <Button onClick={handleCreateFirm}>Add</Button>
+        </div>
+        <form className="space-y-2" onSubmit={handleBulkPaste}>
+          <Textarea
+            rows={7}
+            placeholder="Paste one law firm per line"
+            {...register('lines')}
+          />
+          <Button type="submit">Run Bulk Paste Import</Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AssignmentManagerCard({
+  candidates,
+  firms,
+  selectedCandidateId,
+  setSelectedCandidateId,
+  selectedFirmId,
+  setSelectedFirmId,
+  handleAssignFirm,
+}: {
+  candidates: Candidate[];
+  firms: Firm[];
+  selectedCandidateId: string;
+  setSelectedCandidateId: (v: string) => void;
+  selectedFirmId: string;
+  setSelectedFirmId: (v: string) => void;
+  handleAssignFirm: () => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Candidate-Firm Assignment Manager</CardTitle>
+        <CardDescription>Manual assignment only, default status enforced.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <label className="text-xs font-medium uppercase text-slate-500">Candidate</label>
+        <select
+          className="h-10 w-full rounded-md border border-slate-300 px-2 text-sm"
+          value={selectedCandidateId}
+          onChange={(event) => setSelectedCandidateId(event.target.value)}
+        >
+          {candidates.map((candidate) => (
+            <option key={candidate.id} value={candidate.id}>
+              {candidate.name}
+            </option>
+          ))}
+        </select>
+
+        <label className="text-xs font-medium uppercase text-slate-500">Firm</label>
+        <select
+          className="h-10 w-full rounded-md border border-slate-300 px-2 text-sm"
+          value={selectedFirmId}
+          onChange={(event) => setSelectedFirmId(event.target.value)}
+        >
+          {firms.map((firm) => (
+            <option key={firm.id} value={firm.id}>
+              {firm.name}
+            </option>
+          ))}
+        </select>
+
+        <Button onClick={handleAssignFirm}>Assign Firm</Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function StatusUpdateCard({
+  assignments,
+  selectedAssignmentId,
+  setSelectedAssignmentId,
+  selectedStatus,
+  setSelectedStatus,
+  handleUpdateStatus,
+}: {
+  assignments: Assignment[];
+  selectedAssignmentId: string;
+  setSelectedAssignmentId: (v: string) => void;
+  selectedStatus: (typeof FIRM_STATUSES)[number];
+  setSelectedStatus: (v: (typeof FIRM_STATUSES)[number]) => void;
+  handleUpdateStatus: () => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Status Update Console</CardTitle>
+        <CardDescription>Staff-controlled status transitions only.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <label className="text-xs font-medium uppercase text-slate-500">Assignment</label>
+        <select
+          className="h-10 w-full rounded-md border border-slate-300 px-2 text-sm"
+          value={selectedAssignmentId}
+          onChange={(event) => setSelectedAssignmentId(event.target.value)}
+        >
+          {assignments.map((assignment) => (
+            <option key={assignment.id} value={assignment.id}>
+              {(assignment.candidates?.[0]?.name ?? 'Candidate') +
+                ' \u2014 ' +
+                (assignment.firms?.[0]?.name ?? 'Firm')}
+            </option>
+          ))}
+        </select>
+
+        <label className="text-xs font-medium uppercase text-slate-500">Status</label>
+        <select
+          className="h-10 w-full rounded-md border border-slate-300 px-2 text-sm"
+          value={selectedStatus}
+          onChange={(event) =>
+            setSelectedStatus(event.target.value as (typeof FIRM_STATUSES)[number])
+          }
+        >
+          {FIRM_STATUSES.map((status) => (
+            <option key={status} value={status}>
+              {status}
+            </option>
+          ))}
+        </select>
+
+        <Button onClick={handleUpdateStatus}>Update Status</Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AppointmentManagementCard({
+  appointments,
+  handleReviewAppointment,
+}: {
+  appointments: Appointment[];
+  handleReviewAppointment: (id: string, decision: 'accepted' | 'declined') => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Appointment Management</CardTitle>
+        <CardDescription>Review and manage candidate appointment requests.</CardDescription>
+      </CardHeader>
+      <CardContent className="max-h-96 overflow-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="text-xs uppercase text-slate-500">
+              <th className="px-2 py-2">Candidate</th>
+              <th className="px-2 py-2">Title</th>
+              <th className="px-2 py-2">Modality</th>
+              <th className="px-2 py-2">Time</th>
+              <th className="px-2 py-2">Status</th>
+              <th className="px-2 py-2">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {appointments.map((appointment) => (
+              <tr key={appointment.id} className="border-b border-slate-100 text-sm">
+                <td className="px-2 py-2">{appointment.candidate_name}</td>
+                <td className="px-2 py-2">{appointment.title}</td>
+                <td className="px-2 py-2">{appointment.modality === 'virtual' ? 'Virtual' : 'In-person'}</td>
+                <td className="px-2 py-2 text-xs">
+                  {new Date(appointment.start_at_utc).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  {' \u2013 '}
+                  {new Date(appointment.end_at_utc).toLocaleString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                </td>
+                <td className="px-2 py-2">
+                  <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
+                    appointment.status === 'pending' ? 'bg-amber-100 text-amber-800' :
+                    appointment.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                    appointment.status === 'declined' ? 'bg-red-100 text-red-800' :
+                    'bg-slate-100 text-slate-600'
+                  }`}>
+                    {appointment.status}
+                  </span>
+                </td>
+                <td className="px-2 py-2">
+                  {appointment.status === 'pending' ? (
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700"
+                        onClick={() => handleReviewAppointment(appointment.id, 'accepted')}
+                      >
+                        Accept
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-red-300 text-red-600 hover:bg-red-50"
+                        onClick={() => handleReviewAppointment(appointment.id, 'declined')}
+                      >
+                        Decline
+                      </Button>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-slate-400">{'\u2014'}</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {appointments.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-2 py-4 text-center text-sm text-slate-400">
+                  No appointments found.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ContactSettingsCard({
+  contactPhone,
+  setContactPhone,
+  contactEmail,
+  setContactEmail,
+  handleSaveContact,
+}: {
+  contactPhone: string;
+  setContactPhone: (v: string) => void;
+  contactEmail: string;
+  setContactEmail: (v: string) => void;
+  handleSaveContact: () => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Recruiter Contact Banner Settings</CardTitle>
+        <CardDescription>Global contact visible in candidate app header.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <Input
+          value={contactPhone}
+          onChange={(event) => setContactPhone(event.target.value)}
+          placeholder="Phone"
+        />
+        <Input
+          value={contactEmail}
+          onChange={(event) => setContactEmail(event.target.value)}
+          placeholder="Email"
+        />
+        <Button onClick={handleSaveContact}>Save Contact</Button>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SupportRequestCard({
+  supportRequests,
+  handleProcessSupportRequest,
+}: {
+  supportRequests: SupportRequest[];
+  handleProcessSupportRequest: (request: SupportRequest) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Support Data Request Queue</CardTitle>
+        <CardDescription>Internal-only export/delete handling.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {supportRequests.map((request) => (
+          <div key={request.id} className="rounded-md border border-slate-200 p-2 text-sm">
+            <p className="font-medium">{request.request_type.toUpperCase()}</p>
+            <p className="text-slate-600">Status: {request.status}</p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              onClick={() => handleProcessSupportRequest(request)}
+            >
+              Mark Processed
+            </Button>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AssignmentSnapshotCard({ assignmentRows }: { assignmentRows: ReactNode }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Assignment Snapshot</CardTitle>
+        <CardDescription>Status-priority tracking rows for active candidates.</CardDescription>
+      </CardHeader>
+      <CardContent className="max-h-72 overflow-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="text-xs uppercase text-slate-500">
+              <th className="px-2 py-2">Candidate</th>
+              <th className="px-2 py-2">Firm</th>
+              <th className="px-2 py-2">Status</th>
+            </tr>
+          </thead>
+          <tbody>{assignmentRows}</tbody>
+        </table>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function OperationsDashboard() {
+  const {
+    candidates,
+    firms,
+    assignments,
+    auditEvents,
+    appointments,
+    supportRequests,
+    selectedCandidateId,
+    setSelectedCandidateId,
+    selectedFirmId,
+    setSelectedFirmId,
+    selectedAssignmentId,
+    setSelectedAssignmentId,
+    selectedStatus,
+    setSelectedStatus,
+    contactPhone,
+    setContactPhone,
+    contactEmail,
+    setContactEmail,
+    statusMessage,
+    newFirmName,
+    setNewFirmName,
+    register,
+    assignmentRows,
+    loadData,
+    handleCreateFirm,
+    handleBulkPaste,
+    handleAssignFirm,
+    handleUpdateStatus,
+    handleReviewAppointment,
+    handleSaveContact,
+    handleProcessSupportRequest,
+  } = useOperationsDashboard();
+
   return (
     <div className="space-y-4">
       {statusMessage ? (
@@ -171,373 +726,51 @@ export function OperationsDashboard() {
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Candidate Directory</CardTitle>
-            <CardDescription>Recruiter-only visibility into candidates.</CardDescription>
-          </CardHeader>
-          <CardContent className="max-h-64 overflow-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="text-xs uppercase text-slate-500">
-                  <th className="px-2 py-2">Name</th>
-                  <th className="px-2 py-2">Email</th>
-                </tr>
-              </thead>
-              <tbody>
-                {candidates.map((candidate) => (
-                  <tr key={candidate.id} className="border-b border-slate-100 text-sm">
-                    <td className="px-2 py-2">{candidate.name}</td>
-                    <td className="px-2 py-2">{candidate.email}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Firm Master + Bulk Paste Ingest</CardTitle>
-            <CardDescription>Ingest firm catalog without CSV.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Create single firm"
-                value={newFirmName}
-                onChange={(event) => setNewFirmName(event.target.value)}
-              />
-              <Button
-                onClick={async () => {
-                  const { error } = await supabaseClient
-                    .from('firms')
-                    .insert({ name: newFirmName, normalized_name: newFirmName.toLowerCase() });
-                  if (error) {
-                    setStatusMessage(error.message);
-                  } else {
-                    setStatusMessage('Firm created.');
-                    setNewFirmName('');
-                    loadData();
-                  }
-                }}
-              >
-                Add
-              </Button>
-            </div>
-            <form
-              className="space-y-2"
-              onSubmit={handleSubmit(async (values) => {
-                const parsed = parseFirmLines(values.lines);
-                const { data, error } = await supabaseClient.functions.invoke(
-                  'bulk_paste_ingest_firms',
-                  {
-                    body: { rows: parsed },
-                  },
-                );
-
-                if (error) {
-                  setStatusMessage(error.message);
-                  return;
-                }
-
-                setStatusMessage(
-                  `Ingest complete: ${data.accepted_count ?? 0} accepted, ${data.rejected_count ?? 0} rejected.`,
-                );
-                reset();
-                loadData();
-              })}
-            >
-              <Textarea
-                rows={7}
-                placeholder="Paste one law firm per line"
-                {...register('lines')}
-              />
-              <Button type="submit">Run Bulk Paste Import</Button>
-            </form>
-          </CardContent>
-        </Card>
+        <CandidateDirectoryCard candidates={candidates} />
+        <FirmIngestCard
+          newFirmName={newFirmName}
+          setNewFirmName={setNewFirmName}
+          handleCreateFirm={handleCreateFirm}
+          handleBulkPaste={handleBulkPaste}
+          register={register}
+        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Candidate-Firm Assignment Manager</CardTitle>
-            <CardDescription>Manual assignment only, default status enforced.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <label className="text-xs font-medium uppercase text-slate-500">Candidate</label>
-            <select
-              className="h-10 w-full rounded-md border border-slate-300 px-2 text-sm"
-              value={selectedCandidateId}
-              onChange={(event) => setSelectedCandidateId(event.target.value)}
-            >
-              {candidates.map((candidate) => (
-                <option key={candidate.id} value={candidate.id}>
-                  {candidate.name}
-                </option>
-              ))}
-            </select>
-
-            <label className="text-xs font-medium uppercase text-slate-500">Firm</label>
-            <select
-              className="h-10 w-full rounded-md border border-slate-300 px-2 text-sm"
-              value={selectedFirmId}
-              onChange={(event) => setSelectedFirmId(event.target.value)}
-            >
-              {firms.map((firm) => (
-                <option key={firm.id} value={firm.id}>
-                  {firm.name}
-                </option>
-              ))}
-            </select>
-
-            <Button
-              onClick={async () => {
-                const { error } = await supabaseClient.functions.invoke(
-                  'assign_firm_to_candidate',
-                  {
-                    body: {
-                      candidate_id: selectedCandidateId,
-                      firm_id: selectedFirmId,
-                    },
-                  },
-                );
-
-                if (error) {
-                  setStatusMessage(error.message);
-                } else {
-                  setStatusMessage('Assignment created.');
-                  loadData();
-                }
-              }}
-            >
-              Assign Firm
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Status Update Console</CardTitle>
-            <CardDescription>Staff-controlled status transitions only.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <label className="text-xs font-medium uppercase text-slate-500">Assignment</label>
-            <select
-              className="h-10 w-full rounded-md border border-slate-300 px-2 text-sm"
-              value={selectedAssignmentId}
-              onChange={(event) => setSelectedAssignmentId(event.target.value)}
-            >
-              {assignments.map((assignment) => (
-                <option key={assignment.id} value={assignment.id}>
-                  {(assignment.candidates?.[0]?.name ?? 'Candidate') +
-                    ' — ' +
-                    (assignment.firms?.[0]?.name ?? 'Firm')}
-                </option>
-              ))}
-            </select>
-
-            <label className="text-xs font-medium uppercase text-slate-500">Status</label>
-            <select
-              className="h-10 w-full rounded-md border border-slate-300 px-2 text-sm"
-              value={selectedStatus}
-              onChange={(event) =>
-                setSelectedStatus(event.target.value as (typeof FIRM_STATUSES)[number])
-              }
-            >
-              {FIRM_STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-
-            <Button
-              onClick={async () => {
-                const { error } = await supabaseClient.functions.invoke(
-                  'staff_update_assignment_status',
-                  {
-                    body: {
-                      assignment_id: selectedAssignmentId,
-                      new_status: selectedStatus,
-                    },
-                  },
-                );
-
-                if (error) {
-                  setStatusMessage(error.message);
-                } else {
-                  setStatusMessage('Status updated.');
-                  loadData();
-                }
-              }}
-            >
-              Update Status
-            </Button>
-          </CardContent>
-        </Card>
+        <AssignmentManagerCard
+          candidates={candidates}
+          firms={firms}
+          selectedCandidateId={selectedCandidateId}
+          setSelectedCandidateId={setSelectedCandidateId}
+          selectedFirmId={selectedFirmId}
+          setSelectedFirmId={setSelectedFirmId}
+          handleAssignFirm={handleAssignFirm}
+        />
+        <StatusUpdateCard
+          assignments={assignments}
+          selectedAssignmentId={selectedAssignmentId}
+          setSelectedAssignmentId={setSelectedAssignmentId}
+          selectedStatus={selectedStatus}
+          setSelectedStatus={setSelectedStatus}
+          handleUpdateStatus={handleUpdateStatus}
+        />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Assignment Snapshot</CardTitle>
-          <CardDescription>Status-priority tracking rows for active candidates.</CardDescription>
-        </CardHeader>
-        <CardContent className="max-h-72 overflow-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="text-xs uppercase text-slate-500">
-                <th className="px-2 py-2">Candidate</th>
-                <th className="px-2 py-2">Firm</th>
-                <th className="px-2 py-2">Status</th>
-              </tr>
-            </thead>
-            <tbody>{assignmentRows}</tbody>
-          </table>
-        </CardContent>
-      </Card>
+      <AssignmentSnapshotCard assignmentRows={assignmentRows} />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Appointment Management</CardTitle>
-          <CardDescription>Review and manage candidate appointment requests.</CardDescription>
-        </CardHeader>
-        <CardContent className="max-h-96 overflow-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="text-xs uppercase text-slate-500">
-                <th className="px-2 py-2">Candidate</th>
-                <th className="px-2 py-2">Title</th>
-                <th className="px-2 py-2">Modality</th>
-                <th className="px-2 py-2">Time</th>
-                <th className="px-2 py-2">Status</th>
-                <th className="px-2 py-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {appointments.map((appointment) => (
-                <tr key={appointment.id} className="border-b border-slate-100 text-sm">
-                  <td className="px-2 py-2">{appointment.candidate_name}</td>
-                  <td className="px-2 py-2">{appointment.title}</td>
-                  <td className="px-2 py-2">{appointment.modality === 'virtual' ? 'Virtual' : 'In-person'}</td>
-                  <td className="px-2 py-2 text-xs">
-                    {new Date(appointment.start_at_utc).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                    {' – '}
-                    {new Date(appointment.end_at_utc).toLocaleString(undefined, { hour: 'numeric', minute: '2-digit' })}
-                  </td>
-                  <td className="px-2 py-2">
-                    <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
-                      appointment.status === 'pending' ? 'bg-amber-100 text-amber-800' :
-                      appointment.status === 'accepted' ? 'bg-green-100 text-green-800' :
-                      appointment.status === 'declined' ? 'bg-red-100 text-red-800' :
-                      'bg-slate-100 text-slate-600'
-                    }`}>
-                      {appointment.status}
-                    </span>
-                  </td>
-                  <td className="px-2 py-2">
-                    {appointment.status === 'pending' ? (
-                      <div className="flex gap-1">
-                        <Button
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700"
-                          onClick={async () => {
-                            const { error } = await supabaseClient.functions.invoke(
-                              'staff_review_appointment',
-                              { body: { appointment_id: appointment.id, decision: 'accepted' } },
-                            );
-                            if (error) {
-                              setStatusMessage(error.message);
-                            } else {
-                              setStatusMessage('Appointment accepted.');
-                              loadData();
-                            }
-                          }}
-                        >
-                          Accept
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-red-300 text-red-600 hover:bg-red-50"
-                          onClick={async () => {
-                            const { error } = await supabaseClient.functions.invoke(
-                              'staff_review_appointment',
-                              { body: { appointment_id: appointment.id, decision: 'declined' } },
-                            );
-                            if (error) {
-                              setStatusMessage(error.message);
-                            } else {
-                              setStatusMessage('Appointment declined.');
-                              loadData();
-                            }
-                          }}
-                        >
-                          Decline
-                        </Button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-slate-400">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {appointments.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-2 py-4 text-center text-sm text-slate-400">
-                    No appointments found.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+      <AppointmentManagementCard
+        appointments={appointments}
+        handleReviewAppointment={handleReviewAppointment}
+      />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recruiter Contact Banner Settings</CardTitle>
-            <CardDescription>Global contact visible in candidate app header.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Input
-              value={contactPhone}
-              onChange={(event) => setContactPhone(event.target.value)}
-              placeholder="Phone"
-            />
-            <Input
-              value={contactEmail}
-              onChange={(event) => setContactEmail(event.target.value)}
-              placeholder="Email"
-            />
-            <Button
-              onClick={async () => {
-                const { error } = await supabaseClient
-                  .from('recruiter_contact_config')
-                  .upsert(
-                    {
-                      id: '00000000-0000-0000-0000-000000000001',
-                      phone: contactPhone,
-                      email: contactEmail,
-                      is_active: true,
-                    },
-                    { onConflict: 'id' },
-                  );
-
-                if (error) {
-                  setStatusMessage(error.message);
-                } else {
-                  setStatusMessage('Recruiter contact updated.');
-                  loadData();
-                }
-              }}
-            >
-              Save Contact
-            </Button>
-          </CardContent>
-        </Card>
+        <ContactSettingsCard
+          contactPhone={contactPhone}
+          setContactPhone={setContactPhone}
+          contactEmail={contactEmail}
+          setContactEmail={setContactEmail}
+          handleSaveContact={handleSaveContact}
+        />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -551,46 +784,10 @@ export function OperationsDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Support Data Request Queue</CardTitle>
-            <CardDescription>Internal-only export/delete handling.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {supportRequests.map((request) => (
-              <div key={request.id} className="rounded-md border border-slate-200 p-2 text-sm">
-                <p className="font-medium">{request.request_type.toUpperCase()}</p>
-                <p className="text-slate-600">Status: {request.status}</p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="mt-2"
-                  onClick={async () => {
-                    const { error } = await supabaseClient.functions.invoke(
-                      'staff_handle_data_request',
-                      {
-                        body: {
-                          request_id: request.id,
-                          action: request.request_type,
-                          notes: request.notes,
-                        },
-                      },
-                    );
-
-                    if (error) {
-                      setStatusMessage(error.message);
-                    } else {
-                      setStatusMessage('Support request handled.');
-                      loadData();
-                    }
-                  }}
-                >
-                  Mark Processed
-                </Button>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <SupportRequestCard
+          supportRequests={supportRequests}
+          handleProcessSupportRequest={handleProcessSupportRequest}
+        />
       </div>
 
       <Card>

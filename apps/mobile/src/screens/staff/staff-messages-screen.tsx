@@ -2,33 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ScreenShell } from '../../components/screen-shell';
 import { useAuth } from '../../context/auth-context';
-import type { StaffMessageInboxItem } from '../../features/staff-messaging';
-import { mapChannelsToStaffInboxItems } from '../../features/staff-messaging';
+import type { StaffMessageInboxItem } from '@zenith/shared';
+import { formatRelativeTimestamp, mapChannelsToStaffInboxItems } from '@zenith/shared';
 import { ensureChatUserConnected, getChatClient } from '../../lib/chat';
 import { getFunctionErrorMessage } from '../../lib/function-error';
 import { ensureValidSession, supabase } from '../../lib/supabase';
-
-function formatRelativeTimestamp(isoTimestamp: string): string {
-  const date = new Date(isoTimestamp);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-
-  const now = new Date();
-  const sameDay = now.toDateString() === date.toDateString();
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-
-  if (sameDay) {
-    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  }
-
-  if (yesterday.toDateString() === date.toDateString()) {
-    return 'Yesterday';
-  }
-
-  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-}
 
 export function StaffMessagesScreen({
   onOpenConversation,
