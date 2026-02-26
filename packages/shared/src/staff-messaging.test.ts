@@ -9,8 +9,13 @@ describe('parseCandidateUserIdFromChannelId', () => {
     expect(parseCandidateUserIdFromChannelId('candidate-abc-123')).toBe('abc-123');
   });
 
+  it('parses simple candidate channel ids', () => {
+    expect(parseCandidateUserIdFromChannelId('candidate-abc123')).toBe('abc123');
+  });
+
   it('returns null for non-candidate channels', () => {
     expect(parseCandidateUserIdFromChannelId('messaging-general')).toBeNull();
+    expect(parseCandidateUserIdFromChannelId('general-abc123')).toBeNull();
   });
 });
 

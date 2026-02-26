@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { uiColors } from '../../theme/colors';
 import { Channel, Chat, MessageInput, MessageList, OverlayProvider } from 'stream-chat-expo';
 import { ensureChatUserConnected, getChatClient } from '../../lib/chat';
 import { useAuth } from '../../context/auth-context';
@@ -159,10 +160,10 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   error: {
-    color: '#B91C1C',
+    color: uiColors.error,
   },
   safeArea: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: uiColors.background,
     flex: 1,
   },
 });

@@ -26,7 +26,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   scheduled: { bg: '#DBEAFE', text: '#1E40AF' },
 };
 
-export function StaffAppointmentsScreen() {
+function useStaffAppointmentsScreen() {
   const [appointments, setAppointments] = useState<StaffAppointment[]>([]);
   const [statusMessage, setStatusMessage] = useState('');
   const [reviewingId, setReviewingId] = useState<string | null>(null);
@@ -72,33 +72,43 @@ export function StaffAppointmentsScreen() {
     void loadAppointments();
   }, [loadAppointments]);
 
-  const handleReview = async (appointmentId: string, decision: 'accepted' | 'declined') => {
-    setReviewingId(appointmentId);
-    setStatusMessage('');
+  const handleReview = useCallback(
+    async (appointmentId: string, decision: 'accepted' | 'declined') => {
+      setReviewingId(appointmentId);
+      setStatusMessage('');
 
-    try {
-      await ensureValidSession();
+      try {
+        await ensureValidSession();
 
-      const { error } = await supabase.functions.invoke('staff_review_appointment', {
-        body: { appointment_id: appointmentId, decision },
-      });
+        const { error } = await supabase.functions.invoke('staff_review_appointment', {
+          body: { appointment_id: appointmentId, decision },
+        });
 
-      if (error) {
-        setStatusMessage(error.message);
-        return;
+        if (error) {
+          setStatusMessage(error.message);
+          return;
+        }
+
+        setStatusMessage(`Appointment ${decision}.`);
+        await loadAppointments();
+      } catch (err) {
+        setStatusMessage((err as Error).message);
+      } finally {
+        setReviewingId(null);
       }
-
-      setStatusMessage(`Appointment ${decision}.`);
-      await loadAppointments();
-    } catch (err) {
-      setStatusMessage((err as Error).message);
-    } finally {
-      setReviewingId(null);
-    }
-  };
+    },
+    [loadAppointments],
+  );
 
   const pending = appointments.filter((a) => a.status === 'pending');
   const others = appointments.filter((a) => a.status !== 'pending');
+
+  return { pending, others, statusMessage, reviewingId, handleReview };
+}
+
+export function StaffAppointmentsScreen() {
+  const { pending, others, statusMessage, reviewingId, handleReview } =
+    useStaffAppointmentsScreen();
 
   return (
     <ScreenShell>

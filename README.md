@@ -6,7 +6,7 @@ Production-oriented monorepo for Zenith Legal mobile + admin platform (candidate
 
 - `apps/mobile`: Expo React Native app (candidate + staff role UX)
 - `apps/admin`: Next.js recruiter dashboard (staff operations)
-- `packages/shared`: shared domain enums and validation schemas
+- `packages/shared`: shared domain types, validation schemas, phone utilities, and staff-messaging helpers
 - `supabase`: database migrations, RLS policies, edge functions
 - `docs`: architecture, release, and operations notes
 
@@ -44,6 +44,22 @@ npm run dev:admin
 npm run verify
 ```
 
+5. Run code quality scan (optional)
+
+```bash
+# Install desloppify (one-time)
+python3 -m pip install --break-system-packages "desloppify[full]"
+
+# Scan the full codebase
+python3 -m desloppify scan --path .
+
+# View prioritized issues
+python3 -m desloppify next --count 10
+
+# See the full plan
+python3 -m desloppify plan
+```
+
 ## Milestone Status
 
 - [x] Monorepo scaffolding and CI baseline
@@ -55,6 +71,7 @@ npm run verify
 - [x] Candidate firm authorization workflow (decline-delete for waiting assignments; cancel for authorized assignments)
 - [x] Candidate and admin account deletion flows (candidate self-service + staff candidate-only delete)
 - [x] Push notification queue processing via Expo Push API (`dispatch_notifications` processor mode)
+- [x] Code quality pass: consolidated duplicates into shared package, centralized mobile theme, extracted custom hooks, refactored edge functions
 - [ ] Vendor credential wiring for end-to-end runtime (requires secrets)
 - [ ] Notification email provider + scheduled dispatch automation (push processor is implemented; automation still pending)
 - [ ] Device-level release signing and EAS submit credentials

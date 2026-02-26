@@ -353,11 +353,11 @@ export function IntakeScreen({
 
 const styles = StyleSheet.create({
   body: {
-    color: '#475569',
+    color: uiColors.textSecondary,
     marginBottom: 12,
   },
   checkbox: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 14,
   },
   container: {
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   safeArea: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: uiColors.background,
     flex: 1,
   },
   safeAreaWeb: {
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
     opacity: 0.65,
   },
   disclaimerBody: {
-    color: '#334155',
+    color: uiColors.textStrong,
     fontSize: 12,
     lineHeight: 18,
   },
@@ -402,18 +402,18 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   disclaimerInline: {
-    color: '#475569',
+    color: uiColors.textSecondary,
     fontSize: 12,
     marginTop: -6,
   },
   disclaimerTitle: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 12,
     fontWeight: '700',
     textTransform: 'uppercase',
   },
   error: {
-    color: '#B91C1C',
+    color: uiColors.error,
     fontSize: 12,
     marginTop: -2,
   },
@@ -427,18 +427,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   h1: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 24,
     fontWeight: '700',
   },
   helper: {
-    color: '#475569',
+    color: uiColors.textSecondary,
     fontSize: 12,
     marginTop: -6,
   },
   input: {
-    backgroundColor: '#ffffff',
-    borderColor: '#CBD5E1',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
     borderRadius: 8,
     borderWidth: 1,
     padding: 10,
@@ -452,11 +452,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   label: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontWeight: '600',
   },
   option: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: uiColors.divider,
     borderRadius: 16,
     paddingHorizontal: 10,
     paddingVertical: 7,
@@ -465,11 +465,11 @@ const styles = StyleSheet.create({
     backgroundColor: uiColors.primary,
   },
   optionText: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 12,
   },
   optionTextSelected: {
-    color: '#F8FAFC',
+    color: uiColors.background,
     fontSize: 12,
   },
   wrap: {
@@ -483,8 +483,8 @@ const styles = StyleSheet.create({
   },
   webFrame: {
     alignSelf: 'center',
-    backgroundColor: '#F8FAFC',
-    borderColor: '#E2E8F0',
+    backgroundColor: uiColors.background,
+    borderColor: uiColors.border,
     borderRadius: 16,
     borderWidth: 1,
     boxShadow: '0px 8px 24px rgba(15, 23, 42, 0.06)',

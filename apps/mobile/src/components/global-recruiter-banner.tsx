@@ -61,7 +61,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   title: {
-    color: '#EFF6FF',
+    color: uiColors.bannerTitle,
     fontSize: 12,
     fontWeight: '600',
     marginBottom: 6,

@@ -29,7 +29,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }>
   scheduled: { bg: '#DBEAFE', text: '#1E40AF', label: 'Scheduled' },
 };
 
-export function AppointmentsScreen() {
+function useAppointmentsScreen() {
   const [appointments, setAppointments] = useState<AppointmentRecord[]>([]);
   const [serverMessage, setServerMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -89,6 +89,217 @@ export function AppointmentsScreen() {
     };
   }, [loadAppointments]);
 
+  const toggleForm = useCallback(() => setShowForm((value) => !value), []);
+
+  const onSubmit = useCallback(
+    () =>
+      handleSubmit(
+        async (values) => {
+          try {
+            setSubmitting(true);
+            setServerMessage('');
+            await ensureValidSession();
+
+            const { error } = await supabase.functions.invoke(
+              'schedule_or_update_appointment',
+              { body: values },
+            );
+
+            if (error) {
+              setServerMessage(error.message);
+              return;
+            }
+
+            setServerMessage('Appointment request submitted.');
+            setShowForm(false);
+            reset();
+            await loadAppointments();
+          } catch (err) {
+            setServerMessage((err as Error).message);
+          } finally {
+            setSubmitting(false);
+          }
+        },
+        (formErrors) => {
+          const firstError = Object.values(formErrors)[0];
+          setServerMessage(firstError?.message ?? 'Please fix the highlighted fields.');
+        },
+      )(),
+    [handleSubmit, reset, loadAppointments],
+  );
+
+  return {
+    appointments,
+    serverMessage,
+    showForm,
+    submitting,
+    control,
+    errors,
+    selectedModality,
+    toggleForm,
+    onSubmit,
+  };
+}
+
+function AppointmentCard({ appointment }: { appointment: AppointmentRecord }) {
+  const statusInfo = STATUS_COLORS[appointment.status] ?? STATUS_COLORS.scheduled;
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <Text style={styles.cardTitle}>{appointment.title}</Text>
+        <View style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}>
+          <Text style={[styles.statusText, { color: statusInfo.text }]}>
+            {statusInfo.label}
+          </Text>
+        </View>
+      </View>
+      <Text style={styles.cardTime}>
+        {formatAppointmentDateTime(appointment.start_at_utc)} –{' '}
+        {formatAppointmentDateTime(appointment.end_at_utc)}
+      </Text>
+      <Text style={styles.cardDetail}>
+        {appointment.modality === 'virtual' ? 'Virtual' : 'In-person'}
+        {appointment.location_text ? ` · ${appointment.location_text}` : ''}
+      </Text>
+      {appointment.description ? (
+        <Text style={styles.cardDescription}>{appointment.description}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+function AppointmentForm({
+  control,
+  errors,
+  selectedModality,
+  submitting,
+  onSubmit,
+}: {
+  control: ReturnType<typeof useAppointmentsScreen>['control'];
+  errors: ReturnType<typeof useAppointmentsScreen>['errors'];
+  selectedModality: string | undefined;
+  submitting: boolean;
+  onSubmit: () => void;
+}) {
+  return (
+    <View style={styles.formCard}>
+      <Controller
+        control={control}
+        name="title"
+        render={({ field }) => (
+          <>
+            <TextInput
+              style={[styles.input, errors.title ? styles.inputError : null]}
+              placeholder="Title"
+              onChangeText={field.onChange}
+              value={field.value}
+            />
+            {errors.title ? (
+              <Text style={styles.fieldError}>{errors.title.message ?? 'Title is required'}</Text>
+            ) : null}
+          </>
+        )}
+      />
+      <Controller
+        control={control}
+        name="description"
+        render={({ field }) => (
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            placeholder="Description (optional)"
+            onChangeText={field.onChange}
+            value={field.value ?? ''}
+            multiline
+            numberOfLines={3}
+          />
+        )}
+      />
+      <Controller
+        control={control}
+        name="modality"
+        render={({ field }) => (
+          <View style={styles.row}>
+            <Pressable
+              style={[styles.tag, field.value === 'virtual' ? styles.tagSelected : null]}
+              onPress={() => field.onChange('virtual')}
+            >
+              <Text>Virtual</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.tag, field.value === 'in_person' ? styles.tagSelected : null]}
+              onPress={() => field.onChange('in_person')}
+            >
+              <Text>In-person</Text>
+            </Pressable>
+          </View>
+        )}
+      />
+      {selectedModality === 'virtual' ? (
+        <Controller
+          control={control}
+          name="videoUrl"
+          render={({ field }) => (
+            <>
+              <TextInput
+                style={[styles.input, errors.videoUrl ? styles.inputError : null]}
+                placeholder="Video URL (optional)"
+                onChangeText={(text) => field.onChange(text || undefined)}
+                value={field.value ?? ''}
+              />
+              {errors.videoUrl ? (
+                <Text style={styles.fieldError}>{errors.videoUrl.message}</Text>
+              ) : null}
+            </>
+          )}
+        />
+      ) : null}
+      {selectedModality === 'in_person' ? (
+        <Controller
+          control={control}
+          name="locationText"
+          render={({ field }) => (
+            <TextInput
+              style={styles.input}
+              placeholder="Location (optional)"
+              onChangeText={(text) => field.onChange(text || undefined)}
+              value={field.value ?? ''}
+            />
+          )}
+        />
+      ) : null}
+      <Pressable
+        style={interactivePressableStyle({
+          base: styles.primaryCta,
+          disabled: submitting,
+          disabledStyle: styles.primaryCtaDisabled,
+          hoverStyle: sharedPressableFeedback.hover,
+          focusStyle: sharedPressableFeedback.focus,
+          pressedStyle: sharedPressableFeedback.pressed,
+        })}
+        disabled={submitting}
+        onPress={onSubmit}
+      >
+        <Text style={styles.primaryCtaText}>
+          {submitting ? 'Submitting\u2026' : 'Submit request'}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
+export function AppointmentsScreen() {
+  const {
+    appointments,
+    serverMessage,
+    showForm,
+    submitting,
+    control,
+    errors,
+    selectedModality,
+    toggleForm,
+    onSubmit,
+  } = useAppointmentsScreen();
+
   return (
     <ScreenShell>
       <Text style={styles.title}>Appointments</Text>
@@ -101,7 +312,7 @@ export function AppointmentsScreen() {
           focusStyle: sharedPressableFeedback.focus,
           pressedStyle: sharedPressableFeedback.pressed,
         })}
-        onPress={() => setShowForm((value) => !value)}
+        onPress={toggleForm}
       >
         <Text style={styles.primaryCtaText}>
           {showForm ? 'Close form' : 'Request appointment'}
@@ -109,150 +320,13 @@ export function AppointmentsScreen() {
       </Pressable>
 
       {showForm ? (
-        <View style={styles.formCard}>
-          <Controller
-            control={control}
-            name="title"
-            render={({ field }) => (
-              <>
-                <TextInput
-                  style={[styles.input, errors.title ? styles.inputError : null]}
-                  placeholder="Title"
-                  onChangeText={field.onChange}
-                  value={field.value}
-                />
-                {errors.title ? (
-                  <Text style={styles.fieldError}>{errors.title.message ?? 'Title is required'}</Text>
-                ) : null}
-              </>
-            )}
-          />
-
-          <Controller
-            control={control}
-            name="description"
-            render={({ field }) => (
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Description (optional)"
-                onChangeText={field.onChange}
-                value={field.value ?? ''}
-                multiline
-                numberOfLines={3}
-              />
-            )}
-          />
-
-          <Controller
-            control={control}
-            name="modality"
-            render={({ field }) => (
-              <View style={styles.row}>
-                <Pressable
-                  style={[
-                    styles.tag,
-                    field.value === 'virtual' ? styles.tagSelected : null,
-                  ]}
-                  onPress={() => field.onChange('virtual')}
-                >
-                  <Text>Virtual</Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.tag,
-                    field.value === 'in_person' ? styles.tagSelected : null,
-                  ]}
-                  onPress={() => field.onChange('in_person')}
-                >
-                  <Text>In-person</Text>
-                </Pressable>
-              </View>
-            )}
-          />
-
-          {selectedModality === 'virtual' ? (
-            <Controller
-              control={control}
-              name="videoUrl"
-              render={({ field }) => (
-                <>
-                  <TextInput
-                    style={[styles.input, errors.videoUrl ? styles.inputError : null]}
-                    placeholder="Video URL (optional)"
-                    onChangeText={(text) => field.onChange(text || undefined)}
-                    value={field.value ?? ''}
-                  />
-                  {errors.videoUrl ? (
-                    <Text style={styles.fieldError}>{errors.videoUrl.message}</Text>
-                  ) : null}
-                </>
-              )}
-            />
-          ) : null}
-
-          {selectedModality === 'in_person' ? (
-            <Controller
-              control={control}
-              name="locationText"
-              render={({ field }) => (
-                <TextInput
-                  style={styles.input}
-                  placeholder="Location (optional)"
-                  onChangeText={(text) => field.onChange(text || undefined)}
-                  value={field.value ?? ''}
-                />
-              )}
-            />
-          ) : null}
-
-          <Pressable
-            style={interactivePressableStyle({
-              base: styles.primaryCta,
-              disabled: submitting,
-              disabledStyle: styles.primaryCtaDisabled,
-              hoverStyle: sharedPressableFeedback.hover,
-              focusStyle: sharedPressableFeedback.focus,
-              pressedStyle: sharedPressableFeedback.pressed,
-            })}
-            disabled={submitting}
-            onPress={handleSubmit(
-              async (values) => {
-                try {
-                  setSubmitting(true);
-                  setServerMessage('');
-                  await ensureValidSession();
-
-                  const { error } = await supabase.functions.invoke(
-                    'schedule_or_update_appointment',
-                    { body: values },
-                  );
-
-                  if (error) {
-                    setServerMessage(error.message);
-                    return;
-                  }
-
-                  setServerMessage('Appointment request submitted.');
-                  setShowForm(false);
-                  reset();
-                  await loadAppointments();
-                } catch (err) {
-                  setServerMessage((err as Error).message);
-                } finally {
-                  setSubmitting(false);
-                }
-              },
-              (formErrors) => {
-                const firstError = Object.values(formErrors)[0];
-                setServerMessage(firstError?.message ?? 'Please fix the highlighted fields.');
-              },
-            )}
-          >
-            <Text style={styles.primaryCtaText}>
-              {submitting ? 'Submitting…' : 'Submit request'}
-            </Text>
-          </Pressable>
-        </View>
+        <AppointmentForm
+          control={control}
+          errors={errors}
+          selectedModality={selectedModality}
+          submitting={submitting}
+          onSubmit={onSubmit}
+        />
       ) : null}
 
       {serverMessage ? (
@@ -262,32 +336,9 @@ export function AppointmentsScreen() {
       {appointments.length === 0 ? (
         <Text style={styles.emptyState}>No appointments yet.</Text>
       ) : (
-        appointments.map((appointment) => {
-          const statusInfo = STATUS_COLORS[appointment.status] ?? STATUS_COLORS.scheduled;
-          return (
-            <View key={appointment.id} style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>{appointment.title}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}>
-                  <Text style={[styles.statusText, { color: statusInfo.text }]}>
-                    {statusInfo.label}
-                  </Text>
-                </View>
-              </View>
-              <Text style={styles.cardTime}>
-                {formatAppointmentDateTime(appointment.start_at_utc)} –{' '}
-                {formatAppointmentDateTime(appointment.end_at_utc)}
-              </Text>
-              <Text style={styles.cardDetail}>
-                {appointment.modality === 'virtual' ? 'Virtual' : 'In-person'}
-                {appointment.location_text ? ` · ${appointment.location_text}` : ''}
-              </Text>
-              {appointment.description ? (
-                <Text style={styles.cardDescription}>{appointment.description}</Text>
-              ) : null}
-            </View>
-          );
-        })
+        appointments.map((appointment) => (
+          <AppointmentCard key={appointment.id} appointment={appointment} />
+        ))
       )}
     </ScreenShell>
   );
@@ -295,11 +346,11 @@ export function AppointmentsScreen() {
 
 const styles = StyleSheet.create({
   body: {
-    color: '#475569',
+    color: uiColors.textSecondary,
   },
   card: {
-    backgroundColor: '#ffffff',
-    borderColor: '#E2E8F0',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.border,
     borderRadius: 12,
     borderWidth: 1,
     gap: 4,
@@ -311,53 +362,53 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   cardTitle: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     flex: 1,
     fontSize: 15,
     fontWeight: '600',
   },
   cardTime: {
-    color: '#2563EB',
+    color: uiColors.link,
     fontSize: 13,
   },
   cardDetail: {
-    color: '#475569',
+    color: uiColors.textSecondary,
     fontSize: 13,
   },
   cardDescription: {
-    color: '#64748B',
+    color: uiColors.textMuted,
     fontSize: 13,
     marginTop: 2,
   },
   emptyState: {
-    color: '#94A3B8',
+    color: uiColors.textPlaceholder,
     fontSize: 14,
     fontStyle: 'italic',
     paddingVertical: 16,
     textAlign: 'center',
   },
   formCard: {
-    backgroundColor: '#ffffff',
-    borderColor: '#E2E8F0',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.border,
     borderRadius: 12,
     borderWidth: 1,
     gap: 10,
     padding: 12,
   },
   fieldError: {
-    color: '#DC2626',
+    color: uiColors.errorBright,
     fontSize: 12,
     marginTop: -4,
   },
   input: {
-    backgroundColor: '#ffffff',
-    borderColor: '#CBD5E1',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
     borderRadius: 8,
     borderWidth: 1,
     padding: 10,
   },
   inputError: {
-    borderColor: '#DC2626',
+    borderColor: uiColors.errorBright,
   },
   textArea: {
     minHeight: 60,
@@ -381,9 +432,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   serverMessage: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: uiColors.backgroundAlt,
     borderRadius: 8,
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 14,
     padding: 10,
   },
@@ -397,16 +448,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   tag: {
-    backgroundColor: '#E2E8F0',
+    backgroundColor: uiColors.divider,
     borderRadius: 20,
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
   tagSelected: {
-    backgroundColor: '#BAE6FD',
+    backgroundColor: uiColors.selectedBackground,
   },
   title: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 24,
     fontWeight: '700',
   },

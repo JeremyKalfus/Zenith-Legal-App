@@ -22,6 +22,7 @@
 - [x] Push notification dispatch queue processor (Expo Push API send + queued delivery status updates)
 - [x] Admin web staff messaging inbox + candidate deletion workflow (candidate-only hard delete)
 - [x] Candidate dashboard authorization UX semantics (waiting decline deletes assignment; authorized decline labeled cancel)
+- [x] Code quality pass: duplicate consolidation, theme centralization, hook extraction, edge function refactoring (desloppify strict 85.7 → 86.2)
 - [ ] Vendor credential wiring for end-to-end runtime (requires secrets)
 - [x] Device-level mobile release signing baseline (Apple App ID/App Store Connect app created; Expo EAS project linked; Android keystore + iOS dist cert/provisioning profile created)
 - [ ] Android `eas submit` / Play Console integration credential (Google Play service account)

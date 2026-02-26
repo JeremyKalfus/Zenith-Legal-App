@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   loadingText: {
-    color: '#475569',
+    color: uiColors.textSecondary,
     marginTop: 10,
   },
   primaryButton: {
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   recoveryBody: {
-    color: '#475569',
+    color: uiColors.textSecondary,
     marginBottom: 12,
     textAlign: 'center',
   },
@@ -147,13 +147,13 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   recoveryTitle: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 20,
     fontWeight: '700',
   },
   secondaryButton: {
     alignItems: 'center',
-    borderColor: '#CBD5E1',
+    borderColor: uiColors.borderStrong,
     borderRadius: 10,
     borderWidth: 1,
     paddingHorizontal: 16,
@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   secondaryButtonText: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontWeight: '600',
   },
 });

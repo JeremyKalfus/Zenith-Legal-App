@@ -134,3 +134,25 @@ export function mapChannelsToStaffInboxItems(channels: unknown[]): StaffMessageI
   rows.sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
   return rows;
 }
+
+export function formatRelativeTimestamp(isoTimestamp: string): string {
+  const date = new Date(isoTimestamp);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const now = new Date();
+  const sameDay = now.toDateString() === date.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+
+  if (sameDay) {
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }
+
+  if (yesterday.toDateString() === date.toDateString()) {
+    return 'Yesterday';
+  }
+
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}

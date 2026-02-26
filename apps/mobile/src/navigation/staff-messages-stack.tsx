@@ -1,5 +1,5 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import type { StaffMessageInboxItem } from '../features/staff-messaging';
+import type { StaffMessageInboxItem } from '@zenith/shared';
 import { StaffMessageThreadScreen } from '../screens/staff/staff-message-thread-screen';
 import { StaffMessagesScreen } from '../screens/staff/staff-messages-screen';
 
