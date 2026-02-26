@@ -11,7 +11,11 @@ export function ScreenShell({
   const content = (
     <>
       {showBanner ? <GlobalRecruiterBanner /> : null}
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
+      >
         <View style={styles.inner}>{children}</View>
       </ScrollView>
     </>

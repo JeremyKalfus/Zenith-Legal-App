@@ -183,9 +183,48 @@
 
 **Consequences:** `dispatch_notifications` supports processor mode (default) for queued push deliveries and enqueue mode for `{ events: [...] }` payloads. Email deliveries remain queued until provider integration is added.
 
+### [2026-02-25] Mobile production application identifiers
+
+**Decision:** Set the production iOS bundle identifier and Android package name to `com.zenithlegal.app`.
+
+**Options considered:**
+1. `com.zenithlegal.app` -- concise, brand-aligned, works across iOS/Android
+2. `com.zenithlegal.mobile` -- clear mobile suffix, but less concise
+3. Environment-specific production identifiers -- unnecessary complexity for the primary production app identity
+
+**Rationale:** The domain `zenithlegal.com` supports the reverse-DNS prefix `com.zenithlegal`. Using `app` as the final segment keeps the identifier short and stable for long-term store listings.
+
+**Consequences:** Store releases should keep `ios.bundleIdentifier` and `android.package` fixed at `com.zenithlegal.app`. Non-production builds should use separate identifiers (for example a `.staging` suffix) if side-by-side installs are needed.
+
+### [2026-02-25] EAS-managed credentials and remote app version source for store builds
+
+**Decision:** Use Expo EAS-managed signing credentials for Android/iOS store builds and set `apps/mobile/eas.json` to `cli.appVersionSource = "remote"` with production `autoIncrement`.
+
+**Options considered:**
+1. EAS-managed credentials + remote version source -- fastest release setup; centralizes signing and version increments in EAS
+2. EAS-managed credentials + local version source -- keeps version increments in repo, but creates local file churn on each build
+3. Manual credentials + local version source -- maximum control, highest operational overhead and risk of misconfiguration
+
+**Rationale:** The app is Expo-managed and the immediate goal is to ship TestFlight / Play internal builds quickly. EAS-managed credentials remove manual certificate/keystore handling, and the remote version source avoids repeated local edits to `ios.buildNumber` / `android.versionCode` when `autoIncrement` is enabled.
+
+**Consequences:** EAS now injects remote build numbers/version codes during production builds; local `ios.buildNumber` and `android.versionCode` remain manifest values but are not the authoritative increment source during EAS builds. EAS build configuration also stores `promptToConfigurePushNotifications = false` after deferring APNs setup during the first build flow. APNs and App Store Connect submit credentials were later configured in EAS on the same day; Google Play submit credentials remain follow-up work.
+
+### [2026-02-25] Pin `submit.production.ios.ascAppId` in `eas.json`
+
+**Decision:** Add `submit.production.ios.ascAppId` (`6759677619`) to `apps/mobile/eas.json` and use that for iOS submissions instead of relying on EAS App Store Connect app auto-discovery.
+
+**Options considered:**
+1. Set `ascAppId` explicitly in `eas.json` -- deterministic, avoids auto-lookup failures
+2. Rely on EAS App Store Connect app lookup each submit -- less config, but failed in this project with a CLI/runtime error
+3. Bypass EAS submit and upload IPA manually with Transporter -- viable fallback, but adds manual release steps
+
+**Rationale:** `eas submit -p ios --profile production --latest` failed during the "ensure app exists on App Store Connect" step with `Cannot read properties of undefined (reading 'attributes')`. Adding `ascAppId` skips that lookup path and allows submission scheduling with the already-configured EAS-managed App Store Connect API key.
+
+**Consequences:** iOS EAS submit for the `production` profile depends on the configured App Store Connect app ID in repo config. If the App Store Connect app record is recreated under a different Apple app ID, `apps/mobile/eas.json` must be updated.
+
 ## Pending Decisions
 
 - **Notification delivery providers** -- Which push notification service (Expo Push, FCM, APNs) and email provider (Resend, SendGrid) to use for `dispatch_notifications`.
 - **Calendar OAuth providers** -- Implementation details for Google and Microsoft calendar sync in `connect_calendar_provider`.
 - **Staging environment setup** -- Dedicated Supabase project and Vercel preview deployment configuration.
-- **Mobile release strategy** -- EAS build profiles, TestFlight/Play Store internal testing channels, OTA update policy.
+- **Mobile release strategy** -- TestFlight/Play Store rollout cadence, Google Play submit credential ownership, OTA update policy.

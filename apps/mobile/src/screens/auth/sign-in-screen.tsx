@@ -38,6 +38,7 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
               contentContainerStyle={styles.scrollContent}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
+              automaticallyAdjustKeyboardInsets
             >
               <View style={styles.form}>
                 <Text style={styles.title}>Set a new password</Text>
@@ -112,6 +113,7 @@ export function SignInScreen({ onBack }: { onBack: () => void }) {
             contentContainerStyle={styles.scrollContent}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            automaticallyAdjustKeyboardInsets
           >
             <View style={styles.form}>
               <Text style={styles.title}>Sign in</Text>

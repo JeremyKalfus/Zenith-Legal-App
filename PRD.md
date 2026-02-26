@@ -4,6 +4,15 @@
 
 Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (candidates) with law firms through a recruiter-mediated workflow. The platform consists of a mobile app for candidates and staff, and a web admin dashboard for recruiter operations.
 
+### Distribution Readiness (Operational Snapshot: 2026-02-25)
+
+- Mobile production identifiers are set to `com.zenithlegal.app` for both iOS and Android.
+- Apple Developer App ID and App Store Connect app record (`Zenith Legal`) are created for the production iOS app.
+- Expo EAS project is linked for standalone store builds (`@jeremykalfus/zenith-legal-mobile`).
+- EAS-managed Android signing keystore, iOS distribution certificate/provisioning profile, iOS APNs key, and iOS App Store Connect submit API key are configured.
+- Initial production EAS builds have completed for iOS/TestFlight and Android/Play internal testing artifacts (IPA + AAB).
+- iOS EAS submission to App Store Connect has been scheduled; Google Play submit credential setup remains pending.
+
 ## User Roles
 
 ### Candidate (job-seeking lawyer)
@@ -72,6 +81,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - `dispatch_notifications` edge function can enqueue notification events and process queued push notification deliveries (Expo Push API).
 - Automatic recurring processor scheduling is not fully wired yet (queued deliveries require processor invocation until scheduler/automation is added).
 - Notification events: appointment created/updated, assignment status change, message received.
+- Standalone/TestFlight iOS push notification credential setup (Apple APNs key in EAS) is configured as of 2026-02-25; runtime validation on a TestFlight build is still pending.
 
 ### Admin Dashboard (web)
 - Staff login via Supabase auth.

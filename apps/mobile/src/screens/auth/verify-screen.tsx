@@ -81,7 +81,11 @@ export function VerifyScreen() {
     >
       <View style={Platform.OS === 'web' ? styles.webFrame : undefined}>
         <GlobalRecruiterBanner />
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+        >
           <View style={styles.container}>
           <Text style={styles.title}>Verify your identity</Text>
           <Text style={styles.body}>

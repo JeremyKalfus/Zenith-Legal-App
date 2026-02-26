@@ -57,6 +57,14 @@
 > See `docs/release.md` for full environment strategy.
 
 - [ ] `npm run verify` passes (lint + typecheck + test).
+- [ ] Mobile production identifiers finalized and consistent across code + stores (`ios.bundleIdentifier`, `android.package`, App Store Connect app, Play Console app).
+- [ ] Expo EAS project linked (`owner` + `extra.eas.projectId`) and `apps/mobile/eas.json` build profiles/versioning reviewed.
+- [ ] Android signing keystore exists in EAS credentials for the production package.
+- [ ] iOS Distribution Certificate + Provisioning Profile exist in EAS credentials for the production bundle ID.
+- [ ] iOS APNs key configured in EAS credentials if standalone/TestFlight push notifications are required.
+- [ ] Store submission path decided/tested: EAS submit credentials configured (App Store Connect API key, Google Play service account) or manual upload procedure documented.
+- [ ] App Store Connect export compliance + app privacy questionnaires completed and consistent with runtime behavior.
+- [ ] Google Play Data safety / content rating / app content declarations completed and consistent with runtime behavior.
 - [ ] All edge functions deployed to target environment.
 - [ ] Database migrations applied to target Supabase project.
 - [ ] Mobile smoke test on iOS and Android.
@@ -65,3 +73,18 @@
 - [ ] Staff status updates reflected in candidate dashboard.
 - [ ] No console errors or unhandled promise rejections.
 - [ ] Environment-specific secrets configured (not committed).
+
+### Release Snapshot (2026-02-25)
+
+- [x] Production app identifiers set to `com.zenithlegal.app` in `apps/mobile/app.json`.
+- [x] Apple Developer App ID created (`com.zenithlegal.app`) with Push Notifications enabled.
+- [x] App Store Connect app record created (`Zenith Legal`, bundle ID `com.zenithlegal.app`).
+- [x] Expo EAS project linked (`@jeremykalfus/zenith-legal-mobile`, project ID `38f93994-daaa-4c85-a092-a70ac12f0c06`).
+- [x] Android EAS keystore created for production signing.
+- [x] iOS EAS Distribution Certificate + Provisioning Profile created for production signing.
+- [x] iOS APNs key configured in EAS credentials.
+- [x] App Store Connect API key configured for `eas submit`.
+- [ ] Google Play service account configured for `eas submit`.
+- [x] EAS production build artifacts generated (iOS IPA + Android AAB).
+- [x] iOS EAS submission scheduled to App Store Connect/TestFlight.
+- [ ] App Store Connect / Play Console metadata and compliance forms completed.

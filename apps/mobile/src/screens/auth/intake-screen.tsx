@@ -84,7 +84,11 @@ export function IntakeScreen({
     >
       <View style={Platform.OS === 'web' ? styles.webFrame : undefined}>
         <GlobalRecruiterBanner />
-        <ScrollView contentContainerStyle={styles.scrollContent}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets
+        >
           <View style={styles.container}>
           <Text style={styles.h1}>Welcome to Zenith Legal</Text>
           <Text style={styles.body}>
@@ -150,6 +154,37 @@ export function IntakeScreen({
           {errors.mobile ? <Text style={styles.error}>{errors.mobile.message}</Text> : null}
           {!errors.mobile ? (
             <Text style={styles.helper}>US numbers can be entered without +1.</Text>
+          ) : null}
+
+          <Controller
+            control={control}
+            name="password"
+            render={({ field }) => (
+              <PasswordInput
+                placeholder="Password"
+                style={styles.input}
+                onChangeText={field.onChange}
+                value={field.value}
+                showStrength
+              />
+            )}
+          />
+          {errors.password ? <Text style={styles.error}>{errors.password.message}</Text> : null}
+
+          <Controller
+            control={control}
+            name="confirmPassword"
+            render={({ field }) => (
+              <PasswordInput
+                placeholder="Confirm password"
+                style={styles.input}
+                onChangeText={field.onChange}
+                value={field.value}
+              />
+            )}
+          />
+          {errors.confirmPassword ? (
+            <Text style={styles.error}>{errors.confirmPassword.message}</Text>
           ) : null}
 
           <Text style={styles.label}>Preferred Cities (choose 0-3)</Text>
@@ -275,37 +310,6 @@ export function IntakeScreen({
           />
           {errors.acceptedPrivacyPolicy ? (
             <Text style={styles.error}>{errors.acceptedPrivacyPolicy.message}</Text>
-          ) : null}
-
-          <Controller
-            control={control}
-            name="password"
-            render={({ field }) => (
-              <PasswordInput
-                placeholder="Password"
-                style={styles.input}
-                onChangeText={field.onChange}
-                value={field.value}
-                showStrength
-              />
-            )}
-          />
-          {errors.password ? <Text style={styles.error}>{errors.password.message}</Text> : null}
-
-          <Controller
-            control={control}
-            name="confirmPassword"
-            render={({ field }) => (
-              <PasswordInput
-                placeholder="Confirm password"
-                style={styles.input}
-                onChangeText={field.onChange}
-                value={field.value}
-              />
-            )}
-          />
-          {errors.confirmPassword ? (
-            <Text style={styles.error}>{errors.confirmPassword.message}</Text>
           ) : null}
 
           <Pressable

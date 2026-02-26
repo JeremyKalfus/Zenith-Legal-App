@@ -38,6 +38,7 @@ After completing work, update these root docs when applicable:
 |---|---|
 | New feature or screen added | `PRD.md`, `ARCHITECTURE.md` |
 | Architectural change (new service, integration, data store) | `ARCHITECTURE.md`, `DECISIONS.md` |
+| Mobile release/store setup change (bundle IDs, EAS linkage, signing credentials, store records, submit flow) | `ARCHITECTURE.md`, `DECISIONS.md`, `PLANS.md`, `CHECKLISTS.md` (and `PRD.md` if user-facing distribution readiness changed) |
 | Schema or migration change | `ARCHITECTURE.md` |
 | Significant technical decision made | `DECISIONS.md` |
 | Milestone completed or work queue changes | `PLANS.md` |
@@ -59,3 +60,14 @@ Agents must append this checklist (filled in) to their output after completing a
 - [ ] Edge functions deployed if backend changed (Y/N/N/A)
 - [ ] Commit message is scoped and descriptive
 ```
+
+## Mobile Release Notes (Agent Workflow)
+
+For Expo/EAS mobile release work, update the root docs with a dated snapshot of:
+
+- Final app identifiers (`ios.bundleIdentifier`, `android.package`)
+- Expo/EAS project linkage (`owner`, `extra.eas.projectId`)
+- Credential state (Android keystore, iOS distribution certificate, provisioning profile, APNs key, store submit API keys) without secrets
+- Build/submission progress (for example EAS build IDs and current status)
+
+Never commit or document Apple passwords, 2FA codes, Google service account private keys, or App Store Connect API private keys.

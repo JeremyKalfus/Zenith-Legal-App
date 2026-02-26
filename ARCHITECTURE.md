@@ -125,6 +125,37 @@ See `docs/release.md` for full environment strategy.
 | staging | QA and UAT | Dedicated project | Vercel preview |
 | prod | Production release | Dedicated project | Vercel production |
 
+## Mobile Release Infrastructure (EAS / Stores)
+
+As of **2026-02-25**, the Expo mobile app has a production store-build baseline configured:
+
+- **Expo/EAS project:** `@jeremykalfus/zenith-legal-mobile`
+- **EAS project ID:** `38f93994-daaa-4c85-a092-a70ac12f0c06`
+- **Production app identifier (iOS + Android):** `com.zenithlegal.app`
+- **Apple Developer App ID:** `com.zenithlegal.app` (Push Notifications enabled; Broadcast Capability disabled)
+- **App Store Connect app record:** `Zenith Legal` (bundle ID `com.zenithlegal.app`, SKU `zenith-legal-ios-prod`)
+
+Version/build configuration:
+
+- `apps/mobile/eas.json` uses `cli.appVersionSource = "remote"` so EAS manages production `buildNumber`/`versionCode`
+- `apps/mobile/eas.json` production profile uses `autoIncrement: true`
+- `apps/mobile/eas.json` submit profile includes `ios.ascAppId = "6759677619"` to bypass EAS App Store Connect app auto-lookup during submit
+- `apps/mobile/app.json` includes iOS export-compliance flag `ITSAppUsesNonExemptEncryption = false`
+
+Credential state (EAS-managed):
+
+- **Android:** production signing keystore created for package `com.zenithlegal.app`
+- **iOS:** Apple Distribution Certificate + Provisioning Profile created for bundle ID `com.zenithlegal.app`
+- **iOS APNs key:** configured in EAS (Apple Push key assigned to `com.zenithlegal.app`)
+- **iOS submit API credentials:** configured in EAS (App Store Connect API key for EAS Submit)
+- **Android submit API credentials:** pending (Google Play service account not configured yet)
+
+Build / submission snapshot (2026-02-25):
+
+- iOS production build finished: `36ca22cc-f921-431c-a24b-5adfd6d7871c` (IPA artifact generated)
+- Android production build finished: `3c84ffe0-aa34-444e-8f52-cc43bef37bd4` (AAB artifact generated)
+- iOS EAS submission scheduled to App Store Connect: `25b4cdb9-7d8a-4b4a-af49-8dcf53994ff0` (processing status depends on Apple)
+
 ## CI/CD
 
 GitHub Actions (`.github/workflows/ci.yml`) runs on push to `main` and all PRs:
@@ -135,3 +166,5 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on push to `main` and all PRs:
 4. `npm run test`
 5. Build shared package
 6. Build admin app
+
+Mobile store builds/submissions are run manually via Expo EAS from `apps/mobile/` and are not part of GitHub Actions CI.
