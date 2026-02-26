@@ -1,6 +1,6 @@
 import { z } from 'npm:zod@4.3.6';
 import { errorResponse, jsonResponse } from '../_shared/http.ts';
-import { assertStaff, createAuthedClient, createServiceClient } from '../_shared/supabase.ts';
+import { assertStaff, createServiceClient } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
 
 const schema = z.object({

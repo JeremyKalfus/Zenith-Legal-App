@@ -40,3 +40,8 @@ test-results/
 # IDE
 .vscode/
 .idea/
+
+# Local AI tooling state / artifacts
+.desloppify/
+scorecard.png
+.claude/worktrees/

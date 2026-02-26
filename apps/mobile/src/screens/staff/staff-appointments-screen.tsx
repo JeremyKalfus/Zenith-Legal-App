@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { AppointmentStatus } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
+import { formatAppointmentDateTime } from '../../lib/date-format';
 import { supabase, ensureValidSession } from '../../lib/supabase';
 
 type StaffAppointment = {
@@ -24,17 +25,6 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   cancelled: { bg: '#F1F5F9', text: '#64748B' },
   scheduled: { bg: '#DBEAFE', text: '#1E40AF' },
 };
-
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
 
 export function StaffAppointmentsScreen() {
   const [appointments, setAppointments] = useState<StaffAppointment[]>([]);
@@ -144,7 +134,8 @@ export function StaffAppointmentsScreen() {
               </View>
               <Text style={styles.cardSubtitle}>{appointment.candidate_name}</Text>
               <Text style={styles.cardTime}>
-                {formatDateTime(appointment.start_at_utc)} – {formatDateTime(appointment.end_at_utc)}
+                {formatAppointmentDateTime(appointment.start_at_utc)} –{' '}
+                {formatAppointmentDateTime(appointment.end_at_utc)}
               </Text>
               <Text style={styles.cardDetail}>
                 {appointment.modality === 'virtual' ? 'Virtual' : 'In-person'}
@@ -196,7 +187,8 @@ export function StaffAppointmentsScreen() {
                 </View>
                 <Text style={styles.cardSubtitle}>{appointment.candidate_name}</Text>
                 <Text style={styles.cardTime}>
-                  {formatDateTime(appointment.start_at_utc)} – {formatDateTime(appointment.end_at_utc)}
+                  {formatAppointmentDateTime(appointment.start_at_utc)} –{' '}
+                  {formatAppointmentDateTime(appointment.end_at_utc)}
                 </Text>
                 <Text style={styles.cardDetail}>
                   {appointment.modality === 'virtual' ? 'Virtual' : 'In-person'}

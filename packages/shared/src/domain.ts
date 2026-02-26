@@ -66,19 +66,6 @@ function optionalTrimmedString(max: number) {
     .transform((value) => value ?? undefined);
 }
 
-const mobileInputSchema = z.string().trim().max(30).transform((value, ctx) => {
-  const normalized = normalizePhoneNumber(value);
-  if (!normalized.ok) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: PHONE_VALIDATION_MESSAGES.invalidMobile,
-    });
-    return z.NEVER;
-  }
-
-  return normalized.e164;
-});
-
 const optionalMobileInputSchema = z
   .string()
   .trim()

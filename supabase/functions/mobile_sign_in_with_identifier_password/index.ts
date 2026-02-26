@@ -1,6 +1,7 @@
 import { z } from 'npm:zod@4.3.6';
 import { createServiceClient } from '../_shared/supabase.ts';
 import { errorResponse, jsonResponse } from '../_shared/http.ts';
+import { sanitizePhoneInput } from '../_shared/phone.ts';
 
 const requestSchema = z.object({
   identifier: z.string().trim().min(1).max(255),
@@ -13,21 +14,6 @@ function structuredError(code: string, message: string, status: number): Respons
 
 function isE164Phone(value: string): boolean {
   return /^\+[1-9]\d{7,14}$/.test(value);
-}
-
-function sanitizePhoneInput(value: string): string {
-  const trimmed = value.trim();
-  let result = '';
-  for (const character of trimmed) {
-    if (character >= '0' && character <= '9') {
-      result += character;
-      continue;
-    }
-    if (character === '+' && result.length === 0) {
-      result = '+';
-    }
-  }
-  return result;
 }
 
 function normalizePhoneNumber(input: string): string {

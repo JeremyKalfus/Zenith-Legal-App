@@ -4,6 +4,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { appointmentSchema, type AppointmentInput, type AppointmentStatus } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
+import { formatAppointmentDateTime } from '../../lib/date-format';
 import { supabase, ensureValidSession } from '../../lib/supabase';
 import { uiColors } from '../../theme/colors';
 import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
@@ -27,17 +28,6 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }>
   cancelled: { bg: '#F1F5F9', text: '#64748B', label: 'Cancelled' },
   scheduled: { bg: '#DBEAFE', text: '#1E40AF', label: 'Scheduled' },
 };
-
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
 
 export function AppointmentsScreen() {
   const [appointments, setAppointments] = useState<AppointmentRecord[]>([]);
@@ -285,7 +275,8 @@ export function AppointmentsScreen() {
                 </View>
               </View>
               <Text style={styles.cardTime}>
-                {formatDateTime(appointment.start_at_utc)} – {formatDateTime(appointment.end_at_utc)}
+                {formatAppointmentDateTime(appointment.start_at_utc)} –{' '}
+                {formatAppointmentDateTime(appointment.end_at_utc)}
               </Text>
               <Text style={styles.cardDetail}>
                 {appointment.modality === 'virtual' ? 'Virtual' : 'In-person'}

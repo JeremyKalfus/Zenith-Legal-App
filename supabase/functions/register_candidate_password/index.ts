@@ -1,5 +1,6 @@
 import { z } from 'npm:zod@4.3.6';
 import { createServiceClient } from '../_shared/supabase.ts';
+import { sanitizePhoneInput } from '../_shared/phone.ts';
 import { errorResponse, jsonResponse } from '../_shared/http.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
 
@@ -63,21 +64,6 @@ const optionalMobileInputSchema = z
 
 function isE164Phone(value: string): boolean {
   return /^\+[1-9]\d{7,14}$/.test(value);
-}
-
-function sanitizePhoneInput(value: string): string {
-  const trimmed = value.trim();
-  let result = '';
-  for (const character of trimmed) {
-    if (character >= '0' && character <= '9') {
-      result += character;
-      continue;
-    }
-    if (character === '+' && result.length === 0) {
-      result = '+';
-    }
-  }
-  return result;
 }
 
 function normalizePhoneNumber(input: string): string {
