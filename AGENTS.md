@@ -59,6 +59,7 @@ Agents must append this checklist (filled in) to their output after completing a
 - [ ] Root docs updated (list which ones, or "N/A")
 - [ ] Edge functions deployed if backend changed (Y/N/N/A)
 - [ ] Commit message is scoped and descriptive
+- [ ] `python3 -m desloppify scan --path .` shows no score regression (optional)
 ```
 
 ## Mobile Release Notes (Agent Workflow)

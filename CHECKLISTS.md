@@ -13,6 +13,7 @@
 - [ ] No secrets or credentials in committed files.
 - [ ] Commit message is scoped and descriptive.
 - [ ] Root docs updated if applicable (see `AGENTS.md` doc update policy).
+- [ ] `python3 -m desloppify scan --path .` run to check for regressions (optional but recommended).
 
 ## Backend / Edge Function Change
 
@@ -92,3 +93,64 @@
 - [x] App Store Connect/TestFlight shows iOS build `1.0.0 (2)` processed.
 - [ ] TestFlight runtime sign-in validated (current `1.0.0 (2)` build fails with placeholder Supabase config due missing EAS production env vars).
 - [ ] App Store Connect / Play Console metadata and compliance forms completed.
+
+## Code Quality (desloppify)
+
+Run desloppify to scan the codebase for technical debt, duplications, and code smells.
+
+### Installation
+
+```bash
+python3 -m pip install --break-system-packages "desloppify[full]"
+```
+
+### Scan Workflow
+
+```bash
+# Full scan
+python3 -m desloppify scan --path .
+
+# View top priorities
+python3 -m desloppify next --count 10
+
+# View a specific finding
+python3 -m desloppify show <finding-id>
+
+# Generate a prioritized fix plan
+python3 -m desloppify plan
+
+# After fixing an issue, mark it resolved
+python3 -m desloppify resolve fixed "<finding-id>"
+
+# If intentional / acceptable, mark as wontfix
+python3 -m desloppify resolve wontfix "<finding-id>" --note "reason"
+
+# Rescan to verify
+python3 -m desloppify scan --path .
+```
+
+### Auto-fixers (TypeScript)
+
+```bash
+# Dry-run first
+python3 -m desloppify fix unused-imports --dry-run
+python3 -m desloppify fix unused-vars --dry-run
+python3 -m desloppify fix debug-logs --dry-run
+python3 -m desloppify fix dead-exports --dry-run
+
+# Apply
+python3 -m desloppify fix unused-imports
+```
+
+### Subjective Review (biggest score lever)
+
+```bash
+# Prepare and run blind subjective review batches
+python3 -m desloppify review --run-batches --runner codex --parallel --scan-after-import
+```
+
+### Score Tracking (as of 2026-02-26)
+
+- Overall: 91.5/100 (lenient), 86.2/100 (strict)
+- Open findings: 213
+- Key dimensions: File health 100%, Code quality 97.9%, Duplication 86.7%, Test health 23%, Security 100%

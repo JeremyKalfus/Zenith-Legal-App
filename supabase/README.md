@@ -19,6 +19,6 @@ This folder contains SQL migrations and edge functions for Zenith Legal.
 - `schedule_or_update_appointment`
 - `connect_calendar_provider`
 - `process_chat_webhook`
-- `dispatch_notifications`
+- `dispatch_notifications` (refactored into focused helpers: `fetchTokensByUser`, `processSingleDelivery`, `revokeStaleTokens`)
 - `staff_handle_data_request`
 - `chat_auth_bootstrap`

@@ -41,7 +41,7 @@
 |---|---|---|---|
 | Mobile | `apps/mobile/` | Expo SDK 54, React Native 0.81, React Navigation, react-hook-form, Zod, stream-chat-expo (native), stream-chat-react (web) | Candidate and staff mobile app; web build via Expo web |
 | Admin | `apps/admin/` | Next.js 16, React 19, Tailwind 4, shadcn primitives, Zod | Recruiter web dashboard |
-| Shared | `packages/shared/` | TypeScript, Zod | Domain types, validation schemas, phone utilities |
+| Shared | `packages/shared/` | TypeScript, Zod | Domain types, validation schemas, phone utilities, staff-messaging helpers |
 | Backend | `supabase/` | PostgreSQL 15, Deno edge functions, `@supabase/supabase-js@2.57.4` | Database, auth, serverless API |
 
 ## Edge Functions
@@ -65,7 +65,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 | `staff_delete_user` | Staff JWT | Hard-delete candidate user accounts from admin workflow (candidate-only scope) |
 | `bulk_paste_ingest_firms` | Staff JWT | Bulk firm data import |
 | `staff_handle_data_request` | Staff JWT | Process support/data requests |
-| `dispatch_notifications` | Internal | Dual-mode notification function: enqueue events into `notification_deliveries` or process queued push deliveries via Expo Push API (email provider integration pending) |
+| `dispatch_notifications` | Internal | Dual-mode notification function: enqueue events into `notification_deliveries` or process queued push deliveries via Expo Push API (email provider integration pending). Internal helpers: `fetchTokensByUser`, `processSingleDelivery`, `revokeStaleTokens`, `claimQueuedPushDelivery`, `markDeliveryStatus` |
 | `process_chat_webhook` | Webhook signature | Handle Stream Chat events |
 
 **JWT handling:** All functions set `verify_jwt = false` in `supabase/config.toml` to bypass gateway-level JWT verification (required due to the project's JWT signing key format). Auth is enforced internally via `getCurrentUserId()` which extracts the Bearer token and calls `getUser(token)`.
@@ -88,6 +88,32 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 - `recruiter_contact_config` -- Configurable recruiter phone/email for mobile banner
 
 All tables enforce Row Level Security. Staff-only mutations are routed through edge functions that call `assertStaff()`.
+
+## Shared Package (`@zenith/shared`)
+
+The shared package (`packages/shared/`) exports modules consumed by both admin and mobile workspaces:
+
+- **`domain.ts`** -- Zod schemas, enums, and TypeScript types for the domain model.
+- **`phone.ts`** -- Phone number formatting and validation utilities.
+- **`staff-messaging.ts`** -- Staff messaging helpers consolidated from duplicate implementations in admin and mobile: `StaffMessageInboxItem` type, `parseCandidateUserIdFromChannelId`, `mapChannelsToStaffInboxItems`, `formatRelativeTimestamp`.
+
+The package uses `"main": "src/index.ts"` (no build step). Admin consumes it via `transpilePackages: ['@zenith/shared']` in `next.config.ts`. Mobile consumes it directly.
+
+## Mobile Theme System
+
+The mobile app centralizes all UI colors in `apps/mobile/src/theme/colors.ts` via the `uiColors` object. This replaces inline hex color values with semantic tokens (`textPrimary`, `surface`, `border`, `error`, `link`, etc.). All screen-level `StyleSheet` definitions reference `uiColors.*` instead of hardcoded color strings.
+
+## Component Pattern: Custom Hook Extraction
+
+Large React components in both admin and mobile follow a hook-extraction pattern: state management, side effects, refs, and handler functions are extracted into a co-located `useXxxScreen` or `useXxxDashboard` hook. The component itself is pure JSX that receives values and callbacks from the hook. This keeps render logic separate from business logic and reduces per-file line counts.
+
+Refactored components using this pattern:
+- `apps/admin/src/components/modules/staff-messages-dashboard.tsx` → `useStaffMessagesDashboard`
+- `apps/admin/src/components/modules/candidate-firm-manager.tsx` → `useCandidateFirmManager`
+- `apps/admin/src/components/modules/operations-dashboard.tsx` → `useOperationsDashboard`
+- `apps/mobile/src/screens/candidate/profile-screen.tsx` → `useProfileScreen`
+- `apps/mobile/src/screens/candidate/appointments-screen.tsx` → `useAppointmentsScreen`
+- `apps/mobile/src/screens/staff/staff-appointments-screen.tsx` → `useStaffAppointmentsScreen`
 
 ## Auth Flows
 

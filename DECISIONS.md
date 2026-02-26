@@ -248,6 +248,55 @@
 
 **Consequences:** A new iOS build is required after configuring EAS production env vars; the current `1.0.0 (2)` build remains useful only for verifying signing/upload/TestFlight plumbing. Release checklists and plans now explicitly track EAS production runtime env var configuration.
 
+### [2026-02-26] Consolidate staff-messaging into shared package
+
+**Decision:** Move `staff-messaging.ts` (types, channel parsing, inbox mapping, timestamp formatting) from duplicate implementations in `apps/admin/src/features/` and `apps/mobile/src/features/` into `packages/shared/src/staff-messaging.ts`.
+
+**Options considered:**
+1. Keep duplicates in each app -- zero migration risk, but 100% code duplication
+2. Consolidate into `@zenith/shared` (chosen) -- single source of truth, both apps import from shared
+
+**Rationale:** The files were byte-for-byte identical across admin and mobile. Consolidation eliminates drift risk and reduces maintenance surface.
+
+**Consequences:** Both admin and mobile now import `StaffMessageInboxItem`, `mapChannelsToStaffInboxItems`, `formatRelativeTimestamp`, and `parseCandidateUserIdFromChannelId` from `@zenith/shared`. Tests moved to `packages/shared/src/staff-messaging.test.ts`.
+
+### [2026-02-26] Centralize mobile UI colors in theme object
+
+**Decision:** Define all mobile UI colors as semantic tokens in `apps/mobile/src/theme/colors.ts` (`uiColors` object) and replace inline hex values across screens.
+
+**Options considered:**
+1. Continue with inline hex colors -- simple, but creates hardcoded-color code smells and inconsistency risk
+2. Centralize into a `uiColors` theme object (chosen) -- single palette definition, semantic naming, easy to theme later
+
+**Rationale:** desloppify flagged 20+ hardcoded color instances across mobile screens. Centralizing into named tokens improves consistency and makes future theming (e.g. dark mode) straightforward.
+
+**Consequences:** All mobile screen stylesheets reference `uiColors.*` instead of hex strings. New colors should be added to `uiColors` rather than hardcoded.
+
+### [2026-02-26] Extract custom hooks from large React components
+
+**Decision:** Refactor large React components (200+ lines) by extracting state, effects, and handlers into co-located `useXxx` hooks, leaving components as pure JSX.
+
+**Options considered:**
+1. Leave components as-is -- no refactoring risk, but desloppify flags them as monster functions
+2. Split into multiple sub-components only -- reduces JSX size but scatters state management
+3. Extract hooks + sub-components (chosen) -- clean separation of business logic and render logic
+
+**Rationale:** desloppify flagged 7 functions exceeding the complexity threshold. Hook extraction is the standard React pattern for separating concerns without over-engineering into multiple files.
+
+**Consequences:** 6 components now use this pattern. The hooks themselves may still be flagged as large, but further splitting into hooks-of-hooks would be over-engineering for the current codebase size.
+
+### [2026-02-26] Refactor dispatch_notifications into focused helper functions
+
+**Decision:** Extract `processQueuedPushDeliveries` (153 lines) into focused helpers: `fetchTokensByUser`, `processSingleDelivery`, `revokeStaleTokens`, `claimQueuedPushDelivery`, `markDeliveryStatus`.
+
+**Options considered:**
+1. Keep monolithic function -- simple, but hard to test and reason about
+2. Extract into focused helpers in the same file (chosen) -- each function has a single responsibility
+
+**Rationale:** The function handled token fetching, delivery claiming, push sending, ticket processing, token revocation, and status updates in one block. Extracting helpers improves readability and makes each operation independently testable.
+
+**Consequences:** Main `processQueuedPushDeliveries` reduced to ~65 lines of orchestration. Helper functions are internal to the edge function file.
+
 ## Pending Decisions
 
 - **Notification delivery providers** -- Which push notification service (Expo Push, FCM, APNs) and email provider (Resend, SendGrid) to use for `dispatch_notifications`.
