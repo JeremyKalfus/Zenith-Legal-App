@@ -149,12 +149,15 @@ Credential state (EAS-managed):
 - **iOS APNs key:** configured in EAS (Apple Push key assigned to `com.zenithlegal.app`)
 - **iOS submit API credentials:** configured in EAS (App Store Connect API key for EAS Submit)
 - **Android submit API credentials:** pending (Google Play service account not configured yet)
+- **EAS production runtime env vars (`EXPO_PUBLIC_*`):** pending (first TestFlight build was created without these and used placeholder config values)
 
 Build / submission snapshot (2026-02-25):
 
 - iOS production build finished: `36ca22cc-f921-431c-a24b-5adfd6d7871c` (IPA artifact generated)
 - Android production build finished: `3c84ffe0-aa34-444e-8f52-cc43bef37bd4` (AAB artifact generated)
 - iOS EAS submission scheduled to App Store Connect: `25b4cdb9-7d8a-4b4a-af49-8dcf53994ff0` (processing status depends on Apple)
+- EAS submit scheduling did not result in an Apple-visible build for this run; manual Transporter upload of the IPA was used as fallback and succeeded
+- App Store Connect / TestFlight now shows iOS build `1.0.0 (2)` upload complete and processed (`Ready to Submit`), but app sign-in fails because the build was compiled with placeholder Supabase config (missing EAS production env vars)
 
 ## CI/CD
 

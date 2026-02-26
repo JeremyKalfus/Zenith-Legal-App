@@ -11,7 +11,9 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Expo EAS project is linked for standalone store builds (`@jeremykalfus/zenith-legal-mobile`).
 - EAS-managed Android signing keystore, iOS distribution certificate/provisioning profile, iOS APNs key, and iOS App Store Connect submit API key are configured.
 - Initial production EAS builds have completed for iOS/TestFlight and Android/Play internal testing artifacts (IPA + AAB).
-- iOS EAS submission to App Store Connect has been scheduled; Google Play submit credential setup remains pending.
+- Manual Transporter upload delivered the iOS IPA to App Store Connect after EAS submit scheduling did not surface a build in App Store Connect.
+- App Store Connect/TestFlight now shows iOS build `1.0.0 (2)` processed, but runtime sign-in currently fails because EAS production `EXPO_PUBLIC_*` vars were not configured before the build.
+- Google Play submit credential setup remains pending.
 
 ## User Roles
 
@@ -82,6 +84,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Automatic recurring processor scheduling is not fully wired yet (queued deliveries require processor invocation until scheduler/automation is added).
 - Notification events: appointment created/updated, assignment status change, message received.
 - Standalone/TestFlight iOS push notification credential setup (Apple APNs key in EAS) is configured as of 2026-02-25; runtime validation on a TestFlight build is still pending.
+- Current TestFlight runtime issue: authentication fails with placeholder Supabase config until EAS production env vars are configured and a new build is shipped.
 
 ### Admin Dashboard (web)
 - Staff login via Supabase auth.
@@ -105,6 +108,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 
 - What is the intended behavior when a candidate's appointment overlaps with a pending (not yet accepted) appointment?
 - Is there a workflow for staff to create appointments on behalf of candidates?
+- What are the exact product rules for staff-configured user-specific banners (priority, targeting, expiration, and override behavior vs global banners)?
 - What are the specific notification delivery channels beyond push (email, SMS)?
 - How should the calendar integration sync appointments to external calendars?
 - What is the support/data request lifecycle beyond the initial request creation?

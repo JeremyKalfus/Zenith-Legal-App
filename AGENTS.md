@@ -69,5 +69,7 @@ For Expo/EAS mobile release work, update the root docs with a dated snapshot of:
 - Expo/EAS project linkage (`owner`, `extra.eas.projectId`)
 - Credential state (Android keystore, iOS distribution certificate, provisioning profile, APNs key, store submit API keys) without secrets
 - Build/submission progress (for example EAS build IDs and current status)
+- Runtime build configuration state (for example whether EAS production `EXPO_PUBLIC_*` vars are configured vs placeholder fallbacks)
+- Upload path used if EAS submit is flaky (EAS submit vs manual Transporter upload)
 
 Never commit or document Apple passwords, 2FA codes, Google service account private keys, or App Store Connect API private keys.

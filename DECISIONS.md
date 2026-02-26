@@ -222,6 +222,32 @@
 
 **Consequences:** iOS EAS submit for the `production` profile depends on the configured App Store Connect app ID in repo config. If the App Store Connect app record is recreated under a different Apple app ID, `apps/mobile/eas.json` must be updated.
 
+### [2026-02-25] Manual Transporter upload fallback when EAS submit scheduling does not deliver to Apple
+
+**Decision:** Use Apple Transporter as the fallback upload path when EAS Submit schedules an iOS submission but the build does not appear in App Store Connect within a reasonable window, and verify Apple receipt directly before waiting longer.
+
+**Options considered:**
+1. Keep waiting after EAS says "Scheduled iOS submission" -- low effort, but ambiguous and can waste review/testing time
+2. Retry EAS submit and then verify App Store Connect receipt quickly -- good first step but still subject to EAS submit transport issues
+3. Upload the generated IPA manually via Transporter (chosen fallback) -- reliable Apple-native upload path, manual step
+
+**Rationale:** In this release setup, EAS submit jobs were scheduled successfully, but Apple App Store Connect showed no received builds for the app. Manual Transporter upload of the same IPA delivered immediately and unblocked TestFlight processing.
+
+**Consequences:** "Submission scheduled" on EAS is not treated as completion. Release ops should verify the build appears in App Store Connect/TestFlight (or via App Store Connect API) before waiting on processing. Transporter is the preferred fallback when EAS submit transport is unreliable.
+
+### [2026-02-25] EAS production `EXPO_PUBLIC_*` vars are required for store builds
+
+**Decision:** Treat EAS production environment variables (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_STREAM_API_KEY`, etc.) as mandatory release configuration for TestFlight/App Store builds and validate runtime sign-in before inviting testers.
+
+**Options considered:**
+1. Rely on local `.env` during development and assume release builds will be configured later -- fast initial setup, but easy to miss and ships placeholder config
+2. Configure EAS production vars before first store build (preferred process)
+3. Ship a first TestFlight build without EAS vars and use it only to validate signing/upload pipeline (what happened)
+
+**Rationale:** The first TestFlight build (`1.0.0 (2)`) installed successfully but failed sign-in with `Supabase config is still using placeholder values.` because EAS production env vars were not configured. Expo/EAS builds do not automatically use local `.env` values.
+
+**Consequences:** A new iOS build is required after configuring EAS production env vars; the current `1.0.0 (2)` build remains useful only for verifying signing/upload/TestFlight plumbing. Release checklists and plans now explicitly track EAS production runtime env var configuration.
+
 ## Pending Decisions
 
 - **Notification delivery providers** -- Which push notification service (Expo Push, FCM, APNs) and email provider (Resend, SendGrid) to use for `dispatch_notifications`.

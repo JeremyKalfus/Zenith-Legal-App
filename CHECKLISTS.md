@@ -63,6 +63,7 @@
 - [ ] iOS Distribution Certificate + Provisioning Profile exist in EAS credentials for the production bundle ID.
 - [ ] iOS APNs key configured in EAS credentials if standalone/TestFlight push notifications are required.
 - [ ] Store submission path decided/tested: EAS submit credentials configured (App Store Connect API key, Google Play service account) or manual upload procedure documented.
+- [ ] EAS production mobile runtime vars configured (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_STREAM_API_KEY`) and verified in a store build.
 - [ ] App Store Connect export compliance + app privacy questionnaires completed and consistent with runtime behavior.
 - [ ] Google Play Data safety / content rating / app content declarations completed and consistent with runtime behavior.
 - [ ] All edge functions deployed to target environment.
@@ -87,4 +88,7 @@
 - [ ] Google Play service account configured for `eas submit`.
 - [x] EAS production build artifacts generated (iOS IPA + Android AAB).
 - [x] iOS EAS submission scheduled to App Store Connect/TestFlight.
+- [x] Manual Transporter upload fallback used successfully after EAS submit scheduling did not surface a build in App Store Connect.
+- [x] App Store Connect/TestFlight shows iOS build `1.0.0 (2)` processed.
+- [ ] TestFlight runtime sign-in validated (current `1.0.0 (2)` build fails with placeholder Supabase config due missing EAS production env vars).
 - [ ] App Store Connect / Play Console metadata and compliance forms completed.

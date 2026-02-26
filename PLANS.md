@@ -27,6 +27,7 @@
 - [ ] Android `eas submit` / Play Console integration credential (Google Play service account)
 - [x] iOS APNs key + App Store Connect API key configured in EAS
 - [x] First store-distribution build artifacts generated successfully (IPA + AAB via EAS production builds)
+- [ ] EAS production runtime env vars configured and validated in TestFlight/Play builds (current iOS build uses placeholder Supabase config)
 
 ## Prioritized Work Queue
 
@@ -39,7 +40,9 @@
 
 3. **Observability wiring** -- Sentry DSN and PostHog key integration points are defined but not connected.
 4. **Admin README** -- Replace default Next.js boilerplate README with project-specific documentation.
-5. **Store submission configuration + metadata** -- Configure APNs key + `eas submit` credentials (or document manual upload path) and complete App Store Connect / Play Console metadata/compliance forms.
+5. **Store submission configuration + metadata** -- Finish Android submit setup (Google Play service account), document manual Transporter fallback for iOS uploads, and complete App Store Connect / Play Console metadata/compliance forms.
+6. **Shrink+center icon logo** -- Adjust the app icon/logo artwork so the mark is smaller and centered consistently for app icon/store presentation.
+7. **Add feature that allows staff to set user-based banner display** -- Add staff-configurable banner visibility/settings targeted per user (not only global banner behavior).
 
 ## Blockers and Dependencies
 
@@ -64,11 +67,16 @@
   - Android build `3c84ffe0-aa34-444e-8f52-cc43bef37bd4` (finished, AAB generated)
 - iOS submission initiated:
   - EAS submission `25b4cdb9-7d8a-4b4a-af49-8dcf53994ff0` scheduled to App Store Connect after `ascAppId` workaround
+- Manual iOS upload fallback:
+  - Transporter upload delivered IPA to App Store Connect successfully (build upload `1.0.0 (2)` now processed in TestFlight)
+- Runtime validation finding:
+  - TestFlight sign-in fails with `Supabase config is still using placeholder values.` because EAS production `EXPO_PUBLIC_*` vars were not configured before the build
 - Remaining release operations before store submissions:
+  - Configure EAS production mobile runtime env vars and rebuild iOS (and later Android) for real sign-in / backend connectivity
   - Configure Google Play service account for `eas submit` (or use manual Android upload)
   - Complete store metadata/compliance forms in App Store Connect and Play Console
 
-## Next 4 Tasks
+## Next 6 Tasks
 
 ### 1. Finish notification dispatch (email provider + processor automation)
 
@@ -98,7 +106,16 @@
 - Core onboarding/appointment/messaging events are tracked in PostHog.
 - `npm run verify` passes.
 
-### 4. Complete store submission + push credential setup
+### 4. Configure EAS production env vars + rebuild mobile store builds
+
+**Scope:** Add production EAS `EXPO_PUBLIC_*` variables (Supabase URL/anon key, Stream API key, and support contact values), rebuild iOS for TestFlight (and Android when ready), and verify sign-in works against the real backend.
+
+**Verification:**
+- EAS `production` environment contains real values for `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, and `EXPO_PUBLIC_STREAM_API_KEY`.
+- New TestFlight build installs and signs in successfully (no placeholder Supabase config error).
+- Android store build generated with the same production runtime config values.
+
+### 5. Complete store submission + push credential setup
 
 **Scope:** Finish the remaining mobile release operational work after signing/build baseline setup: configure Android `eas submit` credentials (or document a manual Android upload path), monitor iOS TestFlight processing, and complete App Store Connect / Play Console metadata/compliance configuration.
 
@@ -107,3 +124,11 @@
 - `eas submit -p android --profile production` uploads to Play Internal Testing (or AAB manually uploaded successfully).
 - Standalone/TestFlight iOS push notifications tested after APNs key setup (now configured).
 - Store metadata/compliance forms complete in both store consoles.
+
+### 6. Shrink+center icon logo and add staff user-based banner display control
+
+**Scope:** (a) Update the app/logo icon artwork to be visually smaller and centered in its container/assets, and (b) implement a staff-facing feature to configure banner display per user.
+
+**Verification:**
+- Updated icon/logo renders centered with correct padding in target app surfaces/assets.
+- Staff can set banner display state for a specific user and candidate app reflects the user-specific banner setting.
