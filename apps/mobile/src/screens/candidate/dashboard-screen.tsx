@@ -7,6 +7,7 @@ import { useAuth } from '../../context/auth-context';
 import type { CandidateFirmAssignment } from '../../types/domain';
 import { uiColors } from '../../theme/colors';
 import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
+import { getFirmStatusBadgeColors } from '../../features/firm-status-badge';
 
 async function extractFunctionInvokeErrorMessage(error: unknown, data: unknown): Promise<string> {
   if (typeof data === 'object' && data && 'error' in data) {
@@ -186,63 +187,86 @@ export function DashboardScreen({
           <Text style={styles.body}>Your recruiter will assign firms soon.</Text>
         </View>
       ) : (
-        sortedAssignments.map((assignment) => (
-          <View key={assignment.id} style={styles.card}>
-            <Text style={styles.firmName}>{assignment.firms.name}</Text>
-            <Text style={styles.status}>{assignment.status_enum}</Text>
-            {assignment.status_enum === 'Waiting on your authorization to contact/submit' ||
-            assignment.status_enum === 'Authorized, will submit soon' ? (
-              <View style={styles.authRow}>
-                {assignment.status_enum === 'Waiting on your authorization to contact/submit' ? (
-                  <Pressable
-                    style={interactivePressableStyle({
-                      base: styles.authorizeButton,
-                      disabled: busyAssignmentId === assignment.id,
-                      disabledStyle: styles.buttonDisabled,
-                      hoverStyle: sharedPressableFeedback.hover,
-                      focusStyle: sharedPressableFeedback.focus,
-                      pressedStyle: sharedPressableFeedback.pressed,
-                    })}
-                    disabled={busyAssignmentId === assignment.id}
-                    onPress={() => {
-                      void handleAuthorizationDecision(assignment.id, 'authorized');
-                    }}
-                  >
-                    <Text style={styles.authorizeText}>
-                      {busyAssignmentId === assignment.id ? 'Saving...' : 'Authorize'}
-                    </Text>
-                  </Pressable>
-                ) : (
-                  <View style={[styles.authorizeButton, styles.authorizedBadge, styles.buttonDisabled]}>
-                    <Text style={styles.authorizeText}>Authorized</Text>
-                  </View>
-                )}
-                <Pressable
-                  style={interactivePressableStyle({
-                    base: styles.declineButton,
-                    disabled: busyAssignmentId === assignment.id,
-                    disabledStyle: styles.buttonDisabled,
-                    hoverStyle: sharedPressableFeedback.hover,
-                    focusStyle: sharedPressableFeedback.focus,
-                    pressedStyle: sharedPressableFeedback.pressed,
-                  })}
-                  disabled={busyAssignmentId === assignment.id}
-                  onPress={() => {
-                    void handleAuthorizationDecision(assignment.id, 'declined');
-                  }}
+        sortedAssignments.map((assignment) => {
+          const statusBadgeColors = getFirmStatusBadgeColors(assignment.status_enum);
+
+          return (
+            <View key={assignment.id} style={styles.card}>
+                <Text style={styles.firmName}>{assignment.firms.name}</Text>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    {
+                      backgroundColor: statusBadgeColors.backgroundColor,
+                      borderColor: statusBadgeColors.borderColor,
+                    },
+                  ]}
                 >
-                  <Text style={styles.declineText}>
-                    {busyAssignmentId === assignment.id
-                      ? 'Saving...'
-                      : assignment.status_enum === 'Authorized, will submit soon'
-                        ? 'Cancel'
-                        : 'Decline'}
+                  <Text
+                    style={[
+                      styles.statusBadgeText,
+                      {
+                        color: statusBadgeColors.textColor,
+                      },
+                    ]}
+                  >
+                    {assignment.status_enum}
                   </Text>
-                </Pressable>
-              </View>
-            ) : null}
-          </View>
-        ))
+                </View>
+                {assignment.status_enum === 'Waiting on your authorization to contact/submit' ||
+                assignment.status_enum === 'Authorized, will submit soon' ? (
+                  <View style={styles.authRow}>
+                    {assignment.status_enum === 'Waiting on your authorization to contact/submit' ? (
+                      <Pressable
+                        style={interactivePressableStyle({
+                          base: styles.authorizeButton,
+                          disabled: busyAssignmentId === assignment.id,
+                          disabledStyle: styles.buttonDisabled,
+                          hoverStyle: sharedPressableFeedback.hover,
+                          focusStyle: sharedPressableFeedback.focus,
+                          pressedStyle: sharedPressableFeedback.pressed,
+                        })}
+                        disabled={busyAssignmentId === assignment.id}
+                        onPress={() => {
+                          void handleAuthorizationDecision(assignment.id, 'authorized');
+                        }}
+                      >
+                        <Text style={styles.authorizeText}>
+                          {busyAssignmentId === assignment.id ? 'Saving...' : 'Authorize'}
+                        </Text>
+                      </Pressable>
+                    ) : (
+                      <View style={[styles.authorizeButton, styles.authorizedBadge, styles.buttonDisabled]}>
+                        <Text style={styles.authorizeText}>Authorized</Text>
+                      </View>
+                    )}
+                    <Pressable
+                      style={interactivePressableStyle({
+                        base: styles.declineButton,
+                        disabled: busyAssignmentId === assignment.id,
+                        disabledStyle: styles.buttonDisabled,
+                        hoverStyle: sharedPressableFeedback.hover,
+                        focusStyle: sharedPressableFeedback.focus,
+                        pressedStyle: sharedPressableFeedback.pressed,
+                      })}
+                      disabled={busyAssignmentId === assignment.id}
+                      onPress={() => {
+                        void handleAuthorizationDecision(assignment.id, 'declined');
+                      }}
+                    >
+                      <Text style={styles.declineText}>
+                        {busyAssignmentId === assignment.id
+                          ? 'Saving...'
+                          : assignment.status_enum === 'Authorized, will submit soon'
+                            ? 'Cancel'
+                            : 'Decline'}
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+            </View>
+          );
+        })
       )}
     </ScreenShell>
   );
@@ -325,9 +349,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
   },
-  status: {
-    color: uiColors.success,
-    marginTop: 6,
+  statusBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   title: {
     color: uiColors.textPrimary,

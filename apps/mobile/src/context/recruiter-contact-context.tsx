@@ -1,7 +1,9 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { env } from '../config/env';
 import { supabase } from '../lib/supabase';
 import type { RecruiterContact } from '../types/domain';
+import { useAuth } from './auth-context';
+import { resolveRecruiterContact } from '../features/recruiter-contact-resolver';
 
 const defaultContact: RecruiterContact = {
   phone: env.supportPhone,
@@ -22,30 +24,59 @@ export function RecruiterContactProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const { profile, session } = useAuth();
   const [contact, setContact] = useState<RecruiterContact>(defaultContact);
 
-  const refresh = async () => {
-    const { data } = await supabase
+  const refresh = useCallback(async () => {
+    const candidateUserId =
+      profile?.role === 'candidate' ? profile.id : null;
+
+    const { data: globalData } = await supabase
       .from('recruiter_contact_config')
       .select('phone,email')
       .eq('is_active', true)
       .maybeSingle();
 
-    if (data?.phone && data?.email) {
-      setContact({ phone: data.phone, email: data.email });
+    const globalContact =
+      globalData?.phone && globalData?.email
+        ? { phone: globalData.phone, email: globalData.email }
+        : null;
+
+    let candidateOverride: RecruiterContact | null = null;
+    if (candidateUserId) {
+      const { data: overrideData } = await supabase
+        .from('candidate_recruiter_contact_overrides')
+        .select('phone,email')
+        .eq('candidate_user_id', candidateUserId)
+        .maybeSingle();
+
+      if (overrideData?.phone && overrideData?.email) {
+        candidateOverride = {
+          phone: overrideData.phone,
+          email: overrideData.email,
+        };
+      }
     }
-  };
+
+    setContact(
+      resolveRecruiterContact({
+        defaultContact,
+        globalContact,
+        candidateOverride,
+      }),
+    );
+  }, [profile?.id, profile?.role]);
 
   useEffect(() => {
-    refresh();
-  }, []);
+    void refresh();
+  }, [refresh, profile?.id, profile?.role, session?.user?.id]);
 
   const value = useMemo(
     () => ({
       contact,
       refresh,
     }),
-    [contact],
+    [contact, refresh],
   );
 
   return (

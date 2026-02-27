@@ -16,6 +16,7 @@ import { getFunctionErrorMessage } from '@/lib/function-error';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
+import { getFirmStatusBadgeClasses } from '@/features/firm-status-badge';
 
 type CandidateListItem = {
   id: string;
@@ -554,6 +555,11 @@ function AssignmentCard({
           <p className="font-semibold text-slate-900">
             {firm?.name ?? 'Unknown firm'}
           </p>
+          <span
+            className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${getFirmStatusBadgeClasses(pendingStatus)}`}
+          >
+            {pendingStatus}
+          </span>
           <p className="text-xs text-slate-500">
             Updated {new Date(assignment.status_updated_at).toLocaleString()}
           </p>

@@ -355,3 +355,29 @@
 **Rationale:** Users in Expo need concrete event creation in native calendar apps, not only backend provider records. Device sync closes that gap immediately while retaining existing provider connection state.
 
 **Consequences:** Appointment screen data now triggers `expo-calendar` upsert/delete behavior when a connected provider exists. Calendar access permission is requested in-app, and app config now includes the `expo-calendar` plugin permission text.
+
+### [2026-02-27] Per-candidate recruiter banner contact overrides with global fallback
+
+**Decision:** Add a dedicated table (`candidate_recruiter_contact_overrides`) and staff mobile controls to set/reset banner phone/email per candidate, with runtime precedence `candidate override -> global recruiter_contact_config -> env default`.
+
+**Options considered:**
+1. Keep global-only banner contact -- low complexity, but cannot support candidate-specific routing/preferences
+2. Add per-candidate overrides with explicit reset to default (chosen) -- slightly more schema/UI work, but fulfills targeted banner behavior cleanly
+3. Add full campaign/rules engine (priority/expiration/targeting) -- flexible, but unnecessary scope for current product need
+
+**Rationale:** Product requirement is candidate-specific banner contact edits by staff in the Candidates flow while preserving a safe global fallback path.
+
+**Consequences:** Candidates can now see personalized banner contact details where candidate context exists; staff can save or remove overrides in the mobile candidate management flow without affecting other candidates.
+
+### [2026-02-27] Semantic status badges for firm assignment listings
+
+**Decision:** Standardize firm-assignment status rendering with semantic badge colors across candidate mobile, staff mobile, and admin listing surfaces.
+
+**Options considered:**
+1. Leave status text unstyled -- minimal effort, poor scanability
+2. Color only positive/negative outcomes -- partial visual signal, weak pipeline clarity
+3. Apply semantic color mapping to all statuses (chosen) -- strongest readability and consistency across surfaces
+
+**Rationale:** Recruiters and candidates both need to quickly parse pipeline stage at a glance; consistent colors reduce cognitive load and status ambiguity.
+
+**Consequences:** All listing surfaces now share one palette (Waiting=amber, Authorized=teal, Submitted=blue, Interview=violet, Rejected=red, Offer=green), implemented via dedicated mobile/admin helper mappings.

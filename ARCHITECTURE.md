@@ -72,7 +72,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 
 ## Database Schema
 
-15 migrations in `supabase/migrations/`. Key tables:
+21 migrations in `supabase/migrations/`. Key tables:
 
 - `users_profile` -- User identity and role (candidate/staff)
 - `candidate_preferences` -- Cities, practice_areas (array, max 3), optional practice_area (legacy)
@@ -86,6 +86,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 - `audit_events` -- Immutable audit log
 - `support_data_requests` -- Candidate support requests
 - `recruiter_contact_config` -- Configurable recruiter phone/email for mobile banner
+- `candidate_recruiter_contact_overrides` -- Per-candidate recruiter banner phone/email overrides managed by staff
 
 All tables enforce Row Level Security. Staff-only mutations are routed through edge functions that call `assertStaff()`.
 
@@ -114,6 +115,14 @@ Staff candidate list flows (mobile `staff-candidates-screen` and admin `candidat
 ## Mobile Theme System
 
 The mobile app centralizes all UI colors in `apps/mobile/src/theme/colors.ts` via the `uiColors` object. This replaces inline hex color values with semantic tokens (`textPrimary`, `surface`, `border`, `error`, `link`, etc.). All screen-level `StyleSheet` definitions reference `uiColors.*` instead of hardcoded color strings.
+
+Firm status badges in mobile listings use semantic `uiColors` status tokens for each pipeline stage (`Waiting`, `Authorized`, `Submitted`, `Interview`, `Rejected`, `Offer`).
+
+## Recruiter Contact Banner Resolution (Mobile)
+
+- `RecruiterContactProvider` resolves contact info in precedence order: candidate override (`candidate_recruiter_contact_overrides`) → global active config (`recruiter_contact_config`) → env defaults (`EXPO_PUBLIC_RECRUITER_PHONE`/`EXPO_PUBLIC_RECRUITER_EMAIL`).
+- Candidate overrides are loaded only when the authenticated profile role is `candidate`.
+- Staff can set/reset candidate-specific overrides from `staff-candidate-firms-screen`; candidate banners render those values everywhere candidate context is available.
 
 ## Component Pattern: Custom Hook Extraction
 
