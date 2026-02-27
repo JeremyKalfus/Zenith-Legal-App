@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { AppointmentStatus } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
 import { formatAppointmentDateTime } from '../../lib/date-format';
@@ -18,16 +18,50 @@ type StaffAppointment = {
   candidate_name: string;
 };
 
+type CandidateOption = {
+  id: string;
+  name: string;
+};
+
+const APPOINTMENT_HIDE_AFTER_MS = 24 * 60 * 60 * 1000;
+
+function shouldHideExpiredAppointment(appointment: StaffAppointment): boolean {
+  if (appointment.status !== 'scheduled' && appointment.status !== 'declined') {
+    return false;
+  }
+
+  const endTimeMs = Date.parse(appointment.end_at_utc);
+  if (!Number.isFinite(endTimeMs)) {
+    return false;
+  }
+
+  return endTimeMs < Date.now() - APPOINTMENT_HIDE_AFTER_MS;
+}
+
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   pending: { bg: '#FEF3C7', text: '#92400E' },
   accepted: { bg: '#D1FAE5', text: '#065F46' },
+  scheduled: { bg: '#D1FAE5', text: '#065F46' },
   declined: { bg: '#FEE2E2', text: '#991B1B' },
   cancelled: { bg: '#F1F5F9', text: '#64748B' },
-  scheduled: { bg: '#DBEAFE', text: '#1E40AF' },
 };
 
 function useStaffAppointmentsScreen() {
   const [appointments, setAppointments] = useState<StaffAppointment[]>([]);
+  const [candidates, setCandidates] = useState<CandidateOption[]>([]);
+  const [selectedCandidateId, setSelectedCandidateId] = useState('');
+  const [createTitle, setCreateTitle] = useState('');
+  const [createDescription, setCreateDescription] = useState('');
+  const [createStartAtUtc, setCreateStartAtUtc] = useState(
+    new Date(Date.now() + 3600_000).toISOString(),
+  );
+  const [createEndAtUtc, setCreateEndAtUtc] = useState(
+    new Date(Date.now() + 7200_000).toISOString(),
+  );
+  const [createModality, setCreateModality] = useState<'virtual' | 'in_person'>('virtual');
+  const [createLocation, setCreateLocation] = useState('');
+  const [createVideoUrl, setCreateVideoUrl] = useState('');
+  const [creating, setCreating] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [reviewingId, setReviewingId] = useState<string | null>(null);
 
@@ -64,13 +98,31 @@ function useStaffAppointmentsScreen() {
       };
     });
 
-    setAppointments(mapped);
+    setAppointments(mapped.filter((appointment) => !shouldHideExpiredAppointment(appointment)));
     setStatusMessage('');
+  }, []);
+
+  const loadCandidates = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('users_profile')
+      .select('id,name')
+      .eq('role', 'candidate')
+      .order('name', { ascending: true });
+
+    if (error) {
+      setStatusMessage(error.message);
+      return;
+    }
+
+    const mapped = (data ?? []) as CandidateOption[];
+    setCandidates(mapped);
+    setSelectedCandidateId((current) => current || mapped[0]?.id || '');
   }, []);
 
   useEffect(() => {
     void loadAppointments();
-  }, [loadAppointments]);
+    void loadCandidates();
+  }, [loadAppointments, loadCandidates]);
 
   const handleReview = useCallback(
     async (appointmentId: string, decision: 'accepted' | 'declined') => {
@@ -89,7 +141,7 @@ function useStaffAppointmentsScreen() {
           return;
         }
 
-        setStatusMessage(`Appointment ${decision}.`);
+        setStatusMessage(decision === 'accepted' ? 'Appointment scheduled.' : 'Appointment declined.');
         await loadAppointments();
       } catch (err) {
         setStatusMessage((err as Error).message);
@@ -100,20 +152,234 @@ function useStaffAppointmentsScreen() {
     [loadAppointments],
   );
 
+  const handleCreateAppointment = useCallback(async () => {
+    if (!selectedCandidateId) {
+      setStatusMessage('Select a candidate before scheduling.');
+      return;
+    }
+    if (!createTitle.trim()) {
+      setStatusMessage('Appointment title is required.');
+      return;
+    }
+    if (Date.parse(createEndAtUtc) <= Date.parse(createStartAtUtc)) {
+      setStatusMessage('End time must be after start time.');
+      return;
+    }
+
+    setCreating(true);
+    setStatusMessage('');
+
+    try {
+      await ensureValidSession();
+      const { error } = await supabase.functions.invoke('schedule_or_update_appointment', {
+        body: {
+          candidateUserId: selectedCandidateId,
+          title: createTitle.trim(),
+          description: createDescription.trim() || undefined,
+          modality: createModality,
+          locationText: createModality === 'in_person' ? createLocation.trim() || undefined : undefined,
+          videoUrl: createModality === 'virtual' ? createVideoUrl.trim() || undefined : undefined,
+          startAtUtc: createStartAtUtc,
+          endAtUtc: createEndAtUtc,
+          timezoneLabel: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
+          status: 'scheduled',
+        },
+      });
+
+      if (error) {
+        setStatusMessage(error.message);
+        return;
+      }
+
+      setStatusMessage('Appointment scheduled.');
+      setCreateTitle('');
+      setCreateDescription('');
+      setCreateStartAtUtc(new Date(Date.now() + 3600_000).toISOString());
+      setCreateEndAtUtc(new Date(Date.now() + 7200_000).toISOString());
+      setCreateLocation('');
+      setCreateVideoUrl('');
+      await loadAppointments();
+    } catch (err) {
+      setStatusMessage((err as Error).message);
+    } finally {
+      setCreating(false);
+    }
+  }, [
+    createDescription,
+    createEndAtUtc,
+    createLocation,
+    createModality,
+    createStartAtUtc,
+    createTitle,
+    createVideoUrl,
+    loadAppointments,
+    selectedCandidateId,
+  ]);
+
   const pending = appointments.filter((a) => a.status === 'pending');
   const others = appointments.filter((a) => a.status !== 'pending');
 
-  return { pending, others, statusMessage, reviewingId, handleReview };
+  return {
+    pending,
+    others,
+    candidates,
+    selectedCandidateId,
+    setSelectedCandidateId,
+    createTitle,
+    setCreateTitle,
+    createDescription,
+    setCreateDescription,
+    createStartAtUtc,
+    setCreateStartAtUtc,
+    createEndAtUtc,
+    setCreateEndAtUtc,
+    createModality,
+    setCreateModality,
+    createLocation,
+    setCreateLocation,
+    createVideoUrl,
+    setCreateVideoUrl,
+    creating,
+    statusMessage,
+    reviewingId,
+    handleReview,
+    handleCreateAppointment,
+  };
 }
 
 export function StaffAppointmentsScreen() {
-  const { pending, others, statusMessage, reviewingId, handleReview } =
+  const {
+    pending,
+    others,
+    candidates,
+    selectedCandidateId,
+    setSelectedCandidateId,
+    createTitle,
+    setCreateTitle,
+    createDescription,
+    setCreateDescription,
+    createStartAtUtc,
+    setCreateStartAtUtc,
+    createEndAtUtc,
+    setCreateEndAtUtc,
+    createModality,
+    setCreateModality,
+    createLocation,
+    setCreateLocation,
+    createVideoUrl,
+    setCreateVideoUrl,
+    creating,
+    statusMessage,
+    reviewingId,
+    handleReview,
+    handleCreateAppointment,
+  } =
     useStaffAppointmentsScreen();
 
   return (
     <ScreenShell>
       <Text style={styles.title}>Appointment Review</Text>
       <Text style={styles.body}>Review and approve candidate appointment requests.</Text>
+
+      <View style={styles.createCard}>
+        <Text style={styles.sectionHeader}>Schedule for Candidate</Text>
+        <View style={styles.candidateChipRow}>
+          {candidates.map((candidate) => (
+            <Pressable
+              key={candidate.id}
+              style={[
+                styles.candidateChip,
+                selectedCandidateId === candidate.id ? styles.candidateChipSelected : null,
+              ]}
+              onPress={() => setSelectedCandidateId(candidate.id)}
+            >
+              <Text
+                style={[
+                  styles.candidateChipText,
+                  selectedCandidateId === candidate.id ? styles.candidateChipTextSelected : null,
+                ]}
+              >
+                {candidate.name}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Title"
+          value={createTitle}
+          onChangeText={setCreateTitle}
+        />
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          placeholder="Description (optional)"
+          value={createDescription}
+          onChangeText={setCreateDescription}
+          multiline
+        />
+        <View style={styles.modalityRow}>
+          <Pressable
+            style={[styles.modeChip, createModality === 'virtual' ? styles.modeChipSelected : null]}
+            onPress={() => setCreateModality('virtual')}
+          >
+            <Text
+              style={createModality === 'virtual' ? styles.modeChipTextSelected : styles.modeChipText}
+            >
+              Virtual
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.modeChip, createModality === 'in_person' ? styles.modeChipSelected : null]}
+            onPress={() => setCreateModality('in_person')}
+          >
+            <Text
+              style={createModality === 'in_person' ? styles.modeChipTextSelected : styles.modeChipText}
+            >
+              In-person
+            </Text>
+          </Pressable>
+        </View>
+        <TextInput
+          style={styles.input}
+          placeholder="Start UTC (ISO, e.g. 2026-03-01T14:00:00.000Z)"
+          value={createStartAtUtc}
+          onChangeText={setCreateStartAtUtc}
+          autoCapitalize="none"
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="End UTC (ISO, e.g. 2026-03-01T15:00:00.000Z)"
+          value={createEndAtUtc}
+          onChangeText={setCreateEndAtUtc}
+          autoCapitalize="none"
+        />
+        {createModality === 'in_person' ? (
+          <TextInput
+            style={styles.input}
+            placeholder="Location (optional)"
+            value={createLocation}
+            onChangeText={setCreateLocation}
+          />
+        ) : null}
+        {createModality === 'virtual' ? (
+          <TextInput
+            style={styles.input}
+            placeholder="Video URL (optional)"
+            value={createVideoUrl}
+            onChangeText={setCreateVideoUrl}
+            autoCapitalize="none"
+          />
+        ) : null}
+        <Pressable
+          style={[styles.actionButton, styles.acceptButton, creating ? styles.disabledButton : null]}
+          onPress={() => void handleCreateAppointment()}
+          disabled={creating}
+        >
+          <Text style={styles.acceptButtonText}>
+            {creating ? 'Scheduling...' : 'Schedule Appointment'}
+          </Text>
+        </Pressable>
+      </View>
 
       {statusMessage ? (
         <Text style={styles.statusMessage}>{statusMessage}</Text>
@@ -222,6 +488,73 @@ const styles = StyleSheet.create({
   body: {
     color: '#475569',
   },
+  createCard: {
+    backgroundColor: '#ffffff',
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+    padding: 12,
+  },
+  candidateChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  candidateChip: {
+    borderColor: '#CBD5E1',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  candidateChipSelected: {
+    backgroundColor: '#DBEAFE',
+    borderColor: '#2563EB',
+  },
+  candidateChipText: {
+    color: '#1E293B',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  candidateChipTextSelected: {
+    color: '#1D4ED8',
+  },
+  input: {
+    borderColor: '#CBD5E1',
+    borderRadius: 8,
+    borderWidth: 1,
+    color: '#0F172A',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  textArea: {
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  modalityRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  modeChip: {
+    borderColor: '#CBD5E1',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  modeChipSelected: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#16A34A',
+  },
+  modeChipText: {
+    color: '#334155',
+    fontWeight: '600',
+  },
+  modeChipTextSelected: {
+    color: '#166534',
+    fontWeight: '700',
+  },
   sectionHeader: {
     color: '#0F172A',
     fontSize: 16,
@@ -299,6 +632,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     flex: 1,
     padding: 10,
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
   acceptButton: {
     backgroundColor: '#059669',

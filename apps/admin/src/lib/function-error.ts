@@ -10,7 +10,7 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   firm_not_found: 'The selected firm could not be found.',
   firm_inactive: 'That firm is inactive and cannot be assigned.',
   appointment_not_found: 'That appointment could not be found. Refresh and try again.',
-  appointment_conflict: 'Accepting this appointment would create a scheduling conflict.',
+  appointment_conflict: 'Scheduling this appointment would create a scheduling conflict.',
   invalid_status_transition: 'This appointment cannot be reviewed in its current state.',
   status_update_failed: 'Unable to update the status. Please try again.',
 };

@@ -9,7 +9,7 @@
 - [x] Admin operations dashboard skeleton
 - [x] Edge function auth fix (getUser with explicit JWT + verify_jwt=false)
 - [x] Appointment creation and viewing for candidates
-- [x] Staff appointment review workflow (pending/accepted/declined, edge function, mobile + admin UI)
+- [x] Staff appointment review workflow (pending/scheduled/declined, edge function, mobile + admin UI)
 - [x] Admin appointment management (accept/decline in dashboard)
 - [x] Error handling standardization (shared `getFunctionErrorMessage` utility; response-body extraction via `error.context` / `Response.clone()`)
 - [x] Test coverage expansion (41 tests across 6 files)
@@ -20,6 +20,10 @@
 - [x] Candidate dashboard authorization UX semantics (waiting decline deletes assignment; authorized decline labeled cancel)
 - [x] Candidate self-service in-app account deletion flow (Profile screen + `delete_my_account` edge function)
 - [x] Push notification dispatch queue processor (Expo Push API send + queued delivery status updates)
+- [x] Staff-created appointment scheduling for candidate accounts (mobile + admin)
+- [x] Appointment reminder queue timing support (`notification_deliveries.send_after_utc`, 15-minute push reminders)
+- [x] Calendar sync baseline (Google API sync + Apple ICS link sync records per appointment/provider/user)
+- [x] Appointment retention UX rule (scheduled/declined hidden from candidate/staff views 24h after end)
 - [x] Admin web staff messaging inbox + candidate deletion workflow (candidate-only hard delete)
 - [x] Candidate dashboard authorization UX semantics (waiting decline deletes assignment; authorized decline labeled cancel)
 - [x] Code quality pass: duplicate consolidation, theme centralization, hook extraction, edge function refactoring (desloppify strict 85.7 → 86.2)
@@ -34,8 +38,8 @@
 
 ### High Priority
 
-1. **Notification dispatch implementation (email provider + scheduling hardening)** -- Push queue processing is implemented via Expo Push API; email delivery provider integration and production scheduling/automation still need completion.
-2. **Calendar sync implementation** -- `connect_calendar_provider` edge function and schema tables exist; OAuth flows and event sync logic need completion.
+1. **Notification dispatch implementation (email provider + processor automation)** -- Push queue processing and delayed reminder support are implemented; email delivery provider integration and production scheduler automation still need completion.
+2. **Calendar sync hardening** -- Google/Apple sync wiring is implemented; production OAuth credential rollout and Apple pathway confirmation (ICS vs CalDAV) still need completion.
 
 ### Medium Priority
 
@@ -47,7 +51,7 @@
 
 ## Blockers and Dependencies
 
-- **Vendor secrets required** for: notification dispatch email provider (push via Expo Push API does not require a provider secret), calendar OAuth (Google/Microsoft client IDs), Sentry, PostHog. Stream Chat (`STREAM_API_KEY`, `STREAM_API_SECRET`) are set in Supabase edge function secrets for messaging.
+- **Vendor secrets required** for: notification dispatch email provider (push via Expo Push API does not require a provider secret), calendar OAuth (Google/Apple credentials depending final Apple path), Sentry, PostHog. Stream Chat (`STREAM_API_KEY`, `STREAM_API_SECRET`) are set in Supabase edge function secrets for messaging.
 - **Google Play service account required** for: automated Android `eas submit` uploads. (iOS APNs + App Store Connect API key are configured.)
 - **Staging Supabase project** needed before promoting beyond dev.
 
@@ -89,13 +93,13 @@
 - `notification_deliveries.status` updated to `'sent'` or `'failed'`.
 - Processor invocation is automated on a schedule (not manual-only).
 
-### 2. Wire calendar sync
+### 2. Harden calendar sync rollout
 
-**Scope:** Complete `connect_calendar_provider` with OAuth token exchange for Google/Microsoft calendars and implement appointment-to-event sync.
+**Scope:** Complete production credential rollout and provider-path hardening for the implemented calendar sync foundation (`connect_calendar_provider`, per-user event links, Google API sync, Apple ICS-link path).
 
 **Verification:**
-- Calendar connection persists OAuth tokens.
-- Accepted appointments appear in connected calendars.
+- Calendar connection persists provider tokens/connection data.
+- Scheduled appointments appear in connected calendars for candidate + staff participants.
 - `npm run verify` passes.
 
 ### 3. Observability wiring

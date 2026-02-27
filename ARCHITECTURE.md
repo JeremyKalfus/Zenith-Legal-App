@@ -54,18 +54,18 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 | `mobile_sign_in_with_identifier_password` | Public | Password sign-in |
 | `create_or_update_candidate_profile` | User JWT | Intake profile upsert |
 | `delete_my_account` | User JWT | Candidate self-service account deletion (hard delete auth user + cascaded app data; non-cascading refs nulled first) |
-| `schedule_or_update_appointment` | User JWT | Appointment CRUD |
+| `schedule_or_update_appointment` | User JWT | Appointment create/update for candidates and staff; normalizes accepted->scheduled status semantics, enqueues immediate notifications, 15-minute reminders, and calendar sync |
 | `authorize_firm_submission` | User JWT | Candidate authorizes/declines firm |
 | `chat_auth_bootstrap` | User JWT | Provisions Stream Chat token; candidates (and staff targeting a candidate) also get/create deterministic `candidate-<user_id>` channel. Staff can omit `user_id` to bootstrap inbox listing without creating/selecting a channel. Returns 404 if `users_profile` row missing (no fallback creation) |
-| `connect_calendar_provider` | User JWT | Calendar OAuth connection |
-| `staff_review_appointment` | Staff JWT | Accept/decline appointment requests (pending -> accepted/declined with overlap detection) |
+| `connect_calendar_provider` | User JWT | Connect Google/Apple calendar credentials/tokens for per-user appointment sync |
+| `staff_review_appointment` | Staff JWT | Review appointment requests (pending -> scheduled/declined with overlap detection), enqueue notifications/reminders, and trigger calendar sync |
 | `assign_firm_to_candidate` | Staff JWT | Assign firm to candidate |
 | `staff_update_assignment_status` | Staff JWT | Update assignment status |
 | `staff_unassign_firm_from_candidate` | Staff JWT | Remove firm assignment |
 | `staff_delete_user` | Staff JWT | Hard-delete candidate user accounts from admin workflow (candidate-only scope) |
 | `bulk_paste_ingest_firms` | Staff JWT | Bulk firm data import |
 | `staff_handle_data_request` | Staff JWT | Process support/data requests |
-| `dispatch_notifications` | Internal | Dual-mode notification function: enqueue events into `notification_deliveries` or process queued push deliveries via Expo Push API (email provider integration pending). Internal helpers: `fetchTokensByUser`, `processSingleDelivery`, `revokeStaleTokens`, `claimQueuedPushDelivery`, `markDeliveryStatus` |
+| `dispatch_notifications` | Internal | Dual-mode notification function: enqueue events into `notification_deliveries` or process due queued push deliveries (`send_after_utc <= now`) via Expo Push API (email provider integration pending). Supports `appointment.reminder` events for 15-minute pre-meeting pushes. Internal helpers: `fetchTokensByUser`, `processSingleDelivery`, `revokeStaleTokens`, `claimQueuedPushDelivery`, `markDeliveryStatus` |
 | `process_chat_webhook` | Webhook signature | Handle Stream Chat events |
 
 **JWT handling:** All functions set `verify_jwt = false` in `supabase/config.toml` to bypass gateway-level JWT verification (required due to the project's JWT signing key format). Auth is enforced internally via `getCurrentUserId()` which extracts the Bearer token and calls `getUser(token)`.
@@ -80,9 +80,9 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 - `firms` -- Law firm directory
 - `candidate_firm_assignments` -- Staff-managed candidate-to-firm assignments
 - `candidate_authorizations` -- Candidate decisions on firm submissions
-- `appointments` / `appointment_participants` -- Scheduling with overlap constraints
-- `calendar_connections` / `calendar_event_links` -- External calendar sync
-- `notification_preferences` / `push_tokens` / `notification_deliveries` -- Notification pipeline
+- `appointments` / `appointment_participants` -- Scheduling with scheduled-overlap constraints and explicit participant tracking for candidate/staff reminders + calendar sync
+- `calendar_connections` / `calendar_event_links` -- External calendar sync (Google API sync + Apple ICS link sync), tracked per appointment+provider+user
+- `notification_preferences` / `push_tokens` / `notification_deliveries` -- Notification pipeline with delayed delivery support via `send_after_utc`
 - `audit_events` -- Immutable audit log
 - `support_data_requests` -- Candidate support requests
 - `recruiter_contact_config` -- Configurable recruiter phone/email for mobile banner

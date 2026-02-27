@@ -32,6 +32,21 @@ type Appointment = {
   candidate_name: string;
 };
 
+const APPOINTMENT_HIDE_AFTER_MS = 24 * 60 * 60 * 1000;
+
+function shouldHideExpiredAppointment(appointment: Appointment): boolean {
+  if (appointment.status !== 'scheduled' && appointment.status !== 'declined') {
+    return false;
+  }
+
+  const endTimeMs = Date.parse(appointment.end_at_utc);
+  if (!Number.isFinite(endTimeMs)) {
+    return false;
+  }
+
+  return endTimeMs < Date.now() - APPOINTMENT_HIDE_AFTER_MS;
+}
+
 type SupportRequest = {
   id: string;
   request_type: 'export' | 'delete';
@@ -59,6 +74,18 @@ function useOperationsDashboard() {
   const [contactEmail, setContactEmail] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const [newFirmName, setNewFirmName] = useState('');
+  const [appointmentCandidateId, setAppointmentCandidateId] = useState('');
+  const [appointmentTitle, setAppointmentTitle] = useState('');
+  const [appointmentDescription, setAppointmentDescription] = useState('');
+  const [appointmentModality, setAppointmentModality] = useState<'virtual' | 'in_person'>('virtual');
+  const [appointmentStartAtUtc, setAppointmentStartAtUtc] = useState(
+    () => new Date(Date.now() + 3600_000).toISOString(),
+  );
+  const [appointmentEndAtUtc, setAppointmentEndAtUtc] = useState(
+    () => new Date(Date.now() + 7200_000).toISOString(),
+  );
+  const [appointmentLocationText, setAppointmentLocationText] = useState('');
+  const [appointmentVideoUrl, setAppointmentVideoUrl] = useState('');
 
   const { register, handleSubmit, reset } = useForm<BulkPasteInput>({
     resolver: zodResolver(bulkPasteSchema),
@@ -93,6 +120,7 @@ function useOperationsDashboard() {
     if (candidateResult.data) {
       setCandidates(candidateResult.data as Candidate[]);
       setSelectedCandidateId((current) => current || candidateResult.data?.[0]?.id || '');
+      setAppointmentCandidateId((current) => current || candidateResult.data?.[0]?.id || '');
     }
 
     if (firmResult.data) {
@@ -112,8 +140,9 @@ function useOperationsDashboard() {
     }
 
     if (appointmentResult.data) {
-      setAppointments(
-        (appointmentResult.data as unknown as Array<Record<string, unknown>>).map((row) => {
+      const mappedAppointments: Appointment[] = (
+        appointmentResult.data as unknown as Array<Record<string, unknown>>
+      ).map((row) => {
           const candidate = row.candidate as { name: string } | Array<{ name: string }> | null;
           const name = Array.isArray(candidate) ? candidate[0]?.name ?? 'Unknown' : candidate?.name ?? 'Unknown';
           return {
@@ -125,8 +154,8 @@ function useOperationsDashboard() {
             status: row.status as string,
             candidate_name: name,
           };
-        }),
-      );
+        });
+      setAppointments(mappedAppointments.filter((appointment) => !shouldHideExpiredAppointment(appointment)));
     }
 
     if (calendarResult.data) {
@@ -235,12 +264,69 @@ function useOperationsDashboard() {
       if (error) {
         setStatusMessage(error.message);
       } else {
-        setStatusMessage(decision === 'accepted' ? 'Appointment accepted.' : 'Appointment declined.');
+        setStatusMessage(decision === 'accepted' ? 'Appointment scheduled.' : 'Appointment declined.');
         loadData();
       }
     },
     [loadData],
   );
+
+  const handleCreateAppointment = useCallback(async () => {
+    if (!appointmentCandidateId) {
+      setStatusMessage('Select a candidate before scheduling.');
+      return;
+    }
+    if (!appointmentTitle.trim()) {
+      setStatusMessage('Appointment title is required.');
+      return;
+    }
+    if (Date.parse(appointmentEndAtUtc) <= Date.parse(appointmentStartAtUtc)) {
+      setStatusMessage('End time must be after start time.');
+      return;
+    }
+
+    const timezoneLabel = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York';
+    const { error } = await supabaseClient.functions.invoke('schedule_or_update_appointment', {
+      body: {
+        candidateUserId: appointmentCandidateId,
+        title: appointmentTitle.trim(),
+        description: appointmentDescription.trim() || undefined,
+        modality: appointmentModality,
+        locationText:
+          appointmentModality === 'in_person' ? appointmentLocationText.trim() || undefined : undefined,
+        videoUrl: appointmentModality === 'virtual' ? appointmentVideoUrl.trim() || undefined : undefined,
+        startAtUtc: appointmentStartAtUtc,
+        endAtUtc: appointmentEndAtUtc,
+        timezoneLabel,
+        status: 'scheduled',
+      },
+    });
+
+    if (error) {
+      setStatusMessage(error.message);
+      return;
+    }
+
+    setStatusMessage('Appointment scheduled.');
+    setAppointmentTitle('');
+    setAppointmentDescription('');
+    setAppointmentModality('virtual');
+    setAppointmentStartAtUtc(new Date(Date.now() + 3600_000).toISOString());
+    setAppointmentEndAtUtc(new Date(Date.now() + 7200_000).toISOString());
+    setAppointmentLocationText('');
+    setAppointmentVideoUrl('');
+    loadData();
+  }, [
+    appointmentCandidateId,
+    appointmentDescription,
+    appointmentEndAtUtc,
+    appointmentLocationText,
+    appointmentModality,
+    appointmentStartAtUtc,
+    appointmentTitle,
+    appointmentVideoUrl,
+    loadData,
+  ]);
 
   const handleSaveContact = useCallback(async () => {
     const { error } = await supabaseClient
@@ -305,6 +391,22 @@ function useOperationsDashboard() {
     setContactPhone,
     contactEmail,
     setContactEmail,
+    appointmentCandidateId,
+    setAppointmentCandidateId,
+    appointmentTitle,
+    setAppointmentTitle,
+    appointmentDescription,
+    setAppointmentDescription,
+    appointmentModality,
+    setAppointmentModality,
+    appointmentStartAtUtc,
+    setAppointmentStartAtUtc,
+    appointmentEndAtUtc,
+    setAppointmentEndAtUtc,
+    appointmentLocationText,
+    setAppointmentLocationText,
+    appointmentVideoUrl,
+    setAppointmentVideoUrl,
     statusMessage,
     newFirmName,
     setNewFirmName,
@@ -316,6 +418,7 @@ function useOperationsDashboard() {
     handleAssignFirm,
     handleUpdateStatus,
     handleReviewAppointment,
+    handleCreateAppointment,
     handleSaveContact,
     handleProcessSupportRequest,
   };
@@ -506,9 +609,45 @@ function StatusUpdateCard({
 }
 
 function AppointmentManagementCard({
+  candidates,
+  appointmentCandidateId,
+  setAppointmentCandidateId,
+  appointmentTitle,
+  setAppointmentTitle,
+  appointmentDescription,
+  setAppointmentDescription,
+  appointmentModality,
+  setAppointmentModality,
+  appointmentStartAtUtc,
+  setAppointmentStartAtUtc,
+  appointmentEndAtUtc,
+  setAppointmentEndAtUtc,
+  appointmentLocationText,
+  setAppointmentLocationText,
+  appointmentVideoUrl,
+  setAppointmentVideoUrl,
+  handleCreateAppointment,
   appointments,
   handleReviewAppointment,
 }: {
+  candidates: Candidate[];
+  appointmentCandidateId: string;
+  setAppointmentCandidateId: (v: string) => void;
+  appointmentTitle: string;
+  setAppointmentTitle: (v: string) => void;
+  appointmentDescription: string;
+  setAppointmentDescription: (v: string) => void;
+  appointmentModality: 'virtual' | 'in_person';
+  setAppointmentModality: (v: 'virtual' | 'in_person') => void;
+  appointmentStartAtUtc: string;
+  setAppointmentStartAtUtc: (v: string) => void;
+  appointmentEndAtUtc: string;
+  setAppointmentEndAtUtc: (v: string) => void;
+  appointmentLocationText: string;
+  setAppointmentLocationText: (v: string) => void;
+  appointmentVideoUrl: string;
+  setAppointmentVideoUrl: (v: string) => void;
+  handleCreateAppointment: () => void;
   appointments: Appointment[];
   handleReviewAppointment: (id: string, decision: 'accepted' | 'declined') => void;
 }) {
@@ -518,7 +657,65 @@ function AppointmentManagementCard({
         <CardTitle>Appointment Management</CardTitle>
         <CardDescription>Review and manage candidate appointment requests.</CardDescription>
       </CardHeader>
-      <CardContent className="max-h-96 overflow-auto">
+      <CardContent className="max-h-96 space-y-4 overflow-auto">
+        <div className="space-y-2 rounded-md border border-slate-200 p-3">
+          <p className="text-xs font-medium uppercase text-slate-500">Schedule for candidate</p>
+          <select
+            className="h-10 w-full rounded-md border border-slate-300 px-2 text-sm"
+            value={appointmentCandidateId}
+            onChange={(event) => setAppointmentCandidateId(event.target.value)}
+          >
+            {candidates.map((candidate) => (
+              <option key={candidate.id} value={candidate.id}>
+                {candidate.name}
+              </option>
+            ))}
+          </select>
+          <Input
+            value={appointmentTitle}
+            onChange={(event) => setAppointmentTitle(event.target.value)}
+            placeholder="Title"
+          />
+          <Textarea
+            value={appointmentDescription}
+            onChange={(event) => setAppointmentDescription(event.target.value)}
+            placeholder="Description (optional)"
+            rows={3}
+          />
+          <select
+            className="h-10 w-full rounded-md border border-slate-300 px-2 text-sm"
+            value={appointmentModality}
+            onChange={(event) => setAppointmentModality(event.target.value as 'virtual' | 'in_person')}
+          >
+            <option value="virtual">Virtual</option>
+            <option value="in_person">In-person</option>
+          </select>
+          <Input
+            value={appointmentStartAtUtc}
+            onChange={(event) => setAppointmentStartAtUtc(event.target.value)}
+            placeholder="Start UTC (ISO)"
+          />
+          <Input
+            value={appointmentEndAtUtc}
+            onChange={(event) => setAppointmentEndAtUtc(event.target.value)}
+            placeholder="End UTC (ISO)"
+          />
+          {appointmentModality === 'in_person' ? (
+            <Input
+              value={appointmentLocationText}
+              onChange={(event) => setAppointmentLocationText(event.target.value)}
+              placeholder="Location (optional)"
+            />
+          ) : null}
+          {appointmentModality === 'virtual' ? (
+            <Input
+              value={appointmentVideoUrl}
+              onChange={(event) => setAppointmentVideoUrl(event.target.value)}
+              placeholder="Video URL (optional)"
+            />
+          ) : null}
+          <Button onClick={handleCreateAppointment}>Schedule Appointment</Button>
+        </div>
         <table className="w-full text-left">
           <thead>
             <tr className="text-xs uppercase text-slate-500">
@@ -544,11 +741,11 @@ function AppointmentManagementCard({
                 <td className="px-2 py-2">
                   <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
                     appointment.status === 'pending' ? 'bg-amber-100 text-amber-800' :
-                    appointment.status === 'accepted' ? 'bg-green-100 text-green-800' :
+                    (appointment.status === 'accepted' || appointment.status === 'scheduled') ? 'bg-green-100 text-green-800' :
                     appointment.status === 'declined' ? 'bg-red-100 text-red-800' :
                     'bg-slate-100 text-slate-600'
                   }`}>
-                    {appointment.status}
+                    {appointment.status === 'accepted' ? 'scheduled' : appointment.status}
                   </span>
                 </td>
                 <td className="px-2 py-2">
@@ -702,6 +899,22 @@ export function OperationsDashboard() {
     setContactPhone,
     contactEmail,
     setContactEmail,
+    appointmentCandidateId,
+    setAppointmentCandidateId,
+    appointmentTitle,
+    setAppointmentTitle,
+    appointmentDescription,
+    setAppointmentDescription,
+    appointmentModality,
+    setAppointmentModality,
+    appointmentStartAtUtc,
+    setAppointmentStartAtUtc,
+    appointmentEndAtUtc,
+    setAppointmentEndAtUtc,
+    appointmentLocationText,
+    setAppointmentLocationText,
+    appointmentVideoUrl,
+    setAppointmentVideoUrl,
     statusMessage,
     newFirmName,
     setNewFirmName,
@@ -713,6 +926,7 @@ export function OperationsDashboard() {
     handleAssignFirm,
     handleUpdateStatus,
     handleReviewAppointment,
+    handleCreateAppointment,
     handleSaveContact,
     handleProcessSupportRequest,
   } = useOperationsDashboard();
@@ -759,6 +973,24 @@ export function OperationsDashboard() {
       <AssignmentSnapshotCard assignmentRows={assignmentRows} />
 
       <AppointmentManagementCard
+        candidates={candidates}
+        appointmentCandidateId={appointmentCandidateId}
+        setAppointmentCandidateId={setAppointmentCandidateId}
+        appointmentTitle={appointmentTitle}
+        setAppointmentTitle={setAppointmentTitle}
+        appointmentDescription={appointmentDescription}
+        setAppointmentDescription={setAppointmentDescription}
+        appointmentModality={appointmentModality}
+        setAppointmentModality={setAppointmentModality}
+        appointmentStartAtUtc={appointmentStartAtUtc}
+        setAppointmentStartAtUtc={setAppointmentStartAtUtc}
+        appointmentEndAtUtc={appointmentEndAtUtc}
+        setAppointmentEndAtUtc={setAppointmentEndAtUtc}
+        appointmentLocationText={appointmentLocationText}
+        setAppointmentLocationText={setAppointmentLocationText}
+        appointmentVideoUrl={appointmentVideoUrl}
+        setAppointmentVideoUrl={setAppointmentVideoUrl}
+        handleCreateAppointment={handleCreateAppointment}
         appointments={appointments}
         handleReviewAppointment={handleReviewAppointment}
       />

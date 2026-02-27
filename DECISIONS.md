@@ -303,3 +303,29 @@
 - **Calendar OAuth providers** -- Implementation details for Google and Microsoft calendar sync in `connect_calendar_provider`.
 - **Staging environment setup** -- Dedicated Supabase project and Vercel preview deployment configuration.
 - **Mobile release strategy** -- TestFlight/Play Store rollout cadence, Google Play submit credential ownership, OTA update policy.
+
+### [2026-02-27] Use `scheduled` as canonical reviewed appointment status
+
+**Decision:** Treat `scheduled` as the canonical state for approved appointments and stop writing `accepted` as an active runtime status.
+
+**Options considered:**
+1. Keep `accepted` as canonical -- no migration work, but mismatched product language and duplicated semantics with `scheduled`
+2. Rename at UI layer only -- lower-risk display fix, but inconsistent backend data semantics
+3. Canonicalize to `scheduled` end-to-end (chosen) -- requires migration + logic updates, but removes semantic drift
+
+**Rationale:** Product language uses “scheduled,” and status-dependent logic (conflict checks, visibility windows, notifications) should key off a single canonical value.
+
+**Consequences:** Existing `accepted` rows are migrated to `scheduled`; overlap constraints now target `scheduled`; functions still accept legacy `accepted` input for backward compatibility but normalize writes to `scheduled`.
+
+### [2026-02-27] Delayed reminder queue and per-user calendar sync links
+
+**Decision:** Add delayed notification dispatch (`notification_deliveries.send_after_utc`) for 15-minute appointment reminders and persist calendar sync records per appointment+provider+user (`calendar_event_links`).
+
+**Options considered:**
+1. Fire reminders immediately and rely on client-local timers -- simple server logic, unreliable delivery
+2. Add delayed queue field + due-time processor filtering (chosen) -- predictable server-side reminder timing
+3. Add full external scheduler service first -- robust, but unnecessary complexity for current architecture
+
+**Rationale:** The existing notification queue can support reminder timing with a minimal schema change and no new service. Calendar links need to be user-specific (candidate and staff participants) to avoid collisions and support parallel provider connections.
+
+**Consequences:** Dispatch processor now sends only due push rows (`send_after_utc <= now`). Appointment writes/reviews enqueue reminder events. Calendar sync records are keyed by appointment/provider/user and currently support Google API sync plus Apple ICS-link representation.

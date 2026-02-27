@@ -3,10 +3,21 @@ import { errorResponse, jsonResponse } from '../_shared/http.ts';
 import { createAuthedClient, createServiceClient, getCurrentUserId } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
 
-const schema = z.object({
-  provider: z.enum(['google', 'microsoft']),
-  oauth_code: z.string().min(1),
-});
+const schema = z
+  .object({
+    provider: z.enum(['google', 'apple']),
+    oauth_code: z.string().min(1).optional(),
+    oauth_tokens: z.record(z.unknown()).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.oauth_code && !value.oauth_tokens) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'oauth_code or oauth_tokens is required',
+        path: ['oauth_code'],
+      });
+    }
+  });
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -21,10 +32,8 @@ Deno.serve(async (request) => {
 
     const payload = schema.parse(await request.json());
 
-    const digestBuffer = await crypto.subtle.digest(
-      'SHA-256',
-      new TextEncoder().encode(payload.oauth_code),
-    );
+    const oauthCode = payload.oauth_code ?? '';
+    const digestBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(oauthCode));
     const digest = Array.from(new Uint8Array(digestBuffer))
       .map((byte) => byte.toString(16).padStart(2, '0'))
       .join('');
@@ -32,7 +41,8 @@ Deno.serve(async (request) => {
     const tokenBlob = {
       provider: payload.provider,
       connected_at: new Date().toISOString(),
-      oauth_code_hash: digest,
+      oauth_code_hash: oauthCode ? digest : null,
+      oauth_tokens: payload.oauth_tokens ?? null,
     };
 
     const { data, error } = await client
@@ -43,7 +53,7 @@ Deno.serve(async (request) => {
           provider: payload.provider,
           oauth_tokens_encrypted: JSON.stringify(tokenBlob),
           sync_state: {
-            state: 'connected_pending_exchange',
+            state: payload.oauth_tokens ? 'connected' : 'connected_pending_exchange',
             last_attempt_at: new Date().toISOString(),
           },
         },

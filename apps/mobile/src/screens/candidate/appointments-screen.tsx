@@ -21,12 +21,27 @@ type AppointmentRecord = {
   status: AppointmentStatus;
 };
 
+const APPOINTMENT_HIDE_AFTER_MS = 24 * 60 * 60 * 1000;
+
+function shouldHideExpiredAppointment(appointment: AppointmentRecord): boolean {
+  if (appointment.status !== 'scheduled' && appointment.status !== 'declined') {
+    return false;
+  }
+
+  const endTimeMs = Date.parse(appointment.end_at_utc);
+  if (!Number.isFinite(endTimeMs)) {
+    return false;
+  }
+
+  return endTimeMs < Date.now() - APPOINTMENT_HIDE_AFTER_MS;
+}
+
 const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   pending: { bg: '#FEF3C7', text: '#92400E', label: 'Pending Review' },
-  accepted: { bg: '#D1FAE5', text: '#065F46', label: 'Accepted' },
+  accepted: { bg: '#D1FAE5', text: '#065F46', label: 'Scheduled' },
+  scheduled: { bg: '#D1FAE5', text: '#065F46', label: 'Scheduled' },
   declined: { bg: '#FEE2E2', text: '#991B1B', label: 'Declined' },
   cancelled: { bg: '#F1F5F9', text: '#64748B', label: 'Cancelled' },
-  scheduled: { bg: '#DBEAFE', text: '#1E40AF', label: 'Scheduled' },
 };
 
 function useAppointmentsScreen() {
@@ -66,7 +81,10 @@ function useAppointmentsScreen() {
       return;
     }
 
-    setAppointments((data as AppointmentRecord[]) ?? []);
+    const mapped = ((data as AppointmentRecord[]) ?? []).filter(
+      (appointment) => !shouldHideExpiredAppointment(appointment),
+    );
+    setAppointments(mapped);
     setServerMessage('');
   }, []);
 
@@ -303,7 +321,7 @@ export function AppointmentsScreen() {
   return (
     <ScreenShell>
       <Text style={styles.title}>Appointments</Text>
-      <Text style={styles.body}>Default reminders trigger at 24h and 1h.</Text>
+      <Text style={styles.body}>Push reminders trigger 15 minutes before scheduled meetings.</Text>
 
       <Pressable
         style={interactivePressableStyle({
