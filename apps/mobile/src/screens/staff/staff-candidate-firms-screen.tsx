@@ -37,6 +37,21 @@ const USER_ONLY_AUTHORIZED_STATUS = 'Authorized, will submit soon' as const;
 const STAFF_SETTABLE_FIRM_STATUSES = FIRM_STATUSES.filter(
   (status) => status !== USER_ONLY_AUTHORIZED_STATUS,
 ) as FirmStatus[];
+const BANNER_OVERRIDES_UNAVAILABLE_MESSAGE =
+  'Candidate-specific banner overrides are unavailable in this environment. Apply the latest Supabase migration and refresh schema cache.';
+
+function isMissingBannerOverrideTableError(error: { message?: string; code?: string } | null | undefined): boolean {
+  if (!error) {
+    return false;
+  }
+
+  const message = error.message?.toLowerCase() ?? '';
+  return (
+    error.code === 'PGRST205' ||
+    message.includes("could not find the table 'public.candidate_recruiter_contact_overrides'") ||
+    message.includes('candidate_recruiter_contact_overrides')
+  );
+}
 
 export function StaffCandidateFirmsScreen({
   candidate,
@@ -51,6 +66,8 @@ export function StaffCandidateFirmsScreen({
   const [defaultBannerEmail, setDefaultBannerEmail] = useState(env.supportEmail);
   const [bannerPhoneDraft, setBannerPhoneDraft] = useState(env.supportPhone);
   const [bannerEmailDraft, setBannerEmailDraft] = useState(env.supportEmail);
+  const [bannerOverridesAvailable, setBannerOverridesAvailable] = useState(true);
+  const [bannerNotice, setBannerNotice] = useState<string | null>(null);
   const [hasBannerOverride, setHasBannerOverride] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
@@ -78,19 +95,22 @@ export function StaffCandidateFirmsScreen({
       if (globalContactResult.error) {
         throw new Error(globalContactResult.error.message);
       }
-      if (overrideResult.error) {
+      const isOverrideTableMissing = isMissingBannerOverrideTableError(overrideResult.error);
+      if (overrideResult.error && !isOverrideTableMissing) {
         throw new Error(overrideResult.error.message);
       }
 
       const globalPhone = globalContactResult.data?.phone?.trim() || env.supportPhone;
       const globalEmail = globalContactResult.data?.email?.trim() || env.supportEmail;
-      const overridePhone = overrideResult.data?.phone?.trim();
-      const overrideEmail = overrideResult.data?.email?.trim();
+      const overridePhone = isOverrideTableMissing ? null : overrideResult.data?.phone?.trim();
+      const overrideEmail = isOverrideTableMissing ? null : overrideResult.data?.email?.trim();
 
       setAssignments(assignmentRows);
       setFirms(firmRows);
       setDefaultBannerPhone(globalPhone);
       setDefaultBannerEmail(globalEmail);
+      setBannerOverridesAvailable(!isOverrideTableMissing);
+      setBannerNotice(isOverrideTableMissing ? BANNER_OVERRIDES_UNAVAILABLE_MESSAGE : null);
       if (overridePhone && overrideEmail) {
         setBannerPhoneDraft(overridePhone);
         setBannerEmailDraft(overrideEmail);
@@ -203,6 +223,11 @@ export function StaffCandidateFirmsScreen({
   );
 
   const handleSaveBannerContact = useCallback(async () => {
+    if (!bannerOverridesAvailable) {
+      setMessage(BANNER_OVERRIDES_UNAVAILABLE_MESSAGE);
+      return;
+    }
+
     const phone = bannerPhoneDraft.trim();
     const email = bannerEmailDraft.trim().toLowerCase();
     if (!phone || !email) {
@@ -226,6 +251,11 @@ export function StaffCandidateFirmsScreen({
         );
 
       if (error) {
+        if (isMissingBannerOverrideTableError(error)) {
+          setBannerOverridesAvailable(false);
+          setBannerNotice(BANNER_OVERRIDES_UNAVAILABLE_MESSAGE);
+          throw new Error(BANNER_OVERRIDES_UNAVAILABLE_MESSAGE);
+        }
         throw new Error(error.message);
       }
 
@@ -236,9 +266,14 @@ export function StaffCandidateFirmsScreen({
     } finally {
       setBusyAction(null);
     }
-  }, [bannerEmailDraft, bannerPhoneDraft, candidate.id, loadData, profile?.id]);
+  }, [bannerEmailDraft, bannerOverridesAvailable, bannerPhoneDraft, candidate.id, loadData, profile?.id]);
 
   const handleResetBannerContact = useCallback(async () => {
+    if (!bannerOverridesAvailable) {
+      setMessage(BANNER_OVERRIDES_UNAVAILABLE_MESSAGE);
+      return;
+    }
+
     setBusyAction('banner:reset');
     setMessage(null);
     try {
@@ -248,6 +283,11 @@ export function StaffCandidateFirmsScreen({
         .eq('candidate_user_id', candidate.id);
 
       if (error) {
+        if (isMissingBannerOverrideTableError(error)) {
+          setBannerOverridesAvailable(false);
+          setBannerNotice(BANNER_OVERRIDES_UNAVAILABLE_MESSAGE);
+          throw new Error(BANNER_OVERRIDES_UNAVAILABLE_MESSAGE);
+        }
         throw new Error(error.message);
       }
 
@@ -258,7 +298,7 @@ export function StaffCandidateFirmsScreen({
     } finally {
       setBusyAction(null);
     }
-  }, [candidate.id, loadData]);
+  }, [bannerOverridesAvailable, candidate.id, loadData]);
 
   return (
     <ScreenShell showBanner={false}>
@@ -281,10 +321,12 @@ export function StaffCandidateFirmsScreen({
           <Text style={styles.bannerDefaultText}>
             Default: {defaultBannerPhone} • {defaultBannerEmail}
           </Text>
+          {bannerNotice ? <Text style={styles.bannerNotice}>{bannerNotice}</Text> : null}
           <TextInput
             style={styles.input}
             placeholder="Banner phone"
             placeholderTextColor="#94A3B8"
+            editable={bannerOverridesAvailable}
             value={bannerPhoneDraft}
             onChangeText={setBannerPhoneDraft}
           />
@@ -294,6 +336,7 @@ export function StaffCandidateFirmsScreen({
             placeholderTextColor="#94A3B8"
             keyboardType="email-address"
             autoCapitalize="none"
+            editable={bannerOverridesAvailable}
             value={bannerEmailDraft}
             onChangeText={setBannerEmailDraft}
           />
@@ -301,13 +344,13 @@ export function StaffCandidateFirmsScreen({
             <Pressable
               style={interactivePressableStyle({
                 base: styles.primaryButtonSmall,
-                disabled: busyAction !== null,
+                disabled: busyAction !== null || !bannerOverridesAvailable,
                 disabledStyle: styles.buttonDisabled,
                 hoverStyle: sharedPressableFeedback.hover,
                 focusStyle: sharedPressableFeedback.focus,
                 pressedStyle: sharedPressableFeedback.pressed,
               })}
-              disabled={busyAction !== null}
+              disabled={busyAction !== null || !bannerOverridesAvailable}
               onPress={() => void handleSaveBannerContact()}
             >
               <Text style={styles.primaryButtonSmallText}>
@@ -317,13 +360,13 @@ export function StaffCandidateFirmsScreen({
             <Pressable
               style={interactivePressableStyle({
                 base: styles.secondaryButtonSmall,
-                disabled: busyAction !== null || !hasBannerOverride,
+                disabled: busyAction !== null || !hasBannerOverride || !bannerOverridesAvailable,
                 disabledStyle: styles.buttonDisabled,
                 hoverStyle: sharedPressableFeedback.hover,
                 focusStyle: sharedPressableFeedback.focus,
                 pressedStyle: sharedPressableFeedback.pressed,
               })}
-              disabled={busyAction !== null || !hasBannerOverride}
+              disabled={busyAction !== null || !hasBannerOverride || !bannerOverridesAvailable}
               onPress={() => void handleResetBannerContact()}
             >
               <Text style={styles.secondaryButtonSmallText}>
@@ -589,6 +632,10 @@ const styles = StyleSheet.create({
   },
   bannerDefaultText: {
     color: '#64748B',
+    fontSize: 12,
+  },
+  bannerNotice: {
+    color: '#92400E',
     fontSize: 12,
   },
   bannerStatus: {
