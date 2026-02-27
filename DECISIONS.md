@@ -355,3 +355,15 @@
 **Rationale:** Users in Expo need concrete event creation in native calendar apps, not only backend provider records. Device sync closes that gap immediately while retaining existing provider connection state.
 
 **Consequences:** Appointment screen data now triggers `expo-calendar` upsert/delete behavior when a connected provider exists. Calendar access permission is requested in-app, and app config now includes the `expo-calendar` plugin permission text.
+
+### [2026-02-27] Split Google OAuth config by platform for production readiness
+
+**Decision:** Move Google OAuth config from a single env var to platform-specific client IDs (`web`, `ios`, `android`) with legacy fallback and clear Expo Go guardrails.
+
+**Options considered:**
+1. Keep one client ID for all platforms -- easiest setup, but brittle and causes redirect/client mismatch in production
+2. Use platform-specific IDs in app runtime (chosen) -- aligns with Google OAuth client model and Expo runtime differences
+
+**Rationale:** Real app deployment needs separate OAuth client registrations per platform. A single client ID path is error-prone across web/dev/native runtimes.
+
+**Consequences:** Calendar connect flow now selects client ID by platform and shows explicit error messaging when run in unsupported Expo Go context for Google OAuth.

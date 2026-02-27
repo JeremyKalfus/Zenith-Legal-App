@@ -95,7 +95,11 @@ All tables enforce Row Level Security. Staff-only mutations are routed through e
 - Google Calendar setup uses `expo-auth-session` (`AuthRequest` + PKCE + authorization code exchange) and sends tokens to `connect_calendar_provider`.
 - Apple setup is a one-tap connect path that stores provider state through `connect_calendar_provider`.
 - Connection status is read from `calendar_connections` (`provider`, `sync_state`, `updated_at`) with user-scoped RLS access.
-- Mobile Google OAuth client configuration is provided via `EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID`.
+- Mobile Google OAuth client configuration supports platform-specific IDs:
+  - `EXPO_PUBLIC_GOOGLE_OAUTH_WEB_CLIENT_ID`
+  - `EXPO_PUBLIC_GOOGLE_OAUTH_IOS_CLIENT_ID`
+  - `EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID`
+  - legacy fallback: `EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID`
 - Appointment screens run device-native calendar sync via `expo-calendar` (candidate + staff), creating/updating scheduled events and removing declined/cancelled events from device calendars when provider connection is enabled.
 
 ## Shared Package (`@zenith/shared`)

@@ -110,6 +110,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Mobile app exposes user-facing setup in Profile:
   - Google Calendar: OAuth authorization code flow with PKCE and in-app token exchange.
   - Apple Calendar: one-tap connect path for provider-enabled sync.
+  - Google configuration uses platform-specific OAuth client IDs (`web`, `ios`, `android`) for production readiness.
 - Appointment writes/reviews trigger per-user calendar sync for candidate + staff participants:
   - Google: direct Calendar API create/update/delete when access token is available.
   - Mobile app: device-native `expo-calendar` event sync for connected users (scheduled upsert, declined/cancelled delete).

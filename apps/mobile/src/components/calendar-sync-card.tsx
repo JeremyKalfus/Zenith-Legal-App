@@ -1,7 +1,9 @@
 import * as AuthSession from 'expo-auth-session';
+import * as Application from 'expo-application';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../context/auth-context';
 import { env } from '../config/env';
 import { getFunctionErrorMessage } from '../lib/function-error';
@@ -31,6 +33,41 @@ const GOOGLE_SCOPES = [
   'email',
   'https://www.googleapis.com/auth/calendar.events',
 ];
+
+function getGoogleClientIdForPlatform(): string {
+  if (Platform.OS === 'web') {
+    return env.googleOAuthWebClientId || env.googleOAuthClientId;
+  }
+
+  if (Platform.OS === 'ios') {
+    return env.googleOAuthIosClientId || env.googleOAuthClientId;
+  }
+
+  if (Platform.OS === 'android') {
+    return env.googleOAuthAndroidClientId || env.googleOAuthClientId;
+  }
+
+  return env.googleOAuthClientId;
+}
+
+function buildGoogleRedirectUri(): string {
+  if (Platform.OS === 'web') {
+    return AuthSession.makeRedirectUri({
+      path: 'oauth/google',
+      preferLocalhost: true,
+    });
+  }
+
+  const nativeRedirect = Application.applicationId
+    ? `${Application.applicationId}:/oauthredirect`
+    : 'zenithlegal://oauth/google';
+
+  return AuthSession.makeRedirectUri({
+    native: nativeRedirect,
+    scheme: 'zenithlegal',
+    path: 'oauth/google',
+  });
+}
 
 function getProviderStateLabel(connection: CalendarConnectionRow | null): string {
   if (!connection) {
@@ -109,9 +146,24 @@ export function CalendarSyncCard() {
   }, [refreshConnections]);
 
   const handleConnectGoogle = useCallback(async () => {
-    if (!env.googleOAuthClientId) {
+    if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) {
       setMessageTone('error');
-      setMessage('Google OAuth is not configured. Set EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID.');
+      setMessage(
+        'Google OAuth is not supported in Expo Go. Use a development build or standalone app.',
+      );
+      return;
+    }
+
+    const googleClientId = getGoogleClientIdForPlatform();
+    if (!googleClientId) {
+      const missingVar =
+        Platform.OS === 'ios'
+          ? 'EXPO_PUBLIC_GOOGLE_OAUTH_IOS_CLIENT_ID'
+          : Platform.OS === 'android'
+            ? 'EXPO_PUBLIC_GOOGLE_OAUTH_ANDROID_CLIENT_ID'
+            : 'EXPO_PUBLIC_GOOGLE_OAUTH_WEB_CLIENT_ID';
+      setMessageTone('error');
+      setMessage(`Google OAuth is not configured. Set ${missingVar}.`);
       return;
     }
 
@@ -120,13 +172,9 @@ export function CalendarSyncCard() {
 
     try {
       await ensureValidSession();
-      const redirectUri = AuthSession.makeRedirectUri({
-        scheme: 'zenithlegal',
-        path: 'oauth/google',
-        preferLocalhost: true,
-      });
+      const redirectUri = buildGoogleRedirectUri();
       const request = new AuthSession.AuthRequest({
-        clientId: env.googleOAuthClientId,
+        clientId: googleClientId,
         redirectUri,
         scopes: GOOGLE_SCOPES,
         responseType: AuthSession.ResponseType.Code,
@@ -168,7 +216,7 @@ export function CalendarSyncCard() {
 
       const tokenResponse = await AuthSession.exchangeCodeAsync(
         {
-          clientId: env.googleOAuthClientId,
+          clientId: googleClientId,
           code: authorizationCode,
           redirectUri,
           extraParams: request.codeVerifier
