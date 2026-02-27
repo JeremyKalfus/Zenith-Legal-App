@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { useCallback, useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { CalendarSyncCard } from '../../components/calendar-sync-card';
 import { PasswordInput } from '../../components/password-input';
 import { ScreenShell } from '../../components/screen-shell';
 import { useAuth } from '../../context/auth-context';
@@ -568,6 +569,7 @@ export function ProfileScreen() {
       {h.profile ? (
         <>
           <EmailCard h={h} />
+          <CalendarSyncCard />
           <ProfileDetailsCard h={h} />
           <PasswordCard h={h} />
           <DeleteAccountCard h={h} />

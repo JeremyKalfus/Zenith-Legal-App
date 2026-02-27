@@ -38,12 +38,28 @@ type ParsedTokens = {
   access_token?: string;
   refresh_token?: string;
   calendar_id?: string;
+  oauth_tokens?: {
+    access_token?: string;
+    refresh_token?: string;
+    calendar_id?: string;
+  };
 };
 
 function parseTokens(raw: string): ParsedTokens {
   try {
     const parsed = JSON.parse(raw) as ParsedTokens;
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    if (!parsed || typeof parsed !== 'object') {
+      return {};
+    }
+
+    if (parsed.oauth_tokens && typeof parsed.oauth_tokens === 'object') {
+      return {
+        ...parsed,
+        ...parsed.oauth_tokens,
+      };
+    }
+
+    return parsed;
   } catch {
     return {};
   }

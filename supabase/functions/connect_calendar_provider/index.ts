@@ -1,23 +1,43 @@
-import { z } from 'npm:zod@4.3.6';
 import { errorResponse, jsonResponse } from '../_shared/http.ts';
 import { createAuthedClient, createServiceClient, getCurrentUserId } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
 
-const schema = z
-  .object({
-    provider: z.enum(['google', 'apple']),
-    oauth_code: z.string().min(1).optional(),
-    oauth_tokens: z.record(z.unknown()).optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (!value.oauth_code && !value.oauth_tokens) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'oauth_code or oauth_tokens is required',
-        path: ['oauth_code'],
-      });
-    }
-  });
+type ConnectCalendarPayload = {
+  provider: 'google' | 'apple';
+  oauth_code?: string;
+  oauth_tokens?: Record<string, unknown>;
+};
+
+function parsePayload(input: unknown): ConnectCalendarPayload {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new Error('Invalid payload: body must be an object.');
+  }
+
+  const record = input as Record<string, unknown>;
+  const provider = record.provider;
+  if (provider !== 'google' && provider !== 'apple') {
+    throw new Error('Invalid payload: provider must be google or apple.');
+  }
+
+  const oauthCode =
+    typeof record.oauth_code === 'string' && record.oauth_code.trim().length > 0
+      ? record.oauth_code.trim()
+      : undefined;
+  const oauthTokens =
+    record.oauth_tokens && typeof record.oauth_tokens === 'object' && !Array.isArray(record.oauth_tokens)
+      ? (record.oauth_tokens as Record<string, unknown>)
+      : undefined;
+
+  if (!oauthCode && !oauthTokens) {
+    throw new Error('Invalid payload: oauth_code or oauth_tokens is required.');
+  }
+
+  return {
+    provider,
+    oauth_code: oauthCode,
+    oauth_tokens: oauthTokens,
+  };
+}
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -30,7 +50,7 @@ Deno.serve(async (request) => {
     const client = createAuthedClient(authHeader);
     const serviceClient = createServiceClient();
 
-    const payload = schema.parse(await request.json());
+    const payload = parsePayload(await request.json());
 
     const oauthCode = payload.oauth_code ?? '';
     const digestBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(oauthCode));
@@ -82,6 +102,9 @@ Deno.serve(async (request) => {
     const message = (error as Error).message;
     if (message.startsWith('Unauthorized')) {
       return errorResponse(message, 401);
+    }
+    if (message.startsWith('Invalid payload:')) {
+      return errorResponse(message, 400);
     }
     return errorResponse(message, 500);
   }

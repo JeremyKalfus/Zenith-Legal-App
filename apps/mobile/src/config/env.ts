@@ -6,6 +6,7 @@ export const env = {
   streamApiKey: process.env.EXPO_PUBLIC_STREAM_API_KEY ?? 'hcryqds25ctk',
   supportPhone: process.env.EXPO_PUBLIC_RECRUITER_PHONE ?? '(202) 486-3535',
   supportEmail: process.env.EXPO_PUBLIC_RECRUITER_EMAIL ?? 'mason@zenithlegal.com',
+  googleOAuthClientId: process.env.EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID ?? '',
 };
 
 export function isSupabaseSecretKey(value: string): boolean {
