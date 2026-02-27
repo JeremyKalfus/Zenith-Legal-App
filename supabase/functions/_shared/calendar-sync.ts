@@ -178,18 +178,18 @@ async function syncGoogleEvent(
   }
 
   const existingEventId = existingLink?.provider_event_id;
-  const shouldPatch =
-    Boolean(existingEventId) &&
-    !existingEventId!.startsWith('local:') &&
-    !existingEventId!.startsWith('http://') &&
-    !existingEventId!.startsWith('https://') &&
-    !existingEventId!.startsWith('data:');
+  const hasPatchableEventId =
+    typeof existingEventId === 'string' &&
+    !existingEventId.startsWith('local:') &&
+    !existingEventId.startsWith('http://') &&
+    !existingEventId.startsWith('https://') &&
+    !existingEventId.startsWith('data:');
 
-  const endpoint = shouldPatch
-    ? `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(existingEventId!)}`
+  const endpoint = hasPatchableEventId
+    ? `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(existingEventId)}`
     : `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
 
-  const method = shouldPatch ? 'PATCH' : 'POST';
+  const method = hasPatchableEventId ? 'PATCH' : 'POST';
   const response = await fetch(endpoint, {
     method,
     headers: {

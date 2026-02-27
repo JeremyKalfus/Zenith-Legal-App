@@ -32,6 +32,8 @@ const storageAdapter = createStorageAdapter();
 
 const projectRef = env.supabaseUrl.split('//')[1]?.split('.')[0] ?? '';
 const redirectTo = projectRef ? Linking.createURL('/auth/callback') : undefined;
+const MILLISECONDS_PER_SECOND = 1000;
+const SESSION_REFRESH_BUFFER_SECONDS = 60;
 
 export const supabase = createClient(env.supabaseUrl, env.supabaseAnonKey, {
   auth: {
@@ -98,9 +100,9 @@ export async function ensureValidSession() {
   }
 
   const expiresAt = session.expires_at ?? 0;
-  const nowSeconds = Math.floor(Date.now() / 1000);
+  const nowSeconds = Math.floor(Date.now() / MILLISECONDS_PER_SECOND);
 
-  if (nowSeconds >= expiresAt - 60) {
+  if (nowSeconds >= expiresAt - SESSION_REFRESH_BUFFER_SECONDS) {
     const { data, error } = await supabase.auth.refreshSession();
     if (error || !data.session) {
       if (error && isInvalidRefreshTokenError(error)) {

@@ -4,11 +4,10 @@ import { createServiceClient } from '../_shared/supabase.ts';
 import { createEdgeHandler } from '../_shared/edge-handler.ts';
 
 const MASON_EMAIL = 'mason@zenithlegal.com';
-const ZENITH_LOGO_IMAGE_URL =
-  'https://njxgoypivrxyrukpouxb.supabase.co/storage/v1/object/public/stream-avatars/stream-users/7b24ba95-b1e0-4256-bc7f-226fac2d65f3/zenith-legal-logo.webp';
+const STAFF_STREAM_IMAGE_URL = Deno.env.get('STREAM_STAFF_IMAGE_URL') ?? undefined;
 
 function getStaffStreamImage(email?: string | null): string | undefined {
-  return email?.trim().toLowerCase() === MASON_EMAIL ? ZENITH_LOGO_IMAGE_URL : undefined;
+  return email?.trim().toLowerCase() === MASON_EMAIL ? STAFF_STREAM_IMAGE_URL : undefined;
 }
 
 

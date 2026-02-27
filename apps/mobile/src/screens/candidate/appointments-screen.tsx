@@ -41,6 +41,11 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }>
   declined: { bg: '#FEE2E2', text: '#991B1B', label: 'Declined' },
   cancelled: { bg: '#F1F5F9', text: '#64748B', label: 'Cancelled' },
 };
+const MINUTES_PER_HOUR = 60;
+const SECONDS_PER_MINUTE = 60;
+const MILLISECONDS_PER_SECOND = 1000;
+const ONE_HOUR_MS = MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
+const TWO_HOURS_MS = ONE_HOUR_MS * 2;
 
 function useAppointmentsScreen() {
   const { session } = useAuth();
@@ -75,8 +80,8 @@ function useAppointmentsScreen() {
     defaultValues: {
       title: '',
       modality: 'virtual',
-      startAtUtc: new Date(Date.now() + 3600_000).toISOString(),
-      endAtUtc: new Date(Date.now() + 7200_000).toISOString(),
+      startAtUtc: new Date(Date.now() + ONE_HOUR_MS).toISOString(),
+      endAtUtc: new Date(Date.now() + TWO_HOURS_MS).toISOString(),
       timezoneLabel: getResolvedTimezoneLabel(),
     },
   });
@@ -174,8 +179,8 @@ function useAppointmentsScreen() {
               modality: 'virtual',
               locationText: undefined,
               videoUrl: undefined,
-              startAtUtc: new Date(Date.now() + 3600_000).toISOString(),
-              endAtUtc: new Date(Date.now() + 7200_000).toISOString(),
+              startAtUtc: new Date(Date.now() + ONE_HOUR_MS).toISOString(),
+              endAtUtc: new Date(Date.now() + TWO_HOURS_MS).toISOString(),
               timezoneLabel: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
             });
             await loadAppointments();

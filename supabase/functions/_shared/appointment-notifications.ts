@@ -1,7 +1,13 @@
 import { createServiceClient } from './supabase.ts';
 
+const SECONDS_PER_MINUTE = 60;
+const MILLISECONDS_PER_SECOND = 1000;
+const REMINDER_OFFSET_MINUTES = 15;
+const REMINDER_OFFSET_MS =
+  REMINDER_OFFSET_MINUTES * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
+
 export function buildReminderSendAfter(startAtUtc: string): string | null {
-  const reminderAtMs = Date.parse(startAtUtc) - 15 * 60 * 1000;
+  const reminderAtMs = Date.parse(startAtUtc) - REMINDER_OFFSET_MS;
   if (!Number.isFinite(reminderAtMs)) {
     return null;
   }

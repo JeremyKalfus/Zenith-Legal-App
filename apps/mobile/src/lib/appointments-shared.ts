@@ -7,7 +7,12 @@ export const DURATION_OPTIONS = [
   { label: '2 hours', minutes: 120 },
 ] as const;
 
-const APPOINTMENT_HIDE_AFTER_MS = 24 * 60 * 60 * 1000;
+const HOURS_PER_DAY = 24;
+const MINUTES_PER_HOUR = 60;
+const SECONDS_PER_MINUTE = 60;
+const MILLISECONDS_PER_SECOND = 1000;
+const APPOINTMENT_HIDE_AFTER_MS =
+  HOURS_PER_DAY * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
 const HIDDEN_STATUSES = new Set(['scheduled', 'declined']);
 
 export function shouldHideExpiredAppointment(appointment: {

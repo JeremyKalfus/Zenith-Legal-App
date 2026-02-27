@@ -44,6 +44,17 @@ npm run dev:admin
 npm run verify
 ```
 
+### Root Scripts
+
+- `npm run dev:mobile`: starts Expo mobile app
+- `npm run dev:admin`: starts Next.js admin app
+- `npm run dev`: alias for `dev:mobile`
+- `npm run build`: builds all workspaces that define `build`
+- `npm run lint`: runs lint checks across all workspaces
+- `npm run typecheck`: runs TypeScript checks across all workspaces
+- `npm run test`: runs tests across all workspaces
+- `npm run verify`: runs `lint`, `typecheck`, and `test` in sequence
+
 5. Run code quality scan (optional)
 
 ```bash

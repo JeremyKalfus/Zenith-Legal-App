@@ -33,3 +33,13 @@ Append a new entry immediately after incidents and after post-fix verification i
 - **Fix applied:** Verified CLI auth/link first, then ran `supabase db push` directly without requesting passwords or keys.
 - **Prevention rule:** Always check Supabase CLI auth/link status before asking for credentials. If authenticated and linked, run migrations/deploys directly.
 - **Follow-up checks:** Confirm migration applied with `supabase migration list` and validate table/query availability from app environment.
+
+### 2026-02-27 — Desloppify Render Crash on String `detail`
+
+- **Date:** 2026-02-27
+- **Context:** Running `desloppify next --count 10` and `desloppify show responsibility_cohesion --status open --top 50` during quality triage.
+- **Error:** `desloppify` crashed with `AttributeError: 'str' object has no attribute 'get'` in `app/commands/next_parts/render.py` and `app/commands/show/formatting.py`.
+- **Why it happened:** A finding carried `detail` as a string, but renderer code assumed `detail` was always an object and called `.get(...)`.
+- **Fix applied:** Worked around the crash by using pattern-based `resolve` commands for the affected detector IDs and continued scanning/resolution flow.
+- **Prevention rule:** When `desloppify show` or `next` crashes on a detector payload shape, switch to `resolve`/`show <other-detector>` flow and capture the exact traceback for upstream reporting.
+- **Follow-up checks:** Re-ran `desloppify scan --path .` and `desloppify status` to confirm open findings reached zero despite renderer failure.

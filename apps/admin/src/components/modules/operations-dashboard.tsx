@@ -33,7 +33,14 @@ type Appointment = {
   candidate_name: string;
 };
 
-const APPOINTMENT_HIDE_AFTER_MS = 24 * 60 * 60 * 1000;
+const HOURS_PER_DAY = 24;
+const MINUTES_PER_HOUR = 60;
+const SECONDS_PER_MINUTE = 60;
+const MILLISECONDS_PER_SECOND = 1000;
+const ONE_HOUR_MS = MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
+const TWO_HOURS_MS = ONE_HOUR_MS * 2;
+const APPOINTMENT_HIDE_AFTER_MS =
+  HOURS_PER_DAY * MINUTES_PER_HOUR * SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND;
 
 function shouldHideExpiredAppointment(appointment: Appointment): boolean {
   if (appointment.status !== 'scheduled' && appointment.status !== 'declined') {
@@ -80,10 +87,10 @@ function useOperationsDashboard() {
   const [appointmentDescription, setAppointmentDescription] = useState('');
   const [appointmentModality, setAppointmentModality] = useState<'virtual' | 'in_person'>('virtual');
   const [appointmentStartAtUtc, setAppointmentStartAtUtc] = useState(
-    () => new Date(Date.now() + 3600_000).toISOString(),
+    () => new Date(Date.now() + ONE_HOUR_MS).toISOString(),
   );
   const [appointmentEndAtUtc, setAppointmentEndAtUtc] = useState(
-    () => new Date(Date.now() + 7200_000).toISOString(),
+    () => new Date(Date.now() + TWO_HOURS_MS).toISOString(),
   );
   const [appointmentLocationText, setAppointmentLocationText] = useState('');
   const [appointmentVideoUrl, setAppointmentVideoUrl] = useState('');
@@ -316,8 +323,8 @@ function useOperationsDashboard() {
     setAppointmentTitle('');
     setAppointmentDescription('');
     setAppointmentModality('virtual');
-    setAppointmentStartAtUtc(new Date(Date.now() + 3600_000).toISOString());
-    setAppointmentEndAtUtc(new Date(Date.now() + 7200_000).toISOString());
+    setAppointmentStartAtUtc(new Date(Date.now() + ONE_HOUR_MS).toISOString());
+    setAppointmentEndAtUtc(new Date(Date.now() + TWO_HOURS_MS).toISOString());
     setAppointmentLocationText('');
     setAppointmentVideoUrl('');
     loadData();

@@ -325,7 +325,7 @@ export function StaffCandidateFirmsScreen({
           <TextInput
             style={styles.input}
             placeholder="Banner phone"
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor={uiColors.textPlaceholder}
             editable={bannerOverridesAvailable}
             value={bannerPhoneDraft}
             onChangeText={setBannerPhoneDraft}
@@ -333,7 +333,7 @@ export function StaffCandidateFirmsScreen({
           <TextInput
             style={styles.input}
             placeholder="Banner email"
-            placeholderTextColor="#94A3B8"
+            placeholderTextColor={uiColors.textPlaceholder}
             keyboardType="email-address"
             autoCapitalize="none"
             editable={bannerOverridesAvailable}
@@ -469,7 +469,7 @@ export function StaffCandidateFirmsScreen({
         <TextInput
           style={styles.input}
           placeholder="Filter firms"
-          placeholderTextColor="#94A3B8"
+          placeholderTextColor={uiColors.textPlaceholder}
           value={firmQuery}
           onChangeText={setFirmQuery}
         />
@@ -623,23 +623,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   bannerCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E2E8F0',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.border,
     borderRadius: 12,
     borderWidth: 1,
     gap: 8,
     padding: 12,
   },
   bannerDefaultText: {
-    color: '#64748B',
+    color: uiColors.textMuted,
     fontSize: 12,
   },
   bannerNotice: {
-    color: '#92400E',
+    color: uiColors.warning,
     fontSize: 12,
   },
   bannerStatus: {
-    color: '#334155',
+    color: uiColors.textStrong,
     fontWeight: '600',
   },
   dangerButtonSmall: {
@@ -770,7 +770,7 @@ const styles = StyleSheet.create({
   },
   secondaryButtonSmall: {
     alignItems: 'center',
-    borderColor: '#CBD5E1',
+    borderColor: uiColors.borderStrong,
     borderRadius: 8,
     borderWidth: 1,
     flexShrink: 1,
@@ -778,7 +778,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   secondaryButtonSmallText: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontWeight: '700',
     textAlign: 'center',
   },

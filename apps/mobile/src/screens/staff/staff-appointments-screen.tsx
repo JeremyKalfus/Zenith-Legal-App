@@ -625,19 +625,19 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   acceptButton: {
-    backgroundColor: '#059669',
+    backgroundColor: uiColors.successButton,
   },
   acceptButtonText: {
-    color: '#ffffff',
+    color: uiColors.primaryText,
     fontWeight: '700',
   },
   declineButton: {
     backgroundColor: uiColors.surface,
-    borderColor: '#DC2626',
+    borderColor: uiColors.errorBright,
     borderWidth: 1,
   },
   declineButtonText: {
-    color: '#DC2626',
+    color: uiColors.errorBright,
     fontWeight: '700',
   },
 });
