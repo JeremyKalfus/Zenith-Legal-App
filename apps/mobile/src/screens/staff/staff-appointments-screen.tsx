@@ -1,10 +1,19 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  FlatList,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import type { AppointmentStatus } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
 import { formatAppointmentDateTime } from '../../lib/date-format';
-import { supabase, ensureValidSession } from '../../lib/supabase';
+import { ensureValidSession, supabase } from '../../lib/supabase';
 
 type StaffAppointment = {
   id: string;
@@ -23,6 +32,15 @@ type CandidateOption = {
   id: string;
   name: string;
 };
+
+const DURATION_OPTIONS = [
+  { label: '5 min', minutes: 5 },
+  { label: '15 min', minutes: 15 },
+  { label: '30 min', minutes: 30 },
+  { label: '45 min', minutes: 45 },
+  { label: '1 hour', minutes: 60 },
+  { label: '2 hours', minutes: 120 },
+] as const;
 
 const APPOINTMENT_HIDE_AFTER_MS = 24 * 60 * 60 * 1000;
 
@@ -60,17 +78,19 @@ function useStaffAppointmentsScreen() {
   const [candidates, setCandidates] = useState<CandidateOption[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [candidateSearchText, setCandidateSearchText] = useState('');
-  const [isCandidateDropdownOpen, setIsCandidateDropdownOpen] = useState(false);
+  const [isCandidateSearchOpen, setIsCandidateSearchOpen] = useState(false);
+
   const [createTitle, setCreateTitle] = useState('');
   const [createDescription, setCreateDescription] = useState('');
   const [createStartAtLocal, setCreateStartAtLocal] = useState(() => new Date(Date.now() + 3600_000));
-  const [createEndAtLocal, setCreateEndAtLocal] = useState(() => new Date(Date.now() + 7200_000));
   const [showStartPicker, setShowStartPicker] = useState(false);
-  const [showEndPicker, setShowEndPicker] = useState(false);
+  const [createDurationMinutes, setCreateDurationMinutes] = useState(30);
+  const [isDurationSelectorOpen, setIsDurationSelectorOpen] = useState(false);
   const [createModality, setCreateModality] = useState<'virtual' | 'in_person'>('virtual');
   const [createLocation, setCreateLocation] = useState('');
   const [createVideoUrl, setCreateVideoUrl] = useState('');
   const [creating, setCreating] = useState(false);
+
   const [statusMessage, setStatusMessage] = useState('');
   const [reviewingId, setReviewingId] = useState<string | null>(null);
 
@@ -102,7 +122,7 @@ function useStaffAppointmentsScreen() {
         video_url: row.video_url as string | null,
         start_at_utc: row.start_at_utc as string,
         end_at_utc: row.end_at_utc as string,
-        status: row.status as AppointmentStatus,
+        status: row.status as AppointmentStatus | 'accepted',
         candidate_name: name,
       };
     });
@@ -161,17 +181,65 @@ function useStaffAppointmentsScreen() {
     [loadAppointments],
   );
 
+  const handleStartPickerChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (event.type === 'dismissed') {
+      setShowStartPicker(false);
+      return;
+    }
+
+    if (selectedDate) {
+      setCreateStartAtLocal(selectedDate);
+    }
+
+    if (Platform.OS === 'android') {
+      setShowStartPicker(false);
+    }
+  }, []);
+
+  const handleOpenCandidateSearch = useCallback(() => {
+    setCandidateSearchText('');
+    setIsCandidateSearchOpen(true);
+  }, []);
+
+  const handleSelectCandidate = useCallback((candidateId: string) => {
+    setSelectedCandidateId(candidateId);
+    setIsCandidateSearchOpen(false);
+  }, []);
+
+  const handleSelectDuration = useCallback((minutes: number) => {
+    setCreateDurationMinutes(minutes);
+    setIsDurationSelectorOpen(false);
+  }, []);
+
+  const normalizedCandidateSearch = candidateSearchText.trim().toLowerCase();
+  const filteredCandidates = useMemo(
+    () =>
+      normalizedCandidateSearch
+        ? candidates.filter((candidate) => candidate.name.toLowerCase().includes(normalizedCandidateSearch))
+        : candidates,
+    [candidates, normalizedCandidateSearch],
+  );
+
+  const selectedCandidateName =
+    candidates.find((candidate) => candidate.id === selectedCandidateId)?.name ?? '';
+
+  const createEndAtLocal = useMemo(
+    () => new Date(createStartAtLocal.getTime() + createDurationMinutes * 60_000),
+    [createDurationMinutes, createStartAtLocal],
+  );
+
+  const selectedDurationLabel =
+    DURATION_OPTIONS.find((option) => option.minutes === createDurationMinutes)?.label ??
+    `${createDurationMinutes} min`;
+
   const handleCreateAppointment = useCallback(async () => {
     if (!selectedCandidateId) {
       setStatusMessage('Select a candidate before scheduling.');
       return;
     }
+
     if (!createTitle.trim()) {
       setStatusMessage('Appointment title is required.');
-      return;
-    }
-    if (createEndAtLocal.getTime() <= createStartAtLocal.getTime()) {
-      setStatusMessage('End time must be after start time.');
       return;
     }
 
@@ -180,6 +248,7 @@ function useStaffAppointmentsScreen() {
 
     try {
       await ensureValidSession();
+
       const { error } = await supabase.functions.invoke('schedule_or_update_appointment', {
         body: {
           candidateUserId: selectedCandidateId,
@@ -204,11 +273,11 @@ function useStaffAppointmentsScreen() {
       setCreateTitle('');
       setCreateDescription('');
       setCreateStartAtLocal(new Date(Date.now() + 3600_000));
-      setCreateEndAtLocal(new Date(Date.now() + 7200_000));
+      setCreateDurationMinutes(30);
       setCreateLocation('');
       setCreateVideoUrl('');
       setCandidateSearchText('');
-      setIsCandidateDropdownOpen(false);
+      setIsCandidateSearchOpen(false);
       await loadAppointments();
     } catch (err) {
       setStatusMessage((err as Error).message);
@@ -227,71 +296,40 @@ function useStaffAppointmentsScreen() {
     selectedCandidateId,
   ]);
 
-  const handleStartPickerChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
-    setShowStartPicker(false);
-    if (!selectedDate) {
-      return;
-    }
-
-    setCreateStartAtLocal(selectedDate);
-    if (createEndAtLocal.getTime() <= selectedDate.getTime()) {
-      setCreateEndAtLocal(new Date(selectedDate.getTime() + 3600_000));
-    }
-  }, [createEndAtLocal]);
-
-  const handleEndPickerChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
-    setShowEndPicker(false);
-    if (!selectedDate) {
-      return;
-    }
-
-    setCreateEndAtLocal(selectedDate);
-  }, []);
-
-  const handleSelectCandidate = useCallback((candidateId: string) => {
-    setSelectedCandidateId(candidateId);
-    setIsCandidateDropdownOpen(false);
-  }, []);
-
-  const normalizedSearch = candidateSearchText.trim().toLowerCase();
-  const filteredCandidates = normalizedSearch
-    ? candidates.filter((candidate) => candidate.name.toLowerCase().includes(normalizedSearch))
-    : candidates;
-  const selectedCandidateName =
-    candidates.find((candidate) => candidate.id === selectedCandidateId)?.name ?? '';
-
-  const pending = appointments.filter((a) => a.status === 'pending');
-  const others = appointments.filter((a) => a.status !== 'pending');
+  const pending = appointments.filter((appointment) => appointment.status === 'pending');
+  const others = appointments.filter((appointment) => appointment.status !== 'pending');
 
   return {
     pending,
     others,
-    selectedCandidateId,
+    selectedCandidateName,
+    isCandidateSearchOpen,
+    setIsCandidateSearchOpen,
     candidateSearchText,
     setCandidateSearchText,
-    isCandidateDropdownOpen,
-    setIsCandidateDropdownOpen,
     filteredCandidates,
-    selectedCandidateName,
+    handleOpenCandidateSearch,
     handleSelectCandidate,
     createTitle,
     setCreateTitle,
     createDescription,
     setCreateDescription,
-    createStartAtLocal,
-    createEndAtLocal,
-    showStartPicker,
-    setShowStartPicker,
-    showEndPicker,
-    setShowEndPicker,
-    handleStartPickerChange,
-    handleEndPickerChange,
     createModality,
     setCreateModality,
     createLocation,
     setCreateLocation,
     createVideoUrl,
     setCreateVideoUrl,
+    createStartAtLocal,
+    createEndAtLocal,
+    showStartPicker,
+    setShowStartPicker,
+    handleStartPickerChange,
+    createDurationMinutes,
+    selectedDurationLabel,
+    isDurationSelectorOpen,
+    setIsDurationSelectorOpen,
+    handleSelectDuration,
     creating,
     statusMessage,
     reviewingId,
@@ -304,39 +342,39 @@ export function StaffAppointmentsScreen() {
   const {
     pending,
     others,
-    selectedCandidateId,
+    selectedCandidateName,
+    isCandidateSearchOpen,
+    setIsCandidateSearchOpen,
     candidateSearchText,
     setCandidateSearchText,
-    isCandidateDropdownOpen,
-    setIsCandidateDropdownOpen,
     filteredCandidates,
-    selectedCandidateName,
+    handleOpenCandidateSearch,
     handleSelectCandidate,
     createTitle,
     setCreateTitle,
     createDescription,
     setCreateDescription,
-    createStartAtLocal,
-    createEndAtLocal,
-    showStartPicker,
-    setShowStartPicker,
-    showEndPicker,
-    setShowEndPicker,
-    handleStartPickerChange,
-    handleEndPickerChange,
     createModality,
     setCreateModality,
     createLocation,
     setCreateLocation,
     createVideoUrl,
     setCreateVideoUrl,
+    createStartAtLocal,
+    createEndAtLocal,
+    showStartPicker,
+    setShowStartPicker,
+    handleStartPickerChange,
+    selectedDurationLabel,
+    isDurationSelectorOpen,
+    setIsDurationSelectorOpen,
+    handleSelectDuration,
     creating,
     statusMessage,
     reviewingId,
     handleReview,
     handleCreateAppointment,
-  } =
-    useStaffAppointmentsScreen();
+  } = useStaffAppointmentsScreen();
 
   return (
     <ScreenShell>
@@ -345,44 +383,13 @@ export function StaffAppointmentsScreen() {
 
       <View style={styles.createCard}>
         <Text style={styles.sectionHeader}>Schedule for Candidate</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Search candidate"
-          value={candidateSearchText}
-          onChangeText={setCandidateSearchText}
-          onFocus={() => setIsCandidateDropdownOpen(true)}
-        />
-        {selectedCandidateName ? (
-          <Text style={styles.selectedCandidateLabel}>Selected: {selectedCandidateName}</Text>
-        ) : null}
-        {isCandidateDropdownOpen ? (
-          <View style={styles.candidateDropdown}>
-            {filteredCandidates.map((candidate) => (
-              <Pressable
-                key={candidate.id}
-                style={styles.candidateDropdownItem}
-                onPress={() => handleSelectCandidate(candidate.id)}
-              >
-                <Text
-                  style={[
-                    styles.candidateDropdownText,
-                    selectedCandidateId === candidate.id ? styles.candidateDropdownTextSelected : null,
-                  ]}
-                >
-                  {candidate.name}
-                </Text>
-              </Pressable>
-            ))}
-            {filteredCandidates.length === 0 ? (
-              <Text style={styles.noCandidateResult}>No matching candidates.</Text>
-            ) : null}
-          </View>
-        ) : null}
-        <Pressable style={styles.dropdownToggle} onPress={() => setIsCandidateDropdownOpen((value) => !value)}>
-          <Text style={styles.dropdownToggleText}>
-            {isCandidateDropdownOpen ? 'Hide candidates' : 'Show candidates'}
+
+        <Pressable style={styles.input} onPress={handleOpenCandidateSearch}>
+          <Text style={selectedCandidateName ? styles.valueText : styles.placeholderText}>
+            {selectedCandidateName || 'Select candidate'}
           </Text>
         </Pressable>
+
         <View style={styles.modalityRow}>
           <Pressable
             style={[styles.modeChip, createModality === 'virtual' ? styles.modeChipSelected : null]}
@@ -405,12 +412,9 @@ export function StaffAppointmentsScreen() {
             </Text>
           </Pressable>
         </View>
-        <TextInput
-          style={styles.input}
-          placeholder="Title"
-          value={createTitle}
-          onChangeText={setCreateTitle}
-        />
+
+        <TextInput style={styles.input} placeholder="Title" value={createTitle} onChangeText={setCreateTitle} />
+
         <TextInput
           style={[styles.input, styles.textArea]}
           placeholder="Description (optional)"
@@ -418,32 +422,34 @@ export function StaffAppointmentsScreen() {
           onChangeText={setCreateDescription}
           multiline
         />
-        <Pressable style={styles.input} onPress={() => setShowStartPicker(true)}>
-          <Text style={styles.datetimeText}>
-            Start: {formatAppointmentDateTime(createStartAtLocal.toISOString())}
-          </Text>
+
+        <Pressable style={styles.input} onPress={() => setShowStartPicker((value) => !value)}>
+          <Text style={styles.valueText}>Start: {formatAppointmentDateTime(createStartAtLocal.toISOString())}</Text>
         </Pressable>
-        <Pressable style={styles.input} onPress={() => setShowEndPicker(true)}>
-          <Text style={styles.datetimeText}>
-            End: {formatAppointmentDateTime(createEndAtLocal.toISOString())}
-          </Text>
-        </Pressable>
+
         {showStartPicker ? (
-          <DateTimePicker
-            value={createStartAtLocal}
-            mode="datetime"
-            minimumDate={new Date()}
-            onChange={handleStartPickerChange}
-          />
+          <View style={styles.pickerContainer}>
+            <DateTimePicker
+              value={createStartAtLocal}
+              mode="datetime"
+              display="spinner"
+              minimumDate={new Date()}
+              onChange={handleStartPickerChange}
+            />
+            {Platform.OS === 'ios' ? (
+              <Pressable style={styles.pickerDoneButton} onPress={() => setShowStartPicker(false)}>
+                <Text style={styles.pickerDoneText}>Done</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
-        {showEndPicker ? (
-          <DateTimePicker
-            value={createEndAtLocal}
-            mode="datetime"
-            minimumDate={createStartAtLocal}
-            onChange={handleEndPickerChange}
-          />
-        ) : null}
+
+        <Pressable style={styles.input} onPress={() => setIsDurationSelectorOpen(true)}>
+          <Text style={styles.valueText}>Meeting length: {selectedDurationLabel}</Text>
+        </Pressable>
+
+        <Text style={styles.helperText}>Ends: {formatAppointmentDateTime(createEndAtLocal.toISOString())}</Text>
+
         {createModality === 'in_person' ? (
           <TextInput
             style={styles.input}
@@ -452,6 +458,7 @@ export function StaffAppointmentsScreen() {
             onChangeText={setCreateLocation}
           />
         ) : null}
+
         {createModality === 'virtual' ? (
           <TextInput
             style={styles.input}
@@ -461,20 +468,17 @@ export function StaffAppointmentsScreen() {
             autoCapitalize="none"
           />
         ) : null}
+
         <Pressable
           style={[styles.actionButton, styles.acceptButton, creating ? styles.disabledButton : null]}
           onPress={() => void handleCreateAppointment()}
           disabled={creating}
         >
-          <Text style={styles.acceptButtonText}>
-            {creating ? 'Scheduling...' : 'Schedule Appointment'}
-          </Text>
+          <Text style={styles.acceptButtonText}>{creating ? 'Scheduling...' : 'Schedule Appointment'}</Text>
         </Pressable>
       </View>
 
-      {statusMessage ? (
-        <Text style={styles.statusMessage}>{statusMessage}</Text>
-      ) : null}
+      {statusMessage ? <Text style={styles.statusMessage}>{statusMessage}</Text> : null}
 
       {pending.length > 0 ? (
         <>
@@ -483,22 +487,11 @@ export function StaffAppointmentsScreen() {
             <View key={appointment.id} style={styles.card}>
               <View style={styles.cardHeader}>
                 <Text style={styles.cardTitle}>{appointment.title}</Text>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: STATUS_COLORS.pending.bg },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.statusText,
-                      { color: STATUS_COLORS.pending.text },
-                    ]}
-                  >
-                    Pending
-                  </Text>
+                <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS.pending.bg }]}>
+                  <Text style={[styles.statusText, { color: STATUS_COLORS.pending.text }]}>Pending</Text>
                 </View>
               </View>
+
               <Text style={styles.cardSubtitle}>{appointment.candidate_name}</Text>
               <Text style={styles.cardTime}>
                 {formatAppointmentDateTime(appointment.start_at_utc)} –{' '}
@@ -508,9 +501,8 @@ export function StaffAppointmentsScreen() {
                 {appointment.modality === 'virtual' ? 'Virtual' : 'In-person'}
                 {appointment.location_text ? ` · ${appointment.location_text}` : ''}
               </Text>
-              {appointment.description ? (
-                <Text style={styles.cardDescription}>{appointment.description}</Text>
-              ) : null}
+
+              {appointment.description ? <Text style={styles.cardDescription}>{appointment.description}</Text> : null}
 
               <View style={styles.actionRow}>
                 <Pressable
@@ -518,9 +510,7 @@ export function StaffAppointmentsScreen() {
                   onPress={() => handleReview(appointment.id, 'accepted')}
                   disabled={reviewingId === appointment.id}
                 >
-                  <Text style={styles.acceptButtonText}>
-                    {reviewingId === appointment.id ? 'Saving...' : 'Schedule'}
-                  </Text>
+                  <Text style={styles.acceptButtonText}>{reviewingId === appointment.id ? 'Saving...' : 'Schedule'}</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.actionButton, styles.declineButton]}
@@ -546,10 +536,8 @@ export function StaffAppointmentsScreen() {
               <View key={appointment.id} style={styles.card}>
                 <View style={styles.cardHeader}>
                   <Text style={styles.cardTitle}>{appointment.title}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
-                    <Text style={[styles.statusText, { color: colors.text }]}>
-                      {getStatusLabel(appointment.status)}
-                    </Text>
+                  <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}> 
+                    <Text style={[styles.statusText, { color: colors.text }]}>{getStatusLabel(appointment.status)}</Text>
                   </View>
                 </View>
                 <Text style={styles.cardSubtitle}>{appointment.candidate_name}</Text>
@@ -566,6 +554,50 @@ export function StaffAppointmentsScreen() {
           })}
         </>
       ) : null}
+
+      <Modal visible={isCandidateSearchOpen} animationType="slide" onRequestClose={() => setIsCandidateSearchOpen(false)}>
+        <View style={styles.modalRoot}>
+          <Text style={styles.modalTitle}>Select Candidate</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Search candidates"
+            value={candidateSearchText}
+            onChangeText={setCandidateSearchText}
+            autoFocus
+          />
+          <FlatList
+            data={filteredCandidates}
+            keyExtractor={(item) => item.id}
+            style={styles.modalList}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <Pressable style={styles.modalItem} onPress={() => handleSelectCandidate(item.id)}>
+                <Text style={styles.modalItemText}>{item.name}</Text>
+              </Pressable>
+            )}
+            ListEmptyComponent={<Text style={styles.emptyState}>No matching candidates.</Text>}
+          />
+          <Pressable style={[styles.actionButton, styles.declineButton]} onPress={() => setIsCandidateSearchOpen(false)}>
+            <Text style={styles.declineButtonText}>Close</Text>
+          </Pressable>
+        </View>
+      </Modal>
+
+      <Modal visible={isDurationSelectorOpen} transparent animationType="fade" onRequestClose={() => setIsDurationSelectorOpen(false)}>
+        <View style={styles.durationModalBackdrop}>
+          <View style={styles.durationModalCard}>
+            <Text style={styles.modalTitle}>Meeting Length</Text>
+            {DURATION_OPTIONS.map((option) => (
+              <Pressable key={option.minutes} style={styles.modalItem} onPress={() => handleSelectDuration(option.minutes)}>
+                <Text style={styles.modalItemText}>{option.label}</Text>
+              </Pressable>
+            ))}
+            <Pressable style={[styles.actionButton, styles.declineButton]} onPress={() => setIsDurationSelectorOpen(false)}>
+              <Text style={styles.declineButtonText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </ScreenShell>
   );
 }
@@ -587,54 +619,6 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 12,
   },
-  selectedCandidateLabel: {
-    color: '#334155',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  candidateDropdown: {
-    backgroundColor: '#ffffff',
-    borderColor: '#CBD5E1',
-    borderRadius: 8,
-    borderWidth: 1,
-    maxHeight: 180,
-    paddingVertical: 4,
-  },
-  candidateDropdownItem: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  candidateDropdownText: {
-    color: '#0F172A',
-    fontSize: 13,
-  },
-  candidateDropdownTextSelected: {
-    color: '#1D4ED8',
-    fontWeight: '700',
-  },
-  noCandidateResult: {
-    color: '#64748B',
-    fontSize: 12,
-    fontStyle: 'italic',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  dropdownToggle: {
-    alignSelf: 'flex-start',
-    borderColor: '#CBD5E1',
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  dropdownToggleText: {
-    color: '#334155',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  datetimeText: {
-    color: '#0F172A',
-  },
   input: {
     borderColor: '#CBD5E1',
     borderRadius: 8,
@@ -643,9 +627,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
   },
+  valueText: {
+    color: '#0F172A',
+  },
+  placeholderText: {
+    color: '#64748B',
+  },
+  helperText: {
+    color: '#334155',
+    fontSize: 12,
+  },
   textArea: {
     minHeight: 60,
     textAlignVertical: 'top',
+  },
+  pickerContainer: {
+    borderColor: '#CBD5E1',
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingVertical: 8,
+  },
+  pickerDoneButton: {
+    alignItems: 'center',
+    paddingBottom: 4,
+  },
+  pickerDoneText: {
+    color: '#166534',
+    fontWeight: '700',
   },
   modalityRow: {
     flexDirection: 'row',
@@ -766,5 +774,47 @@ const styles = StyleSheet.create({
   declineButtonText: {
     color: '#DC2626',
     fontWeight: '700',
+  },
+  modalRoot: {
+    backgroundColor: '#ffffff',
+    flex: 1,
+    gap: 8,
+    padding: 16,
+  },
+  modalTitle: {
+    color: '#0F172A',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  modalList: {
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    borderWidth: 1,
+    flex: 1,
+  },
+  modalItem: {
+    borderBottomColor: '#E2E8F0',
+    borderBottomWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  modalItemText: {
+    color: '#0F172A',
+    fontSize: 15,
+  },
+  durationModalBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 16,
+  },
+  durationModalCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    gap: 4,
+    maxWidth: 360,
+    padding: 12,
+    width: '100%',
   },
 });
