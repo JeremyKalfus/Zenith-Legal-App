@@ -756,7 +756,7 @@ function AppointmentManagementCard({
                         className="bg-green-600 hover:bg-green-700"
                         onClick={() => handleReviewAppointment(appointment.id, 'accepted')}
                       >
-                        Accept
+                        Schedule
                       </Button>
                       <Button
                         size="sm"

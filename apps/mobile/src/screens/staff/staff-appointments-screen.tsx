@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import type { AppointmentStatus } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
 import { formatAppointmentDateTime } from '../../lib/date-format';
@@ -14,7 +15,7 @@ type StaffAppointment = {
   video_url: string | null;
   start_at_utc: string;
   end_at_utc: string;
-  status: AppointmentStatus;
+  status: AppointmentStatus | 'accepted';
   candidate_name: string;
 };
 
@@ -38,6 +39,14 @@ function shouldHideExpiredAppointment(appointment: StaffAppointment): boolean {
   return endTimeMs < Date.now() - APPOINTMENT_HIDE_AFTER_MS;
 }
 
+function getStatusLabel(status: AppointmentStatus | 'accepted'): string {
+  if (status === 'accepted') {
+    return 'scheduled';
+  }
+
+  return status;
+}
+
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   pending: { bg: '#FEF3C7', text: '#92400E' },
   accepted: { bg: '#D1FAE5', text: '#065F46' },
@@ -50,14 +59,14 @@ function useStaffAppointmentsScreen() {
   const [appointments, setAppointments] = useState<StaffAppointment[]>([]);
   const [candidates, setCandidates] = useState<CandidateOption[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
+  const [candidateSearchText, setCandidateSearchText] = useState('');
+  const [isCandidateDropdownOpen, setIsCandidateDropdownOpen] = useState(false);
   const [createTitle, setCreateTitle] = useState('');
   const [createDescription, setCreateDescription] = useState('');
-  const [createStartAtUtc, setCreateStartAtUtc] = useState(
-    new Date(Date.now() + 3600_000).toISOString(),
-  );
-  const [createEndAtUtc, setCreateEndAtUtc] = useState(
-    new Date(Date.now() + 7200_000).toISOString(),
-  );
+  const [createStartAtLocal, setCreateStartAtLocal] = useState(() => new Date(Date.now() + 3600_000));
+  const [createEndAtLocal, setCreateEndAtLocal] = useState(() => new Date(Date.now() + 7200_000));
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showEndPicker, setShowEndPicker] = useState(false);
   const [createModality, setCreateModality] = useState<'virtual' | 'in_person'>('virtual');
   const [createLocation, setCreateLocation] = useState('');
   const [createVideoUrl, setCreateVideoUrl] = useState('');
@@ -161,7 +170,7 @@ function useStaffAppointmentsScreen() {
       setStatusMessage('Appointment title is required.');
       return;
     }
-    if (Date.parse(createEndAtUtc) <= Date.parse(createStartAtUtc)) {
+    if (createEndAtLocal.getTime() <= createStartAtLocal.getTime()) {
       setStatusMessage('End time must be after start time.');
       return;
     }
@@ -179,8 +188,8 @@ function useStaffAppointmentsScreen() {
           modality: createModality,
           locationText: createModality === 'in_person' ? createLocation.trim() || undefined : undefined,
           videoUrl: createModality === 'virtual' ? createVideoUrl.trim() || undefined : undefined,
-          startAtUtc: createStartAtUtc,
-          endAtUtc: createEndAtUtc,
+          startAtUtc: createStartAtLocal.toISOString(),
+          endAtUtc: createEndAtLocal.toISOString(),
           timezoneLabel: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
           status: 'scheduled',
         },
@@ -194,10 +203,12 @@ function useStaffAppointmentsScreen() {
       setStatusMessage('Appointment scheduled.');
       setCreateTitle('');
       setCreateDescription('');
-      setCreateStartAtUtc(new Date(Date.now() + 3600_000).toISOString());
-      setCreateEndAtUtc(new Date(Date.now() + 7200_000).toISOString());
+      setCreateStartAtLocal(new Date(Date.now() + 3600_000));
+      setCreateEndAtLocal(new Date(Date.now() + 7200_000));
       setCreateLocation('');
       setCreateVideoUrl('');
+      setCandidateSearchText('');
+      setIsCandidateDropdownOpen(false);
       await loadAppointments();
     } catch (err) {
       setStatusMessage((err as Error).message);
@@ -206,15 +217,48 @@ function useStaffAppointmentsScreen() {
     }
   }, [
     createDescription,
-    createEndAtUtc,
+    createEndAtLocal,
     createLocation,
     createModality,
-    createStartAtUtc,
+    createStartAtLocal,
     createTitle,
     createVideoUrl,
     loadAppointments,
     selectedCandidateId,
   ]);
+
+  const handleStartPickerChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
+    setShowStartPicker(false);
+    if (!selectedDate) {
+      return;
+    }
+
+    setCreateStartAtLocal(selectedDate);
+    if (createEndAtLocal.getTime() <= selectedDate.getTime()) {
+      setCreateEndAtLocal(new Date(selectedDate.getTime() + 3600_000));
+    }
+  }, [createEndAtLocal]);
+
+  const handleEndPickerChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
+    setShowEndPicker(false);
+    if (!selectedDate) {
+      return;
+    }
+
+    setCreateEndAtLocal(selectedDate);
+  }, []);
+
+  const handleSelectCandidate = useCallback((candidateId: string) => {
+    setSelectedCandidateId(candidateId);
+    setIsCandidateDropdownOpen(false);
+  }, []);
+
+  const normalizedSearch = candidateSearchText.trim().toLowerCase();
+  const filteredCandidates = normalizedSearch
+    ? candidates.filter((candidate) => candidate.name.toLowerCase().includes(normalizedSearch))
+    : candidates;
+  const selectedCandidateName =
+    candidates.find((candidate) => candidate.id === selectedCandidateId)?.name ?? '';
 
   const pending = appointments.filter((a) => a.status === 'pending');
   const others = appointments.filter((a) => a.status !== 'pending');
@@ -222,17 +266,26 @@ function useStaffAppointmentsScreen() {
   return {
     pending,
     others,
-    candidates,
     selectedCandidateId,
-    setSelectedCandidateId,
+    candidateSearchText,
+    setCandidateSearchText,
+    isCandidateDropdownOpen,
+    setIsCandidateDropdownOpen,
+    filteredCandidates,
+    selectedCandidateName,
+    handleSelectCandidate,
     createTitle,
     setCreateTitle,
     createDescription,
     setCreateDescription,
-    createStartAtUtc,
-    setCreateStartAtUtc,
-    createEndAtUtc,
-    setCreateEndAtUtc,
+    createStartAtLocal,
+    createEndAtLocal,
+    showStartPicker,
+    setShowStartPicker,
+    showEndPicker,
+    setShowEndPicker,
+    handleStartPickerChange,
+    handleEndPickerChange,
     createModality,
     setCreateModality,
     createLocation,
@@ -251,17 +304,26 @@ export function StaffAppointmentsScreen() {
   const {
     pending,
     others,
-    candidates,
     selectedCandidateId,
-    setSelectedCandidateId,
+    candidateSearchText,
+    setCandidateSearchText,
+    isCandidateDropdownOpen,
+    setIsCandidateDropdownOpen,
+    filteredCandidates,
+    selectedCandidateName,
+    handleSelectCandidate,
     createTitle,
     setCreateTitle,
     createDescription,
     setCreateDescription,
-    createStartAtUtc,
-    setCreateStartAtUtc,
-    createEndAtUtc,
-    setCreateEndAtUtc,
+    createStartAtLocal,
+    createEndAtLocal,
+    showStartPicker,
+    setShowStartPicker,
+    showEndPicker,
+    setShowEndPicker,
+    handleStartPickerChange,
+    handleEndPickerChange,
     createModality,
     setCreateModality,
     createLocation,
@@ -283,40 +345,44 @@ export function StaffAppointmentsScreen() {
 
       <View style={styles.createCard}>
         <Text style={styles.sectionHeader}>Schedule for Candidate</Text>
-        <View style={styles.candidateChipRow}>
-          {candidates.map((candidate) => (
-            <Pressable
-              key={candidate.id}
-              style={[
-                styles.candidateChip,
-                selectedCandidateId === candidate.id ? styles.candidateChipSelected : null,
-              ]}
-              onPress={() => setSelectedCandidateId(candidate.id)}
-            >
-              <Text
-                style={[
-                  styles.candidateChipText,
-                  selectedCandidateId === candidate.id ? styles.candidateChipTextSelected : null,
-                ]}
-              >
-                {candidate.name}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
         <TextInput
           style={styles.input}
-          placeholder="Title"
-          value={createTitle}
-          onChangeText={setCreateTitle}
+          placeholder="Search candidate"
+          value={candidateSearchText}
+          onChangeText={setCandidateSearchText}
+          onFocus={() => setIsCandidateDropdownOpen(true)}
         />
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder="Description (optional)"
-          value={createDescription}
-          onChangeText={setCreateDescription}
-          multiline
-        />
+        {selectedCandidateName ? (
+          <Text style={styles.selectedCandidateLabel}>Selected: {selectedCandidateName}</Text>
+        ) : null}
+        {isCandidateDropdownOpen ? (
+          <View style={styles.candidateDropdown}>
+            {filteredCandidates.map((candidate) => (
+              <Pressable
+                key={candidate.id}
+                style={styles.candidateDropdownItem}
+                onPress={() => handleSelectCandidate(candidate.id)}
+              >
+                <Text
+                  style={[
+                    styles.candidateDropdownText,
+                    selectedCandidateId === candidate.id ? styles.candidateDropdownTextSelected : null,
+                  ]}
+                >
+                  {candidate.name}
+                </Text>
+              </Pressable>
+            ))}
+            {filteredCandidates.length === 0 ? (
+              <Text style={styles.noCandidateResult}>No matching candidates.</Text>
+            ) : null}
+          </View>
+        ) : null}
+        <Pressable style={styles.dropdownToggle} onPress={() => setIsCandidateDropdownOpen((value) => !value)}>
+          <Text style={styles.dropdownToggleText}>
+            {isCandidateDropdownOpen ? 'Hide candidates' : 'Show candidates'}
+          </Text>
+        </Pressable>
         <View style={styles.modalityRow}>
           <Pressable
             style={[styles.modeChip, createModality === 'virtual' ? styles.modeChipSelected : null]}
@@ -341,18 +407,43 @@ export function StaffAppointmentsScreen() {
         </View>
         <TextInput
           style={styles.input}
-          placeholder="Start UTC (ISO, e.g. 2026-03-01T14:00:00.000Z)"
-          value={createStartAtUtc}
-          onChangeText={setCreateStartAtUtc}
-          autoCapitalize="none"
+          placeholder="Title"
+          value={createTitle}
+          onChangeText={setCreateTitle}
         />
         <TextInput
-          style={styles.input}
-          placeholder="End UTC (ISO, e.g. 2026-03-01T15:00:00.000Z)"
-          value={createEndAtUtc}
-          onChangeText={setCreateEndAtUtc}
-          autoCapitalize="none"
+          style={[styles.input, styles.textArea]}
+          placeholder="Description (optional)"
+          value={createDescription}
+          onChangeText={setCreateDescription}
+          multiline
         />
+        <Pressable style={styles.input} onPress={() => setShowStartPicker(true)}>
+          <Text style={styles.datetimeText}>
+            Start: {formatAppointmentDateTime(createStartAtLocal.toISOString())}
+          </Text>
+        </Pressable>
+        <Pressable style={styles.input} onPress={() => setShowEndPicker(true)}>
+          <Text style={styles.datetimeText}>
+            End: {formatAppointmentDateTime(createEndAtLocal.toISOString())}
+          </Text>
+        </Pressable>
+        {showStartPicker ? (
+          <DateTimePicker
+            value={createStartAtLocal}
+            mode="datetime"
+            minimumDate={new Date()}
+            onChange={handleStartPickerChange}
+          />
+        ) : null}
+        {showEndPicker ? (
+          <DateTimePicker
+            value={createEndAtLocal}
+            mode="datetime"
+            minimumDate={createStartAtLocal}
+            onChange={handleEndPickerChange}
+          />
+        ) : null}
         {createModality === 'in_person' ? (
           <TextInput
             style={styles.input}
@@ -428,7 +519,7 @@ export function StaffAppointmentsScreen() {
                   disabled={reviewingId === appointment.id}
                 >
                   <Text style={styles.acceptButtonText}>
-                    {reviewingId === appointment.id ? 'Saving...' : 'Accept'}
+                    {reviewingId === appointment.id ? 'Saving...' : 'Schedule'}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -457,7 +548,7 @@ export function StaffAppointmentsScreen() {
                   <Text style={styles.cardTitle}>{appointment.title}</Text>
                   <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
                     <Text style={[styles.statusText, { color: colors.text }]}>
-                      {appointment.status}
+                      {getStatusLabel(appointment.status)}
                     </Text>
                   </View>
                 </View>
@@ -496,29 +587,53 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 12,
   },
-  candidateChipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
+  selectedCandidateLabel: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '500',
   },
-  candidateChip: {
+  candidateDropdown: {
+    backgroundColor: '#ffffff',
+    borderColor: '#CBD5E1',
+    borderRadius: 8,
+    borderWidth: 1,
+    maxHeight: 180,
+    paddingVertical: 4,
+  },
+  candidateDropdownItem: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  candidateDropdownText: {
+    color: '#0F172A',
+    fontSize: 13,
+  },
+  candidateDropdownTextSelected: {
+    color: '#1D4ED8',
+    fontWeight: '700',
+  },
+  noCandidateResult: {
+    color: '#64748B',
+    fontSize: 12,
+    fontStyle: 'italic',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  dropdownToggle: {
+    alignSelf: 'flex-start',
     borderColor: '#CBD5E1',
     borderRadius: 999,
     borderWidth: 1,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 5,
   },
-  candidateChipSelected: {
-    backgroundColor: '#DBEAFE',
-    borderColor: '#2563EB',
-  },
-  candidateChipText: {
-    color: '#1E293B',
+  dropdownToggleText: {
+    color: '#334155',
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
   },
-  candidateChipTextSelected: {
-    color: '#1D4ED8',
+  datetimeText: {
+    color: '#0F172A',
   },
   input: {
     borderColor: '#CBD5E1',
