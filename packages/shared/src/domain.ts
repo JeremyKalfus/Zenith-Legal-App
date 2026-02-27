@@ -146,7 +146,6 @@ export type CandidateRegistration = z.infer<typeof candidateRegistrationSchema>;
 export const APPOINTMENT_STATUSES = [
   'pending',
   'scheduled',
-  'accepted',
   'declined',
   'cancelled',
 ] as const;
@@ -193,6 +192,7 @@ export const notificationEventSchema = z.enum([
   'message.new',
   'appointment.created',
   'appointment.updated',
+  'appointment.reminder',
   'appointment.cancelled',
   'firm_status.updated',
 ]);

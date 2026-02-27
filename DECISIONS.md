@@ -300,6 +300,58 @@
 ## Pending Decisions
 
 - **Notification delivery providers** -- Which push notification service (Expo Push, FCM, APNs) and email provider (Resend, SendGrid) to use for `dispatch_notifications`.
-- **Calendar OAuth providers** -- Implementation details for Google and Microsoft calendar sync in `connect_calendar_provider`.
+- **Microsoft calendar provider support** -- `calendar_provider` still includes `microsoft`, but user-facing setup and sync behavior are currently implemented for Google + Apple only.
 - **Staging environment setup** -- Dedicated Supabase project and Vercel preview deployment configuration.
 - **Mobile release strategy** -- TestFlight/Play Store rollout cadence, Google Play submit credential ownership, OTA update policy.
+
+### [2026-02-27] Use `scheduled` as canonical reviewed appointment status
+
+**Decision:** Treat `scheduled` as the canonical state for approved appointments and stop writing `accepted` as an active runtime status.
+
+**Options considered:**
+1. Keep `accepted` as canonical -- no migration work, but mismatched product language and duplicated semantics with `scheduled`
+2. Rename at UI layer only -- lower-risk display fix, but inconsistent backend data semantics
+3. Canonicalize to `scheduled` end-to-end (chosen) -- requires migration + logic updates, but removes semantic drift
+
+**Rationale:** Product language uses “scheduled,” and status-dependent logic (conflict checks, visibility windows, notifications) should key off a single canonical value.
+
+**Consequences:** Existing `accepted` rows are migrated to `scheduled`; overlap constraints now target `scheduled`; functions still accept legacy `accepted` input for backward compatibility but normalize writes to `scheduled`.
+
+### [2026-02-27] Delayed reminder queue and per-user calendar sync links
+
+**Decision:** Add delayed notification dispatch (`notification_deliveries.send_after_utc`) for 15-minute appointment reminders and persist calendar sync records per appointment+provider+user (`calendar_event_links`).
+
+**Options considered:**
+1. Fire reminders immediately and rely on client-local timers -- simple server logic, unreliable delivery
+2. Add delayed queue field + due-time processor filtering (chosen) -- predictable server-side reminder timing
+3. Add full external scheduler service first -- robust, but unnecessary complexity for current architecture
+
+**Rationale:** The existing notification queue can support reminder timing with a minimal schema change and no new service. Calendar links need to be user-specific (candidate and staff participants) to avoid collisions and support parallel provider connections.
+
+**Consequences:** Dispatch processor now sends only due push rows (`send_after_utc <= now`). Appointment writes/reviews enqueue reminder events. Calendar sync records are keyed by appointment/provider/user and currently support Google API sync plus Apple ICS-link representation.
+
+### [2026-02-27] Mobile self-service calendar connection in Profile screens
+
+**Decision:** Implement user-facing calendar setup in mobile Profile screens via a shared `CalendarSyncCard` for both candidate and staff users.
+
+**Options considered:**
+1. Keep calendar setup backend-only and rely on manual DB/function calls -- no UI work, but unusable for end users
+2. Add setup only for candidates -- partial rollout, staff still blocked from self-service setup
+3. Add shared setup UI for both roles (chosen) -- consistent UX and immediate self-service for all appointment participants
+
+**Rationale:** Calendar sync is participant-specific (candidate + staff), so both roles need a first-class setup path. Profile is the natural location for account-level external integrations.
+
+**Consequences:** Mobile profile now exposes provider status + connect actions. Google uses OAuth code flow with PKCE and in-app token exchange (`expo-auth-session`), then stores tokens through `connect_calendar_provider`. Apple uses one-tap connect for ICS sync mode. Calendar token parsing in sync code now supports nested `oauth_tokens` payload shape from connection rows.
+
+### [2026-02-27] Use device-native calendar sync in Expo appointment screens
+
+**Decision:** Add mobile-side device calendar sync (`expo-calendar`) so candidate/staff scheduled appointments are created/updated directly in the device calendar app, with declined/cancelled records removed.
+
+**Options considered:**
+1. Keep backend-only provider link state -- low implementation effort, but no visible on-device calendar events in Expo
+2. Build provider-specific deep links only -- partial experience and no event lifecycle updates
+3. Sync directly to device calendar from appointment screens (chosen) -- immediate user-visible behavior in Expo across iOS/Android
+
+**Rationale:** Users in Expo need concrete event creation in native calendar apps, not only backend provider records. Device sync closes that gap immediately while retaining existing provider connection state.
+
+**Consequences:** Appointment screen data now triggers `expo-calendar` upsert/delete behavior when a connected provider exists. Calendar access permission is requested in-app, and app config now includes the `expo-calendar` plugin permission text.

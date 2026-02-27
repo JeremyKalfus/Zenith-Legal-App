@@ -25,6 +25,7 @@ type DeliveryRow = {
   event_type: string;
   payload: Record<string, unknown> | null;
   status: string;
+  send_after_utc: string;
 };
 
 type PushTokenRow = {
@@ -55,6 +56,12 @@ function isExpoPushToken(value: string): boolean {
 function buildPushMessage(eventType: string, payload: Record<string, unknown> | null) {
   switch (eventType) {
     case 'appointment.created':
+      if (payload && payload.status === 'scheduled') {
+        return {
+          title: 'Appointment scheduled',
+          body: 'A recruiter scheduled an appointment for you.',
+        };
+      }
       return {
         title: 'Appointment requested',
         body: 'Your appointment request was received.',
@@ -62,10 +69,10 @@ function buildPushMessage(eventType: string, payload: Record<string, unknown> | 
     case 'appointment.updated': {
       const decision =
         payload && typeof payload.decision === 'string' ? payload.decision.toLowerCase() : null;
-      if (decision === 'accepted') {
+      if (decision === 'accepted' || decision === 'scheduled') {
         return {
-          title: 'Appointment accepted',
-          body: 'A recruiter accepted your appointment request.',
+          title: 'Appointment scheduled',
+          body: 'A recruiter scheduled your appointment.',
         };
       }
       if (decision === 'declined') {
@@ -83,6 +90,11 @@ function buildPushMessage(eventType: string, payload: Record<string, unknown> | 
       return {
         title: 'Appointment cancelled',
         body: 'Your appointment was cancelled.',
+      };
+    case 'appointment.reminder':
+      return {
+        title: 'Appointment reminder',
+        body: 'Your appointment starts in 15 minutes.',
       };
     case 'firm_status.updated': {
       const status = payload && typeof payload.status === 'string' ? payload.status : null;
@@ -340,9 +352,10 @@ async function processQueuedPushDeliveries(payload: z.infer<typeof processSchema
 
   const { data: queuedRows, error: queuedError } = await serviceClient
     .from('notification_deliveries')
-    .select('id,user_id,event_type,payload,status')
+    .select('id,user_id,event_type,payload,status,send_after_utc')
     .eq('channel', 'push')
     .eq('status', 'queued')
+    .lte('send_after_utc', new Date().toISOString())
     .order('created_at', { ascending: true })
     .limit(limit);
 

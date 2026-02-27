@@ -28,8 +28,9 @@ function toDialablePhone(phone: string): string {
 
 export function GlobalRecruiterBanner() {
   const { contact } = useRecruiterContact();
-  const dialablePhone = ZENITH_RECRUITER_PHONE_DIAL || toDialablePhone(contact.phone);
-  const email = ZENITH_RECRUITER_EMAIL || contact.email;
+  const displayPhone = contact.phone?.trim() || ZENITH_RECRUITER_PHONE_DISPLAY;
+  const dialablePhone = toDialablePhone(contact.phone?.trim() || ZENITH_RECRUITER_PHONE_DIAL);
+  const email = contact.email?.trim() || ZENITH_RECRUITER_EMAIL;
 
   return (
     <View style={styles.container} accessibilityRole="header">
@@ -39,7 +40,7 @@ export function GlobalRecruiterBanner() {
           accessibilityRole="link"
           onPress={() => Linking.openURL(`tel:${dialablePhone}`)}
         >
-          <Text style={styles.link}>{ZENITH_RECRUITER_PHONE_DISPLAY}</Text>
+          <Text style={styles.link}>{displayPhone}</Text>
         </Pressable>
         <Pressable
           accessibilityRole="link"

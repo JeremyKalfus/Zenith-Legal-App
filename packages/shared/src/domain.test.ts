@@ -162,7 +162,6 @@ describe('appointment statuses', () => {
     expect(APPOINTMENT_STATUSES).toEqual([
       'pending',
       'scheduled',
-      'accepted',
       'declined',
       'cancelled',
     ]);

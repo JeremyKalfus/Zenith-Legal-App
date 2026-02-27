@@ -2,11 +2,21 @@ import { z } from 'npm:zod@4.3.6';
 import { errorResponse, jsonResponse } from '../_shared/http.ts';
 import { assertStaff, createServiceClient } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
+import { syncAppointmentForParticipants } from '../_shared/calendar-sync.ts';
 
 const schema = z.object({
   appointment_id: z.string().uuid(),
   decision: z.enum(['accepted', 'declined']),
 });
+
+function buildReminderSendAfter(startAtUtc: string): string | null {
+  const reminderAtMs = Date.parse(startAtUtc) - 15 * 60 * 1000;
+  if (!Number.isFinite(reminderAtMs)) {
+    return null;
+  }
+
+  return reminderAtMs > Date.now() ? new Date(reminderAtMs).toISOString() : null;
+}
 
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
@@ -42,7 +52,7 @@ Deno.serve(async (request) => {
         .from('appointments')
         .select('id,start_at_utc,end_at_utc')
         .eq('candidate_user_id', appointment.candidate_user_id)
-        .eq('status', 'accepted')
+        .eq('status', 'scheduled')
         .neq('id', appointment.id)
         .lt('start_at_utc', appointment.end_at_utc)
         .gt('end_at_utc', appointment.start_at_utc)
@@ -54,16 +64,18 @@ Deno.serve(async (request) => {
 
       if (conflicts && conflicts.length > 0) {
         return errorResponse(
-          'Accepting this appointment would create a scheduling conflict',
+          'Scheduling this appointment would create a scheduling conflict',
           409,
           'appointment_conflict',
         );
       }
     }
 
+    const nextStatus = payload.decision === 'accepted' ? 'scheduled' : 'declined';
+
     const { data: updated, error: updateError } = await serviceClient
       .from('appointments')
-      .update({ status: payload.decision })
+      .update({ status: nextStatus })
       .eq('id', payload.appointment_id)
       .select('*')
       .single();
@@ -76,6 +88,17 @@ Deno.serve(async (request) => {
       );
     }
 
+    if (nextStatus === 'scheduled') {
+      await serviceClient.from('appointment_participants').upsert(
+        {
+          appointment_id: appointment.id,
+          user_id: actorUserId,
+          participant_type: 'staff',
+        },
+        { onConflict: 'appointment_id,user_id' },
+      );
+    }
+
     await serviceClient.from('notification_deliveries').insert([
       {
         user_id: appointment.candidate_user_id,
@@ -83,7 +106,8 @@ Deno.serve(async (request) => {
         event_type: 'appointment.updated',
         payload: {
           appointment_id: appointment.id,
-          decision: payload.decision,
+          decision: nextStatus,
+          status: nextStatus,
         },
         status: 'queued',
       },
@@ -93,11 +117,37 @@ Deno.serve(async (request) => {
         event_type: 'appointment.updated',
         payload: {
           appointment_id: appointment.id,
-          decision: payload.decision,
+          decision: nextStatus,
+          status: nextStatus,
         },
         status: 'queued',
       },
     ]);
+
+    const reminderSendAfter = nextStatus === 'scheduled' ? buildReminderSendAfter(appointment.start_at_utc) : null;
+    if (reminderSendAfter) {
+      const reminderTargets = new Set<string>([appointment.candidate_user_id]);
+      reminderTargets.add(actorUserId);
+      await serviceClient.from('notification_deliveries').insert(
+        Array.from(reminderTargets).map((targetUserId) => ({
+          user_id: targetUserId,
+          channel: 'push',
+          event_type: 'appointment.reminder',
+          payload: {
+            appointment_id: appointment.id,
+            start_at_utc: appointment.start_at_utc,
+          },
+          send_after_utc: reminderSendAfter,
+          status: 'queued',
+        })),
+      );
+    }
+
+    await syncAppointmentForParticipants({
+      serviceClient,
+      appointment: updated,
+      participantUserIds: [appointment.candidate_user_id, actorUserId],
+    });
 
     await writeAuditEvent({
       client: serviceClient,
@@ -113,7 +163,7 @@ Deno.serve(async (request) => {
       success: true,
       appointment: updated,
       previous_status: appointment.status,
-      new_status: payload.decision,
+      new_status: nextStatus,
     });
   } catch (error) {
     const message = (error as Error).message;

@@ -68,21 +68,24 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ### Appointments
 - Candidates request appointments with title, description, modality (virtual/in-person), optional location (in-person) and video URL (virtual), start/end times, timezone.
 - Appointment requests start in `pending` status.
-- Staff reviews and accepts or declines via `staff_review_appointment`.
-- Overlap detection prevents conflicting accepted appointments.
+- Staff can schedule appointments directly for candidates (mobile + admin workflows) or review pending requests via `staff_review_appointment` (`pending` -> `scheduled`/`declined`).
+- Overlap detection prevents conflicting scheduled appointments.
+- Scheduled and declined appointments are hidden from candidate and staff views 24 hours after planned end time.
 - Real-time subscription updates appointment list.
 
 ### Profile Management
 - Candidates update email, password, and intake fields.
 - Profile data stored in `users_profile` and `candidate_preferences` tables.
 - Candidates can delete their account in-app from Profile (self-service deletion flow with confirmation).
+- Candidate and staff Profile tabs include a Calendar Sync settings card with provider status and connect actions.
 
 ### Notifications
 - Push token registration.
 - Notification preferences per user.
 - `dispatch_notifications` edge function can enqueue notification events and process queued push notification deliveries (Expo Push API).
+- Staff-scheduled appointments enqueue immediate push notifications and 15-minute pre-meeting push reminders.
 - Automatic recurring processor scheduling is not fully wired yet (queued deliveries require processor invocation until scheduler/automation is added).
-- Notification events: appointment created/updated, assignment status change, message received.
+- Notification events: appointment created/updated/reminder, assignment status change, message received.
 - Standalone/TestFlight iOS push notification credential setup (Apple APNs key in EAS) is configured as of 2026-02-25; runtime validation on a TestFlight build is still pending.
 - Current TestFlight runtime issue: authentication fails with placeholder Supabase config until EAS production env vars are configured and a new build is shipped.
 
@@ -101,15 +104,19 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Candidate consents tracked with version and timestamp.
 
 ### Calendar Integration
-- `connect_calendar_provider` edge function (Google, Microsoft).
-- `calendar_connections` and `calendar_event_links` tables in schema.
+- `connect_calendar_provider` edge function (Google, Apple).
+- Mobile app exposes user-facing setup in Profile:
+  - Google Calendar: OAuth authorization code flow with PKCE and in-app token exchange.
+  - Apple Calendar: one-tap connect path for provider-enabled sync.
+- Appointment writes/reviews trigger per-user calendar sync for candidate + staff participants:
+  - Google: direct Calendar API create/update/delete when access token is available.
+  - Mobile app: device-native `expo-calendar` event sync for connected users (scheduled upsert, declined/cancelled delete).
+- `calendar_connections` and `calendar_event_links` tables persist provider connection state and synced event links.
 
 ## Open Questions
 
-- What is the intended behavior when a candidate's appointment overlaps with a pending (not yet accepted) appointment?
-- Is there a workflow for staff to create appointments on behalf of candidates?
+- What is the intended behavior when a candidate's appointment overlaps with a pending (not yet scheduled) appointment?
 - What are the exact product rules for staff-configured user-specific banners (priority, targeting, expiration, and override behavior vs global banners)?
 - What are the specific notification delivery channels beyond push (email, SMS)?
-- How should the calendar integration sync appointments to external calendars?
 - What is the support/data request lifecycle beyond the initial request creation?
 - Are there plans for candidate self-service firm discovery (vs recruiter-only assignment)?

@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { CalendarSyncCard } from '../../components/calendar-sync-card';
 import { ScreenShell } from '../../components/screen-shell';
 import { useAuth } from '../../context/auth-context';
 import { uiColors } from '../../theme/colors';
@@ -17,6 +18,8 @@ export function StaffProfileScreen() {
         <Text style={styles.subtle}>{profile?.email ?? 'No email available'}</Text>
         <Text style={styles.subtle}>Role: {profile?.role ?? 'staff'}</Text>
       </View>
+
+      <CalendarSyncCard />
 
       <Pressable
         style={interactivePressableStyle({

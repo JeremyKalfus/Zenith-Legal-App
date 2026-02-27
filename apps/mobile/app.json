@@ -42,7 +42,14 @@
       "expo-secure-store",
       "expo-notifications",
       "expo-video",
-      "expo-audio"
+      "expo-audio",
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Allow Zenith Legal to access your calendar so scheduled appointments can sync automatically."
+        }
+      ],
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {
