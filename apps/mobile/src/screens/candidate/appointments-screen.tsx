@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { Picker } from '@react-native-picker/picker';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { appointmentSchema, type AppointmentInput, type AppointmentStatus } from '@zenith/shared';
@@ -20,6 +22,15 @@ type AppointmentRecord = {
   video_url: string | null;
   status: AppointmentStatus;
 };
+
+const DURATION_OPTIONS = [
+  { label: '5 min', minutes: 5 },
+  { label: '15 min', minutes: 15 },
+  { label: '30 min', minutes: 30 },
+  { label: '45 min', minutes: 45 },
+  { label: '1 hour', minutes: 60 },
+  { label: '2 hours', minutes: 120 },
+] as const;
 
 const APPOINTMENT_HIDE_AFTER_MS = 24 * 60 * 60 * 1000;
 
@@ -54,6 +65,7 @@ function useAppointmentsScreen() {
     control,
     handleSubmit,
     reset,
+    setValue,
     watch,
     formState: { errors },
   } = useForm<AppointmentInput>({
@@ -69,6 +81,35 @@ function useAppointmentsScreen() {
   });
 
   const selectedModality = watch('modality');
+  const [createStartAtLocal, setCreateStartAtLocal] = useState(() => new Date(Date.now() + 3600_000));
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [createDurationMinutes, setCreateDurationMinutes] = useState(30);
+
+  const createEndAtLocal = useMemo(
+    () => new Date(createStartAtLocal.getTime() + createDurationMinutes * 60_000),
+    [createDurationMinutes, createStartAtLocal],
+  );
+
+  useEffect(() => {
+    setValue('startAtUtc', createStartAtLocal.toISOString());
+    setValue('endAtUtc', createEndAtLocal.toISOString());
+    setValue('timezoneLabel', Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York');
+  }, [createEndAtLocal, createStartAtLocal, setValue]);
+
+  const handleStartPickerChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (event.type === 'dismissed') {
+      setShowStartPicker(false);
+      return;
+    }
+
+    if (selectedDate) {
+      setCreateStartAtLocal(selectedDate);
+    }
+
+    if (Platform.OS === 'android') {
+      setShowStartPicker(false);
+    }
+  }, []);
 
   const loadAppointments = useCallback(async () => {
     const { data, error } = await supabase
@@ -130,7 +171,18 @@ function useAppointmentsScreen() {
 
             setServerMessage('Appointment request submitted.');
             setShowForm(false);
-            reset();
+            reset({
+              title: '',
+              description: '',
+              modality: 'virtual',
+              locationText: undefined,
+              videoUrl: undefined,
+              startAtUtc: new Date(Date.now() + 3600_000).toISOString(),
+              endAtUtc: new Date(Date.now() + 7200_000).toISOString(),
+              timezoneLabel: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
+            });
+            setCreateStartAtLocal(new Date(Date.now() + 3600_000));
+            setCreateDurationMinutes(30);
             await loadAppointments();
           } catch (err) {
             setServerMessage((err as Error).message);
@@ -143,7 +195,7 @@ function useAppointmentsScreen() {
           setServerMessage(firstError?.message ?? 'Please fix the highlighted fields.');
         },
       )(),
-    [handleSubmit, reset, loadAppointments],
+    [handleSubmit, loadAppointments, reset],
   );
 
   return {
@@ -154,6 +206,13 @@ function useAppointmentsScreen() {
     control,
     errors,
     selectedModality,
+    createStartAtLocal,
+    createEndAtLocal,
+    showStartPicker,
+    setShowStartPicker,
+    handleStartPickerChange,
+    createDurationMinutes,
+    setCreateDurationMinutes,
     toggleForm,
     onSubmit,
   };
@@ -190,12 +249,26 @@ function AppointmentForm({
   control,
   errors,
   selectedModality,
+  createStartAtLocal,
+  createEndAtLocal,
+  showStartPicker,
+  setShowStartPicker,
+  handleStartPickerChange,
+  createDurationMinutes,
+  setCreateDurationMinutes,
   submitting,
   onSubmit,
 }: {
   control: ReturnType<typeof useAppointmentsScreen>['control'];
   errors: ReturnType<typeof useAppointmentsScreen>['errors'];
   selectedModality: string | undefined;
+  createStartAtLocal: Date;
+  createEndAtLocal: Date;
+  showStartPicker: boolean;
+  setShowStartPicker: (value: boolean | ((value: boolean) => boolean)) => void;
+  handleStartPickerChange: (event: DateTimePickerEvent, selectedDate?: Date) => void;
+  createDurationMinutes: number;
+  setCreateDurationMinutes: (minutes: number) => void;
   submitting: boolean;
   onSubmit: () => void;
 }) {
@@ -252,6 +325,34 @@ function AppointmentForm({
           </View>
         )}
       />
+      <Pressable style={styles.input} onPress={() => setShowStartPicker((value) => !value)}>
+        <Text style={styles.valueText}>Start: {formatAppointmentDateTime(createStartAtLocal.toISOString())}</Text>
+      </Pressable>
+      {showStartPicker ? (
+        <View style={styles.pickerShell}>
+          <DateTimePicker
+            value={createStartAtLocal}
+            mode="datetime"
+            display="spinner"
+            minimumDate={new Date()}
+            onChange={handleStartPickerChange}
+          />
+          {Platform.OS === 'ios' ? (
+            <Pressable style={styles.pickerDone} onPress={() => setShowStartPicker(false)}>
+              <Text style={styles.pickerDoneText}>Done</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+      <Text style={styles.helperText}>Meeting length</Text>
+      <View style={styles.pickerShell}>
+        <Picker selectedValue={createDurationMinutes} onValueChange={(value) => setCreateDurationMinutes(Number(value))}>
+          {DURATION_OPTIONS.map((option) => (
+            <Picker.Item key={option.minutes} label={option.label} value={option.minutes} />
+          ))}
+        </Picker>
+      </View>
+      <Text style={styles.helperText}>Ends: {formatAppointmentDateTime(createEndAtLocal.toISOString())}</Text>
       {selectedModality === 'virtual' ? (
         <Controller
           control={control}
@@ -314,6 +415,13 @@ export function AppointmentsScreen() {
     control,
     errors,
     selectedModality,
+    createStartAtLocal,
+    createEndAtLocal,
+    showStartPicker,
+    setShowStartPicker,
+    handleStartPickerChange,
+    createDurationMinutes,
+    setCreateDurationMinutes,
     toggleForm,
     onSubmit,
   } = useAppointmentsScreen();
@@ -342,6 +450,13 @@ export function AppointmentsScreen() {
           control={control}
           errors={errors}
           selectedModality={selectedModality}
+          createStartAtLocal={createStartAtLocal}
+          createEndAtLocal={createEndAtLocal}
+          showStartPicker={showStartPicker}
+          setShowStartPicker={setShowStartPicker}
+          handleStartPickerChange={handleStartPickerChange}
+          createDurationMinutes={createDurationMinutes}
+          setCreateDurationMinutes={setCreateDurationMinutes}
           submitting={submitting}
           onSubmit={onSubmit}
         />
@@ -424,6 +539,28 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     padding: 10,
+  },
+  valueText: {
+    color: uiColors.textPrimary,
+  },
+  pickerShell: {
+    borderColor: uiColors.borderStrong,
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  pickerDone: {
+    alignItems: 'center',
+    paddingBottom: 6,
+  },
+  pickerDoneText: {
+    color: uiColors.success,
+    fontWeight: '700',
+  },
+  helperText: {
+    color: uiColors.textSecondary,
+    fontSize: 12,
+    fontWeight: '500',
   },
   inputError: {
     borderColor: uiColors.errorBright,

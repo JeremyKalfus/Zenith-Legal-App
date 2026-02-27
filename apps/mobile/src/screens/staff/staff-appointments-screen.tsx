@@ -1,15 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  FlatList,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { Picker } from '@react-native-picker/picker';
 import type { AppointmentStatus } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
 import { formatAppointmentDateTime } from '../../lib/date-format';
@@ -58,11 +50,7 @@ function shouldHideExpiredAppointment(appointment: StaffAppointment): boolean {
 }
 
 function getStatusLabel(status: AppointmentStatus | 'accepted'): string {
-  if (status === 'accepted') {
-    return 'scheduled';
-  }
-
-  return status;
+  return status === 'accepted' ? 'scheduled' : status;
 }
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
@@ -78,14 +66,12 @@ function useStaffAppointmentsScreen() {
   const [candidates, setCandidates] = useState<CandidateOption[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [candidateSearchText, setCandidateSearchText] = useState('');
-  const [isCandidateSearchOpen, setIsCandidateSearchOpen] = useState(false);
 
   const [createTitle, setCreateTitle] = useState('');
   const [createDescription, setCreateDescription] = useState('');
   const [createStartAtLocal, setCreateStartAtLocal] = useState(() => new Date(Date.now() + 3600_000));
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [createDurationMinutes, setCreateDurationMinutes] = useState(30);
-  const [isDurationSelectorOpen, setIsDurationSelectorOpen] = useState(false);
   const [createModality, setCreateModality] = useState<'virtual' | 'in_person'>('virtual');
   const [createLocation, setCreateLocation] = useState('');
   const [createVideoUrl, setCreateVideoUrl] = useState('');
@@ -109,9 +95,7 @@ function useStaffAppointmentsScreen() {
 
     const mapped: StaffAppointment[] = (data ?? []).map((row: Record<string, unknown>) => {
       const candidate = row.candidate as { name: string } | { name: string }[] | null;
-      const name = Array.isArray(candidate)
-        ? candidate[0]?.name ?? 'Unknown'
-        : candidate?.name ?? 'Unknown';
+      const name = Array.isArray(candidate) ? candidate[0]?.name ?? 'Unknown' : candidate?.name ?? 'Unknown';
 
       return {
         id: row.id as string,
@@ -153,6 +137,44 @@ function useStaffAppointmentsScreen() {
     void loadCandidates();
   }, [loadAppointments, loadCandidates]);
 
+  const filteredCandidates = useMemo(() => {
+    const search = candidateSearchText.trim().toLowerCase();
+    if (!search) {
+      return candidates;
+    }
+
+    return candidates.filter((candidate) => candidate.name.toLowerCase().includes(search));
+  }, [candidateSearchText, candidates]);
+
+  useEffect(() => {
+    if (!filteredCandidates.some((candidate) => candidate.id === selectedCandidateId)) {
+      setSelectedCandidateId(filteredCandidates[0]?.id ?? '');
+    }
+  }, [filteredCandidates, selectedCandidateId]);
+
+  const selectedCandidateName =
+    candidates.find((candidate) => candidate.id === selectedCandidateId)?.name ?? '';
+
+  const createEndAtLocal = useMemo(
+    () => new Date(createStartAtLocal.getTime() + createDurationMinutes * 60_000),
+    [createDurationMinutes, createStartAtLocal],
+  );
+
+  const handleStartPickerChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (event.type === 'dismissed') {
+      setShowStartPicker(false);
+      return;
+    }
+
+    if (selectedDate) {
+      setCreateStartAtLocal(selectedDate);
+    }
+
+    if (Platform.OS === 'android') {
+      setShowStartPicker(false);
+    }
+  }, []);
+
   const handleReview = useCallback(
     async (appointmentId: string, decision: 'accepted' | 'declined') => {
       setReviewingId(appointmentId);
@@ -181,57 +203,6 @@ function useStaffAppointmentsScreen() {
     [loadAppointments],
   );
 
-  const handleStartPickerChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (event.type === 'dismissed') {
-      setShowStartPicker(false);
-      return;
-    }
-
-    if (selectedDate) {
-      setCreateStartAtLocal(selectedDate);
-    }
-
-    if (Platform.OS === 'android') {
-      setShowStartPicker(false);
-    }
-  }, []);
-
-  const handleOpenCandidateSearch = useCallback(() => {
-    setCandidateSearchText('');
-    setIsCandidateSearchOpen(true);
-  }, []);
-
-  const handleSelectCandidate = useCallback((candidateId: string) => {
-    setSelectedCandidateId(candidateId);
-    setIsCandidateSearchOpen(false);
-  }, []);
-
-  const handleSelectDuration = useCallback((minutes: number) => {
-    setCreateDurationMinutes(minutes);
-    setIsDurationSelectorOpen(false);
-  }, []);
-
-  const normalizedCandidateSearch = candidateSearchText.trim().toLowerCase();
-  const filteredCandidates = useMemo(
-    () =>
-      normalizedCandidateSearch
-        ? candidates.filter((candidate) => candidate.name.toLowerCase().includes(normalizedCandidateSearch))
-        : candidates,
-    [candidates, normalizedCandidateSearch],
-  );
-
-  const selectedCandidateName =
-    candidates.find((candidate) => candidate.id === selectedCandidateId)?.name ?? '';
-
-  const createEndAtLocal = useMemo(
-    () => new Date(createStartAtLocal.getTime() + createDurationMinutes * 60_000),
-    [createDurationMinutes, createStartAtLocal],
-  );
-
-  const selectedDurationLabel =
-    DURATION_OPTIONS.find((option) => option.minutes === createDurationMinutes)?.label ??
-    `${createDurationMinutes} min`;
-
   const handleCreateAppointment = useCallback(async () => {
     if (!selectedCandidateId) {
       setStatusMessage('Select a candidate before scheduling.');
@@ -248,7 +219,6 @@ function useStaffAppointmentsScreen() {
 
     try {
       await ensureValidSession();
-
       const { error } = await supabase.functions.invoke('schedule_or_update_appointment', {
         body: {
           candidateUserId: selectedCandidateId,
@@ -276,8 +246,6 @@ function useStaffAppointmentsScreen() {
       setCreateDurationMinutes(30);
       setCreateLocation('');
       setCreateVideoUrl('');
-      setCandidateSearchText('');
-      setIsCandidateSearchOpen(false);
       await loadAppointments();
     } catch (err) {
       setStatusMessage((err as Error).message);
@@ -302,14 +270,15 @@ function useStaffAppointmentsScreen() {
   return {
     pending,
     others,
-    selectedCandidateName,
-    isCandidateSearchOpen,
-    setIsCandidateSearchOpen,
+    statusMessage,
+    reviewingId,
+    handleReview,
+    filteredCandidates,
+    selectedCandidateId,
+    setSelectedCandidateId,
     candidateSearchText,
     setCandidateSearchText,
-    filteredCandidates,
-    handleOpenCandidateSearch,
-    handleSelectCandidate,
+    selectedCandidateName,
     createTitle,
     setCreateTitle,
     createDescription,
@@ -322,18 +291,12 @@ function useStaffAppointmentsScreen() {
     setCreateVideoUrl,
     createStartAtLocal,
     createEndAtLocal,
+    createDurationMinutes,
+    setCreateDurationMinutes,
     showStartPicker,
     setShowStartPicker,
     handleStartPickerChange,
-    createDurationMinutes,
-    selectedDurationLabel,
-    isDurationSelectorOpen,
-    setIsDurationSelectorOpen,
-    handleSelectDuration,
     creating,
-    statusMessage,
-    reviewingId,
-    handleReview,
     handleCreateAppointment,
   };
 }
@@ -342,14 +305,15 @@ export function StaffAppointmentsScreen() {
   const {
     pending,
     others,
-    selectedCandidateName,
-    isCandidateSearchOpen,
-    setIsCandidateSearchOpen,
+    statusMessage,
+    reviewingId,
+    handleReview,
+    filteredCandidates,
+    selectedCandidateId,
+    setSelectedCandidateId,
     candidateSearchText,
     setCandidateSearchText,
-    filteredCandidates,
-    handleOpenCandidateSearch,
-    handleSelectCandidate,
+    selectedCandidateName,
     createTitle,
     setCreateTitle,
     createDescription,
@@ -362,17 +326,12 @@ export function StaffAppointmentsScreen() {
     setCreateVideoUrl,
     createStartAtLocal,
     createEndAtLocal,
+    createDurationMinutes,
+    setCreateDurationMinutes,
     showStartPicker,
     setShowStartPicker,
     handleStartPickerChange,
-    selectedDurationLabel,
-    isDurationSelectorOpen,
-    setIsDurationSelectorOpen,
-    handleSelectDuration,
     creating,
-    statusMessage,
-    reviewingId,
-    handleReview,
     handleCreateAppointment,
   } = useStaffAppointmentsScreen();
 
@@ -384,37 +343,37 @@ export function StaffAppointmentsScreen() {
       <View style={styles.createCard}>
         <Text style={styles.sectionHeader}>Schedule for Candidate</Text>
 
-        <Pressable style={styles.input} onPress={handleOpenCandidateSearch}>
-          <Text style={selectedCandidateName ? styles.valueText : styles.placeholderText}>
-            {selectedCandidateName || 'Select candidate'}
-          </Text>
-        </Pressable>
+        <TextInput
+          style={styles.input}
+          placeholder="Search candidates"
+          value={candidateSearchText}
+          onChangeText={setCandidateSearchText}
+        />
+        <View style={styles.pickerShell}>
+          <Picker selectedValue={selectedCandidateId} onValueChange={(value) => setSelectedCandidateId(String(value))}>
+            {filteredCandidates.map((candidate) => (
+              <Picker.Item key={candidate.id} label={candidate.name} value={candidate.id} />
+            ))}
+          </Picker>
+        </View>
+        {selectedCandidateName ? <Text style={styles.helperText}>Selected: {selectedCandidateName}</Text> : null}
 
         <View style={styles.modalityRow}>
           <Pressable
             style={[styles.modeChip, createModality === 'virtual' ? styles.modeChipSelected : null]}
             onPress={() => setCreateModality('virtual')}
           >
-            <Text
-              style={createModality === 'virtual' ? styles.modeChipTextSelected : styles.modeChipText}
-            >
-              Virtual
-            </Text>
+            <Text style={createModality === 'virtual' ? styles.modeChipTextSelected : styles.modeChipText}>Virtual</Text>
           </Pressable>
           <Pressable
             style={[styles.modeChip, createModality === 'in_person' ? styles.modeChipSelected : null]}
             onPress={() => setCreateModality('in_person')}
           >
-            <Text
-              style={createModality === 'in_person' ? styles.modeChipTextSelected : styles.modeChipText}
-            >
-              In-person
-            </Text>
+            <Text style={createModality === 'in_person' ? styles.modeChipTextSelected : styles.modeChipText}>In-person</Text>
           </Pressable>
         </View>
 
         <TextInput style={styles.input} placeholder="Title" value={createTitle} onChangeText={setCreateTitle} />
-
         <TextInput
           style={[styles.input, styles.textArea]}
           placeholder="Description (optional)"
@@ -428,7 +387,7 @@ export function StaffAppointmentsScreen() {
         </Pressable>
 
         {showStartPicker ? (
-          <View style={styles.pickerContainer}>
+          <View style={styles.pickerShell}>
             <DateTimePicker
               value={createStartAtLocal}
               mode="datetime"
@@ -437,16 +396,21 @@ export function StaffAppointmentsScreen() {
               onChange={handleStartPickerChange}
             />
             {Platform.OS === 'ios' ? (
-              <Pressable style={styles.pickerDoneButton} onPress={() => setShowStartPicker(false)}>
+              <Pressable style={styles.pickerDone} onPress={() => setShowStartPicker(false)}>
                 <Text style={styles.pickerDoneText}>Done</Text>
               </Pressable>
             ) : null}
           </View>
         ) : null}
 
-        <Pressable style={styles.input} onPress={() => setIsDurationSelectorOpen(true)}>
-          <Text style={styles.valueText}>Meeting length: {selectedDurationLabel}</Text>
-        </Pressable>
+        <Text style={styles.helperText}>Meeting length</Text>
+        <View style={styles.pickerShell}>
+          <Picker selectedValue={createDurationMinutes} onValueChange={(value) => setCreateDurationMinutes(Number(value))}>
+            {DURATION_OPTIONS.map((option) => (
+              <Picker.Item key={option.minutes} label={option.label} value={option.minutes} />
+            ))}
+          </Picker>
+        </View>
 
         <Text style={styles.helperText}>Ends: {formatAppointmentDateTime(createEndAtLocal.toISOString())}</Text>
 
@@ -491,17 +455,14 @@ export function StaffAppointmentsScreen() {
                   <Text style={[styles.statusText, { color: STATUS_COLORS.pending.text }]}>Pending</Text>
                 </View>
               </View>
-
               <Text style={styles.cardSubtitle}>{appointment.candidate_name}</Text>
               <Text style={styles.cardTime}>
-                {formatAppointmentDateTime(appointment.start_at_utc)} –{' '}
-                {formatAppointmentDateTime(appointment.end_at_utc)}
+                {formatAppointmentDateTime(appointment.start_at_utc)} – {formatAppointmentDateTime(appointment.end_at_utc)}
               </Text>
               <Text style={styles.cardDetail}>
                 {appointment.modality === 'virtual' ? 'Virtual' : 'In-person'}
                 {appointment.location_text ? ` · ${appointment.location_text}` : ''}
               </Text>
-
               {appointment.description ? <Text style={styles.cardDescription}>{appointment.description}</Text> : null}
 
               <View style={styles.actionRow}>
@@ -536,14 +497,13 @@ export function StaffAppointmentsScreen() {
               <View key={appointment.id} style={styles.card}>
                 <View style={styles.cardHeader}>
                   <Text style={styles.cardTitle}>{appointment.title}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}> 
+                  <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
                     <Text style={[styles.statusText, { color: colors.text }]}>{getStatusLabel(appointment.status)}</Text>
                   </View>
                 </View>
                 <Text style={styles.cardSubtitle}>{appointment.candidate_name}</Text>
                 <Text style={styles.cardTime}>
-                  {formatAppointmentDateTime(appointment.start_at_utc)} –{' '}
-                  {formatAppointmentDateTime(appointment.end_at_utc)}
+                  {formatAppointmentDateTime(appointment.start_at_utc)} – {formatAppointmentDateTime(appointment.end_at_utc)}
                 </Text>
                 <Text style={styles.cardDetail}>
                   {appointment.modality === 'virtual' ? 'Virtual' : 'In-person'}
@@ -554,50 +514,6 @@ export function StaffAppointmentsScreen() {
           })}
         </>
       ) : null}
-
-      <Modal visible={isCandidateSearchOpen} animationType="slide" onRequestClose={() => setIsCandidateSearchOpen(false)}>
-        <View style={styles.modalRoot}>
-          <Text style={styles.modalTitle}>Select Candidate</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Search candidates"
-            value={candidateSearchText}
-            onChangeText={setCandidateSearchText}
-            autoFocus
-          />
-          <FlatList
-            data={filteredCandidates}
-            keyExtractor={(item) => item.id}
-            style={styles.modalList}
-            keyboardShouldPersistTaps="handled"
-            renderItem={({ item }) => (
-              <Pressable style={styles.modalItem} onPress={() => handleSelectCandidate(item.id)}>
-                <Text style={styles.modalItemText}>{item.name}</Text>
-              </Pressable>
-            )}
-            ListEmptyComponent={<Text style={styles.emptyState}>No matching candidates.</Text>}
-          />
-          <Pressable style={[styles.actionButton, styles.declineButton]} onPress={() => setIsCandidateSearchOpen(false)}>
-            <Text style={styles.declineButtonText}>Close</Text>
-          </Pressable>
-        </View>
-      </Modal>
-
-      <Modal visible={isDurationSelectorOpen} transparent animationType="fade" onRequestClose={() => setIsDurationSelectorOpen(false)}>
-        <View style={styles.durationModalBackdrop}>
-          <View style={styles.durationModalCard}>
-            <Text style={styles.modalTitle}>Meeting Length</Text>
-            {DURATION_OPTIONS.map((option) => (
-              <Pressable key={option.minutes} style={styles.modalItem} onPress={() => handleSelectDuration(option.minutes)}>
-                <Text style={styles.modalItemText}>{option.label}</Text>
-              </Pressable>
-            ))}
-            <Pressable style={[styles.actionButton, styles.declineButton]} onPress={() => setIsDurationSelectorOpen(false)}>
-              <Text style={styles.declineButtonText}>Close</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
     </ScreenShell>
   );
 }
@@ -630,30 +546,28 @@ const styles = StyleSheet.create({
   valueText: {
     color: '#0F172A',
   },
-  placeholderText: {
-    color: '#64748B',
-  },
-  helperText: {
-    color: '#334155',
-    fontSize: 12,
-  },
-  textArea: {
-    minHeight: 60,
-    textAlignVertical: 'top',
-  },
-  pickerContainer: {
+  pickerShell: {
     borderColor: '#CBD5E1',
     borderRadius: 8,
     borderWidth: 1,
-    paddingVertical: 8,
+    overflow: 'hidden',
   },
-  pickerDoneButton: {
+  pickerDone: {
     alignItems: 'center',
-    paddingBottom: 4,
+    paddingBottom: 6,
   },
   pickerDoneText: {
     color: '#166534',
     fontWeight: '700',
+  },
+  helperText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  textArea: {
+    minHeight: 60,
+    textAlignVertical: 'top',
   },
   modalityRow: {
     flexDirection: 'row',
@@ -774,47 +688,5 @@ const styles = StyleSheet.create({
   declineButtonText: {
     color: '#DC2626',
     fontWeight: '700',
-  },
-  modalRoot: {
-    backgroundColor: '#ffffff',
-    flex: 1,
-    gap: 8,
-    padding: 16,
-  },
-  modalTitle: {
-    color: '#0F172A',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  modalList: {
-    borderColor: '#E2E8F0',
-    borderRadius: 8,
-    borderWidth: 1,
-    flex: 1,
-  },
-  modalItem: {
-    borderBottomColor: '#E2E8F0',
-    borderBottomWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  modalItemText: {
-    color: '#0F172A',
-    fontSize: 15,
-  },
-  durationModalBackdrop: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
-    flex: 1,
-    justifyContent: 'center',
-    padding: 16,
-  },
-  durationModalCard: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    gap: 4,
-    maxWidth: 360,
-    padding: 12,
-    width: '100%',
   },
 });
