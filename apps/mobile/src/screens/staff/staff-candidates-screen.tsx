@@ -1,8 +1,34 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  CITY_OPTIONS,
+  filterCandidatesBySearchCityPractice,
+  PRACTICE_AREAS,
+  type CityOption,
+  type PracticeArea,
+} from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
 import type { StaffCandidateListItem } from '../../features/staff-candidate-management';
 import { listStaffCandidates } from '../../features/staff-candidate-management';
+import { uiColors } from '../../theme/colors';
+
+const COLLAPSED_BUBBLE_ROWS_HEIGHT = 34;
+
+function FilterChip({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={[styles.chip, selected ? styles.chipSelected : null]}>
+      <Text style={selected ? styles.chipTextSelected : styles.chipText}>{label}</Text>
+    </Pressable>
+  );
+}
 
 export function StaffCandidatesScreen({
   onOpenCandidate,
@@ -11,6 +37,10 @@ export function StaffCandidatesScreen({
 }) {
   const [candidates, setCandidates] = useState<StaffCandidateListItem[]>([]);
   const [query, setQuery] = useState('');
+  const [selectedCities, setSelectedCities] = useState<CityOption[]>([]);
+  const [selectedPracticeAreas, setSelectedPracticeAreas] = useState<PracticeArea[]>([]);
+  const [showAllCityFilters, setShowAllCityFilters] = useState(false);
+  const [showAllPracticeFilters, setShowAllPracticeFilters] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -32,16 +62,12 @@ export function StaffCandidatesScreen({
   }, [loadCandidates]);
 
   const filteredCandidates = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) {
-      return candidates;
-    }
-    return candidates.filter((candidate) =>
-      [candidate.name, candidate.email, candidate.mobile]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(normalizedQuery)),
-    );
-  }, [candidates, query]);
+    return filterCandidatesBySearchCityPractice(candidates, {
+      query,
+      selectedCities,
+      selectedPracticeAreas,
+    });
+  }, [candidates, query, selectedCities, selectedPracticeAreas]);
 
   return (
     <ScreenShell showBanner={false}>
@@ -58,6 +84,50 @@ export function StaffCandidatesScreen({
         autoCapitalize="none"
         onChangeText={setQuery}
       />
+
+      <Text style={styles.filterLabel}>Filter by city</Text>
+      <View style={[styles.chipWrap, !showAllCityFilters && styles.chipWrapCollapsed]}>
+        {CITY_OPTIONS.map((city) => {
+          const selected = selectedCities.includes(city);
+          return (
+            <FilterChip
+              key={city}
+              label={city}
+              selected={selected}
+              onPress={() => {
+                setSelectedCities((current) => (selected
+                  ? current.filter((value) => value !== city)
+                  : [...current, city]));
+              }}
+            />
+          );
+        })}
+      </View>
+      <Pressable style={styles.expandButton} onPress={() => setShowAllCityFilters((value) => !value)}>
+        <Text style={styles.expandButtonText}>{showAllCityFilters ? 'Show less' : 'See more'}</Text>
+      </Pressable>
+
+      <Text style={styles.filterLabel}>Filter by practice</Text>
+      <View style={[styles.chipWrap, !showAllPracticeFilters && styles.chipWrapCollapsed]}>
+        {PRACTICE_AREAS.map((area) => {
+          const selected = selectedPracticeAreas.includes(area);
+          return (
+            <FilterChip
+              key={area}
+              label={area}
+              selected={selected}
+              onPress={() => {
+                setSelectedPracticeAreas((current) => (selected
+                  ? current.filter((value) => value !== area)
+                  : [...current, area]));
+              }}
+            />
+          );
+        })}
+      </View>
+      <Pressable style={styles.expandButton} onPress={() => setShowAllPracticeFilters((value) => !value)}>
+        <Text style={styles.expandButtonText}>{showAllPracticeFilters ? 'Show less' : 'See more'}</Text>
+      </Pressable>
 
       <Pressable style={styles.secondaryButton} onPress={() => void loadCandidates()}>
         <Text style={styles.secondaryButtonText}>{isLoading ? 'Refreshing...' : 'Refresh list'}</Text>
@@ -90,47 +160,86 @@ export function StaffCandidatesScreen({
 
 const styles = StyleSheet.create({
   body: {
-    color: '#475569',
+    color: uiColors.textSecondary,
   },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E2E8F0',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.border,
     borderRadius: 12,
     borderWidth: 1,
     padding: 12,
   },
   cardPressed: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: uiColors.background,
   },
   cardSubtle: {
-    color: '#64748B',
+    color: uiColors.textMuted,
     fontSize: 12,
     marginTop: 4,
   },
   cardText: {
-    color: '#334155',
+    color: uiColors.textStrong,
     marginTop: 2,
   },
   cardTitle: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 15,
     fontWeight: '700',
   },
+  chip: {
+    backgroundColor: uiColors.divider,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  chipSelected: {
+    backgroundColor: uiColors.primary,
+  },
+  chipText: {
+    color: uiColors.textPrimary,
+    fontSize: 12,
+  },
+  chipTextSelected: {
+    color: uiColors.primaryText,
+    fontSize: 12,
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chipWrapCollapsed: {
+    maxHeight: COLLAPSED_BUBBLE_ROWS_HEIGHT,
+    overflow: 'hidden',
+  },
   emptyText: {
-    color: '#64748B',
+    color: uiColors.textMuted,
     padding: 12,
     textAlign: 'center',
   },
   error: {
-    color: '#B91C1C',
+    color: uiColors.error,
     fontSize: 13,
   },
+  expandButton: {
+    alignSelf: 'flex-start',
+    marginTop: -4,
+  },
+  expandButtonText: {
+    color: uiColors.primary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  filterLabel: {
+    color: uiColors.textPrimary,
+    fontWeight: '600',
+  },
   input: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#CBD5E1',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
     borderRadius: 10,
     borderWidth: 1,
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
@@ -139,16 +248,16 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     alignItems: 'center',
-    backgroundColor: '#E2E8F0',
+    backgroundColor: uiColors.border,
     borderRadius: 10,
     padding: 10,
   },
   secondaryButtonText: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontWeight: '600',
   },
   title: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 24,
     fontWeight: '700',
   },

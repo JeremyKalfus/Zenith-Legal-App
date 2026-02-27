@@ -28,6 +28,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ### Staff (recruiter)
 - Signs in via invite-only magic link.
 - Manages candidate-firm assignments: assigns firms to candidates, updates assignment statuses, unassigns firms.
+- Filters staff candidate lists by text search plus candidate city/practice chips on mobile and admin candidates pages.
 - Reviews appointment requests (accept/decline).
 - Messages candidates via real-time chat.
 - Ingests firm data in bulk (paste-based).
@@ -50,6 +51,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 
 ### Firm Assignments
 - Staff assigns firms to candidates via `assign_firm_to_candidate`.
+- Staff candidate list views (mobile + admin) support `search AND (city OR practice)` filtering using `candidate_preferences` (`cities`, `practice_areas`, legacy `practice_area` fallback).
 - Candidates see assigned firms on their dashboard.
 - Candidates authorize firm submissions via `authorize_firm_submission`.
 - Candidates declining while status is `Waiting on your authorization to contact/submit` removes that firm assignment from the dashboard (assignment deleted).
