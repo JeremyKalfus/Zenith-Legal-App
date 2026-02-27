@@ -580,7 +580,7 @@ export function StaffCandidateFirmsScreen({
 
 const styles = StyleSheet.create({
   assignFirmName: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     flex: 1,
     flexShrink: 1,
     fontWeight: '600',
@@ -589,8 +589,8 @@ const styles = StyleSheet.create({
   },
   assignRow: {
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E2E8F0',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.border,
     borderRadius: 10,
     borderWidth: 1,
     flexDirection: 'row',
@@ -600,25 +600,25 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   body: {
-    color: '#475569',
+    color: uiColors.textSecondary,
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E2E8F0',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.border,
     borderRadius: 12,
     borderWidth: 1,
     padding: 12,
   },
   cardSubtle: {
-    color: '#64748B',
+    color: uiColors.textMuted,
     fontSize: 12,
     marginTop: 4,
   },
   cardTitle: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 16,
     fontWeight: '700',
   },
@@ -644,8 +644,8 @@ const styles = StyleSheet.create({
   },
   dangerButtonSmall: {
     alignItems: 'center',
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FECACA',
+    backgroundColor: uiColors.errorBackground,
+    borderColor: uiColors.errorBorder,
     borderRadius: 8,
     borderWidth: 1,
     flexShrink: 1,
@@ -653,25 +653,25 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   dangerButtonSmallText: {
-    color: '#991B1B',
+    color: uiColors.errorDark,
     fontWeight: '700',
     textAlign: 'center',
   },
   emptyText: {
-    color: '#64748B',
+    color: uiColors.textMuted,
     paddingVertical: 4,
   },
   input: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#CBD5E1',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
     borderRadius: 10,
     borderWidth: 1,
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   message: {
-    color: '#334155',
+    color: uiColors.textStrong,
     fontSize: 13,
   },
   modalActions: {
@@ -682,27 +682,27 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     alignItems: 'center',
-    backgroundColor: 'rgba(15,23,42,0.35)',
+    backgroundColor: uiColors.modalOverlay,
     flex: 1,
     justifyContent: 'center',
     padding: 16,
   },
   modalCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: uiColors.surface,
     borderRadius: 14,
     padding: 16,
     width: '100%',
   },
   modalHelper: {
-    color: '#92400E',
+    color: uiColors.warning,
     fontSize: 12,
   },
   modalSubtitle: {
-    color: '#475569',
+    color: uiColors.textSecondary,
     marginTop: 2,
   },
   modalTitle: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 18,
     fontWeight: '700',
   },
@@ -715,7 +715,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   primaryButtonModalText: {
-    color: '#FFFFFF',
+    color: uiColors.primaryText,
     fontWeight: '700',
   },
   primaryButtonSmall: {
@@ -727,7 +727,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   primaryButtonSmallText: {
-    color: '#FFFFFF',
+    color: uiColors.primaryText,
     fontWeight: '700',
     textAlign: 'center',
   },
@@ -741,19 +741,19 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   sectionTitle: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 16,
     fontWeight: '700',
   },
   secondaryButton: {
     alignItems: 'center',
-    backgroundColor: '#E2E8F0',
+    backgroundColor: uiColors.border,
     borderRadius: 10,
     padding: 10,
   },
   secondaryButtonModal: {
     alignItems: 'center',
-    borderColor: '#CBD5E1',
+    borderColor: uiColors.borderStrong,
     borderRadius: 10,
     borderWidth: 1,
     flex: 1,
@@ -761,11 +761,11 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   secondaryButtonModalText: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontWeight: '600',
   },
   secondaryButtonText: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontWeight: '600',
   },
   secondaryButtonSmall: {
@@ -783,7 +783,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   statusOption: {
-    borderColor: '#CBD5E1',
+    borderColor: uiColors.borderStrong,
     borderRadius: 10,
     borderWidth: 1,
     paddingHorizontal: 10,
@@ -794,15 +794,15 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   statusOptionSelected: {
-    backgroundColor: '#ECFEFF',
-    borderColor: '#14B8A6',
+    backgroundColor: uiColors.statusSelectedBackground,
+    borderColor: uiColors.statusSelectedBorder,
   },
   statusOptionText: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 13,
   },
   statusOptionTextSelected: {
-    color: '#115E59',
+    color: uiColors.statusSelectedText,
     fontWeight: '700',
   },
   statusBadge: {
@@ -818,10 +818,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   subtitle: {
-    color: '#475569',
+    color: uiColors.textSecondary,
   },
   title: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 22,
     fontWeight: '700',
   },

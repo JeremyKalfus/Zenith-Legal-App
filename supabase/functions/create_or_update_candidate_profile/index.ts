@@ -1,243 +1,86 @@
-import { z } from 'npm:zod@4.3.6';
 import { errorResponse, jsonResponse } from '../_shared/http.ts';
-import { createAuthedClient, createServiceClient, getCurrentUserId } from '../_shared/supabase.ts';
+import { createAuthedClient, createServiceClient } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
+import {
+  candidateIntakeSchema,
+  COMMUNICATION_CONSENT_VERSION,
+  persistCandidateIntakeData,
+  PRIVACY_POLICY_VERSION,
+} from '../_shared/candidate-intake.ts';
+import { createEdgeHandler } from '../_shared/edge-handler.ts';
 
-const PRIVACY_POLICY_VERSION = Deno.env.get('CONSENT_PRIVACY_POLICY_VERSION') ?? 'v1';
-const COMMUNICATION_CONSENT_VERSION = Deno.env.get('CONSENT_COMMUNICATION_CONSENT_VERSION') ?? 'v1';
-
-const cityOptions = [
-  'DC',
-  'NYC',
-  'Boston',
-  'Houston',
-  'Dallas',
-  'Chicago',
-  'Atlanta',
-  'Charlotte',
-  'LA / Southern Cal',
-  'SF / Northern Cal',
-  'Miami',
-  'Denver',
-  'Philadelphia',
-  'Seattle',
-  'Other',
-] as const;
-
-const practiceAreas = [
-  'Antitrust',
-  'White Collar',
-  "Int'l arb",
-  "Int'l reg",
-  'Gov Contracts',
-  'SEC / CFTC',
-  'IP / Tech Trans',
-  'Labor & Employment',
-  'Litigation',
-  'Corp: M&A/PE',
-  'Corp: Finance',
-  'Corp: EC/VC',
-  'Corp: Cap Mkts',
-  'Real Estate',
-  'Tax & Benefits',
-  'Other',
-] as const;
-
-function optionalTrimmedString(max: number) {
-  return z
-    .string()
-    .trim()
-    .max(max)
-    .transform((value) => (value.length === 0 ? undefined : value))
-    .optional()
-    .transform((value) => value ?? undefined);
+function mapPersistenceFailureToResponse(message: string): Response | null {
+  if (message.startsWith('consent_lookup_failed:')) {
+    return errorResponse(message.slice('consent_lookup_failed:'.length), 400);
+  }
+  if (message.startsWith('profile_insert_failed:')) {
+    return errorResponse(message.slice('profile_insert_failed:'.length), 400);
+  }
+  if (message.startsWith('preferences_insert_failed:')) {
+    return errorResponse(message.slice('preferences_insert_failed:'.length), 400);
+  }
+  if (message.startsWith('consents_insert_failed:')) {
+    return errorResponse(message.slice('consents_insert_failed:'.length), 400);
+  }
+  return null;
 }
 
-const optionalMobileInputSchema = z
-  .string()
-  .trim()
-  .max(30)
-  .transform((value) => (value.length === 0 ? undefined : value))
-  .optional()
-  .transform((value) => value ?? undefined);
+Deno.serve(
+  createEdgeHandler(
+    async ({ request, authHeader, userId }) => {
+      const resolvedUserId = userId as string;
+      const client = createAuthedClient(authHeader);
+      const serviceClient = createServiceClient();
 
-const candidateIntakeSchema = z
-  .object({
-    name: optionalTrimmedString(120),
-    email: z.string().trim().email().max(255),
-    mobile: optionalMobileInputSchema,
-    preferredCities: z.array(z.enum(cityOptions)).default([]),
-    otherCityText: optionalTrimmedString(120),
-    practiceAreas: z.array(z.enum(practiceAreas)).max(3).default([]),
-    otherPracticeText: optionalTrimmedString(120),
-    acceptedPrivacyPolicy: z.boolean(),
-    acceptedCommunicationConsent: z.boolean(),
-  })
-  .superRefine((value, ctx) => {
-    if (!value.acceptedPrivacyPolicy) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'acceptedPrivacyPolicy must be true',
-        path: ['acceptedPrivacyPolicy'],
-      });
-    }
-
-    if (!value.acceptedCommunicationConsent) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'acceptedCommunicationConsent must be true',
-        path: ['acceptedCommunicationConsent'],
-      });
-    }
-
-    if (value.preferredCities.includes('Other') && !value.otherCityText) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'otherCityText is required when Other city is selected',
-        path: ['otherCityText'],
-      });
-    }
-
-    if (value.practiceAreas.includes('Other') && !value.otherPracticeText) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'otherPracticeText is required when practice area is Other',
-        path: ['otherPracticeText'],
-      });
-    }
-  });
-
-Deno.serve(async (request) => {
-  if (request.method === 'OPTIONS') {
-    return jsonResponse({ ok: true });
-  }
-
-  try {
-    const authHeader = request.headers.get('Authorization');
-    const userId = await getCurrentUserId(authHeader);
-    const client = createAuthedClient(authHeader);
-    const serviceClient = createServiceClient();
-
-    const payload = await request.json();
-    const parsed = candidateIntakeSchema.safeParse(payload);
-
-    if (!parsed.success) {
-      return errorResponse(parsed.error.flatten().formErrors.join(', ') || 'Invalid payload', 422);
-    }
-
-    const intake = parsed.data;
-    const consentAcceptedAt = new Date().toISOString();
-
-    const { data: existingProfile } = await serviceClient
-      .from('users_profile')
-      .select('role')
-      .eq('id', userId)
-      .maybeSingle();
-
-    const role = existingProfile?.role === 'staff' ? 'staff' : 'candidate';
-
-    const upsertProfile = await client.from('users_profile').upsert(
-      {
-        id: userId,
-        role,
-        name: intake.name ?? null,
-        email: intake.email,
-        mobile: intake.mobile ?? null,
-        onboarding_complete: true,
-      },
-      { onConflict: 'id' },
-    );
-
-    if (upsertProfile.error) {
-      return errorResponse(upsertProfile.error.message, 400);
-    }
-
-    const upsertPreferences = await client.from('candidate_preferences').upsert(
-      {
-        user_id: userId,
-        cities: intake.preferredCities,
-        other_city_text: intake.otherCityText || null,
-        practice_areas: intake.practiceAreas,
-        practice_area: intake.practiceAreas[0] ?? null,
-        other_practice_text: intake.otherPracticeText || null,
-      },
-      { onConflict: 'user_id' },
-    );
-
-    if (upsertPreferences.error) {
-      return errorResponse(upsertPreferences.error.message, 400);
-    }
-
-    const { data: existingConsents, error: existingConsentsError } = await client
-      .from('candidate_consents')
-      .select(
-        'privacy_policy_accepted,privacy_policy_version,communication_consent_accepted,communication_consent_version',
-      )
-      .eq('user_id', userId)
-      .maybeSingle();
-
-    if (existingConsentsError) {
-      return errorResponse(existingConsentsError.message, 400);
-    }
-
-    const shouldUpsertConsents =
-      !existingConsents ||
-      existingConsents.privacy_policy_accepted !== intake.acceptedPrivacyPolicy ||
-      existingConsents.communication_consent_accepted !== intake.acceptedCommunicationConsent ||
-      (intake.acceptedPrivacyPolicy && !existingConsents.privacy_policy_version) ||
-      (intake.acceptedCommunicationConsent && !existingConsents.communication_consent_version);
-
-    if (shouldUpsertConsents) {
-      const upsertConsents = await client.from('candidate_consents').upsert(
-        {
-          user_id: userId,
-          privacy_policy_accepted: intake.acceptedPrivacyPolicy,
-          privacy_policy_accepted_at: intake.acceptedPrivacyPolicy ? consentAcceptedAt : null,
-          privacy_policy_version: intake.acceptedPrivacyPolicy ? PRIVACY_POLICY_VERSION : null,
-          communication_consent_accepted: intake.acceptedCommunicationConsent,
-          communication_consent_accepted_at: intake.acceptedCommunicationConsent
-            ? consentAcceptedAt
-            : null,
-          communication_consent_version: intake.acceptedCommunicationConsent
-            ? COMMUNICATION_CONSENT_VERSION
-            : null,
-          source: 'mobile_app',
-        },
-        { onConflict: 'user_id' },
-      );
-
-      if (upsertConsents.error) {
-        return errorResponse(upsertConsents.error.message, 400);
+      const payload = await request.json();
+      const parsed = candidateIntakeSchema.safeParse(payload);
+      if (!parsed.success) {
+        return errorResponse(parsed.error.flatten().formErrors.join(', ') || 'Invalid payload', 422);
       }
-    }
 
-    await writeAuditEvent({
-      client: serviceClient,
-      actorUserId: userId,
-      action: 'candidate_intake_upsert',
-      entityType: 'users_profile',
-      entityId: userId,
-      afterJson: {
-        onboarding_complete: true,
-        email: intake.email,
-        mobile: intake.mobile,
-        consent_versions: {
-          privacy_policy_version: PRIVACY_POLICY_VERSION,
-          communication_consent_version: COMMUNICATION_CONSENT_VERSION,
+      const intake = parsed.data;
+      const { data: existingProfile } = await serviceClient
+        .from('users_profile')
+        .select('role')
+        .eq('id', resolvedUserId)
+        .maybeSingle();
+
+      const role = existingProfile?.role === 'staff' ? 'staff' : 'candidate';
+      await persistCandidateIntakeData({
+        client,
+        userId: resolvedUserId,
+        role,
+        intake,
+        source: 'mobile_app',
+        upsertConsentsOnlyWhenChanged: true,
+      });
+
+      await writeAuditEvent({
+        client: serviceClient,
+        actorUserId: resolvedUserId,
+        action: 'candidate_intake_upsert',
+        entityType: 'users_profile',
+        entityId: resolvedUserId,
+        afterJson: {
+          onboarding_complete: true,
+          email: intake.email,
+          mobile: intake.mobile,
+          consent_versions: {
+            privacy_policy_version: PRIVACY_POLICY_VERSION,
+            communication_consent_version: COMMUNICATION_CONSENT_VERSION,
+          },
         },
-      },
-    });
+      });
 
-    return jsonResponse({
-      success: true,
-      user_id: userId,
-      onboarding_complete: true,
-    });
-  } catch (error) {
-    const message = (error as Error).message;
-    if (message.startsWith('Unauthorized')) {
-      return errorResponse(message, 401);
-    }
-    return errorResponse(message, 500);
-  }
-});
+      return jsonResponse({
+        success: true,
+        user_id: resolvedUserId,
+        onboarding_complete: true,
+      });
+    },
+    {
+      auth: 'user',
+      onError: mapPersistenceFailureToResponse,
+    },
+  ),
+);

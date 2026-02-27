@@ -1,6 +1,13 @@
-import { StreamChat } from 'stream-chat';
+import { createStreamChatClientManager } from '@zenith/shared';
+import type { StreamChat } from 'stream-chat';
 
-let chatClient: StreamChat | null = null;
+const streamChatClientManager = createStreamChatClientManager(() => {
+  const apiKey = getConfiguredStreamApiKey();
+  if (!apiKey) {
+    throw new Error(getStreamChatConfigError() ?? 'Stream Chat is not configured.');
+  }
+  return apiKey;
+});
 
 function getConfiguredStreamApiKey(): string | null {
   const apiKey = process.env.NEXT_PUBLIC_STREAM_API_KEY?.trim();
@@ -20,16 +27,7 @@ export function getStreamChatConfigError(): string | null {
 }
 
 export function getChatClient(): StreamChat {
-  const apiKey = getConfiguredStreamApiKey();
-  if (!apiKey) {
-    throw new Error(getStreamChatConfigError() ?? 'Stream Chat is not configured.');
-  }
-
-  if (!chatClient) {
-    chatClient = StreamChat.getInstance(apiKey);
-  }
-
-  return chatClient;
+  return streamChatClientManager.getChatClient();
 }
 
 export async function ensureChatUserConnected(
@@ -40,23 +38,9 @@ export async function ensureChatUserConnected(
   },
   token: string,
 ): Promise<StreamChat> {
-  const client = getChatClient();
-
-  if (client.userID === user.id) {
-    return client;
-  }
-
-  if (client.userID && client.userID !== user.id) {
-    await client.disconnectUser();
-  }
-
-  await client.connectUser(user, token);
-  return client;
+  return streamChatClientManager.ensureChatUserConnected(user, token);
 }
 
 export async function disconnectChatClient(): Promise<void> {
-  if (chatClient) {
-    await chatClient.disconnectUser();
-    chatClient = null;
-  }
+  await streamChatClientManager.disconnectChatClient();
 }

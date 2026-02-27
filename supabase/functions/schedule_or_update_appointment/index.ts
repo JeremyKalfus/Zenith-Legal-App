@@ -1,8 +1,13 @@
 import { z } from 'npm:zod@4.3.6';
 import { errorResponse, jsonResponse } from '../_shared/http.ts';
-import { assertStaff, createAuthedClient, createServiceClient, getCurrentUserId } from '../_shared/supabase.ts';
+import { assertStaff, createAuthedClient, createServiceClient } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
 import { syncAppointmentForParticipants } from '../_shared/calendar-sync.ts';
+import {
+  queueAppointmentReminderNotifications,
+  queueAppointmentStatusNotifications,
+} from '../_shared/appointment-notifications.ts';
+import { createEdgeHandler } from '../_shared/edge-handler.ts';
 
 const appointmentSchema = z
   .object({
@@ -39,30 +44,17 @@ function normalizeStatus(status: z.infer<typeof schema>['status'] | undefined) {
   return status;
 }
 
-function buildReminderSendAfter(startAtUtc: string): string | null {
-  const reminderAtMs = Date.parse(startAtUtc) - 15 * 60 * 1000;
-  if (!Number.isFinite(reminderAtMs)) {
-    return null;
-  }
+const scheduleOrUpdateAppointmentHandler = createEdgeHandler(
+    async (context) => {
+      const { request, authHeader, userId } = context;
+      const resolvedUserId = userId as string;
+      const client = createAuthedClient(authHeader);
+      const serviceClient = createServiceClient();
+      const payload = schema.parse(await request.json());
+      const normalizedStatus = normalizeStatus(payload.status);
 
-  return reminderAtMs > Date.now() ? new Date(reminderAtMs).toISOString() : null;
-}
-
-Deno.serve(async (request) => {
-  if (request.method === 'OPTIONS') {
-    return jsonResponse({ ok: true });
-  }
-
-  try {
-    const authHeader = request.headers.get('Authorization');
-    const userId = await getCurrentUserId(authHeader);
-    const client = createAuthedClient(authHeader);
-    const serviceClient = createServiceClient();
-    const payload = schema.parse(await request.json());
-    const normalizedStatus = normalizeStatus(payload.status);
-
-    const candidateUserId = payload.candidateUserId ?? userId;
-    const isOnBehalfScheduling = candidateUserId !== userId;
+    const candidateUserId = payload.candidateUserId ?? resolvedUserId;
+    const isOnBehalfScheduling = candidateUserId !== resolvedUserId;
     let actorIsStaff = false;
 
     if (isOnBehalfScheduling || (normalizedStatus && normalizedStatus !== 'pending')) {
@@ -90,7 +82,7 @@ Deno.serve(async (request) => {
 
     const dbPayload = {
       candidate_user_id: candidateUserId,
-      created_by_user_id: userId,
+      created_by_user_id: resolvedUserId,
       title: payload.title,
       description: payload.description ?? null,
       modality: payload.modality,
@@ -124,7 +116,6 @@ Deno.serve(async (request) => {
     }
 
     const appointment = appointmentResult.data;
-    const reminderSendAfter = buildReminderSendAfter(appointment.start_at_utc);
 
     await client.from('appointment_participants').upsert(
       [
@@ -135,8 +126,8 @@ Deno.serve(async (request) => {
         },
         {
           appointment_id: appointment.id,
-          user_id: userId,
-          participant_type: userId === candidateUserId ? 'candidate' : 'staff',
+          user_id: resolvedUserId,
+          participant_type: resolvedUserId === candidateUserId ? 'candidate' : 'staff',
         },
       ],
       { onConflict: 'appointment_id,user_id' },
@@ -145,70 +136,43 @@ Deno.serve(async (request) => {
     await syncAppointmentForParticipants({
       serviceClient,
       appointment,
-      participantUserIds: [candidateUserId, userId],
+      participantUserIds: [candidateUserId, resolvedUserId],
     });
 
-    await serviceClient.from('notification_deliveries').insert([
-      {
-        user_id: candidateUserId,
-        channel: 'push',
-        event_type: payload.id ? 'appointment.updated' : 'appointment.created',
-        payload: {
-          appointment_id: appointment.id,
-          status: appointment.status,
-          decision: appointment.status === 'scheduled' ? 'scheduled' : undefined,
-        },
-        status: 'queued',
-      },
-      {
-        user_id: candidateUserId,
-        channel: 'email',
-        event_type: payload.id ? 'appointment.updated' : 'appointment.created',
-        payload: {
-          appointment_id: appointment.id,
-          status: appointment.status,
-          decision: appointment.status === 'scheduled' ? 'scheduled' : undefined,
-        },
-        status: 'queued',
-      },
-    ]);
+      await queueAppointmentStatusNotifications({
+        serviceClient,
+        candidateUserId,
+        appointmentId: appointment.id,
+        eventType: payload.id ? 'appointment.updated' : 'appointment.created',
+        status: appointment.status,
+      });
 
-    if (appointment.status === 'scheduled' && reminderSendAfter) {
-      const reminderTargets = new Set<string>([candidateUserId]);
-      if (actorIsStaff && userId !== candidateUserId) {
-        reminderTargets.add(userId);
+      if (appointment.status === 'scheduled') {
+        const reminderTargets = new Set<string>([candidateUserId]);
+        if (actorIsStaff && resolvedUserId !== candidateUserId) {
+          reminderTargets.add(resolvedUserId);
+        }
+
+        await queueAppointmentReminderNotifications({
+          serviceClient,
+          appointmentId: appointment.id,
+          startAtUtc: appointment.start_at_utc,
+          participantUserIds: reminderTargets,
+        });
       }
-
-      await serviceClient.from('notification_deliveries').insert(
-        Array.from(reminderTargets).map((targetUserId) => ({
-          user_id: targetUserId,
-          channel: 'push',
-          event_type: 'appointment.reminder',
-          payload: {
-            appointment_id: appointment.id,
-            start_at_utc: appointment.start_at_utc,
-          },
-          send_after_utc: reminderSendAfter,
-          status: 'queued',
-        })),
-      );
-    }
 
     await writeAuditEvent({
       client: serviceClient,
-      actorUserId: userId,
+      actorUserId: resolvedUserId,
       action: payload.id ? 'update_appointment' : 'create_appointment',
       entityType: 'appointments',
       entityId: appointment.id,
       afterJson: appointment,
     });
 
-    return jsonResponse({ success: true, appointment });
-  } catch (error) {
-    const message = (error as Error).message;
-    if (message.startsWith('Unauthorized')) {
-      return errorResponse(message, 401);
-    }
-    return errorResponse(message, 500);
-  }
-});
+      return jsonResponse({ success: true, appointment });
+    },
+    { auth: 'user' },
+  );
+
+Deno.serve(scheduleOrUpdateAppointmentHandler);

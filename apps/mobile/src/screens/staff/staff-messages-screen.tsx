@@ -7,6 +7,7 @@ import { formatRelativeTimestamp, mapChannelsToStaffInboxItems } from '@zenith/s
 import { ensureChatUserConnected, getChatClient } from '../../lib/chat';
 import { getFunctionErrorMessage } from '../../lib/function-error';
 import { ensureValidSession, supabase } from '../../lib/supabase';
+import { uiColors } from '../../theme/colors';
 
 export function StaffMessagesScreen({
   onOpenConversation,
@@ -160,7 +161,7 @@ export function StaffMessagesScreen({
 const styles = StyleSheet.create({
   badge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#0F172A',
+    backgroundColor: uiColors.textPrimary,
     borderRadius: 999,
     marginTop: 8,
     minWidth: 24,
@@ -168,17 +169,17 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   badgeText: {
-    color: '#FFFFFF',
+    color: uiColors.primaryText,
     fontSize: 12,
     fontWeight: '700',
     textAlign: 'center',
   },
   body: {
-    color: '#475569',
+    color: uiColors.textSecondary,
   },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E2E8F0',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.border,
     borderRadius: 12,
     borderWidth: 1,
     padding: 12,
@@ -190,31 +191,31 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   cardPreview: {
-    color: '#334155',
+    color: uiColors.textStrong,
     marginTop: 4,
   },
   cardPressed: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: uiColors.background,
   },
   cardTimestamp: {
-    color: '#64748B',
+    color: uiColors.textMuted,
     flexShrink: 0,
     fontSize: 12,
     marginLeft: 8,
   },
   cardTitle: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     flex: 1,
     fontSize: 15,
     fontWeight: '700',
   },
   emptyText: {
-    color: '#64748B',
+    color: uiColors.textMuted,
     padding: 12,
     textAlign: 'center',
   },
   error: {
-    color: '#B91C1C',
+    color: uiColors.error,
     fontSize: 13,
   },
   list: {
@@ -222,23 +223,23 @@ const styles = StyleSheet.create({
   },
   refreshButton: {
     alignItems: 'center',
-    backgroundColor: '#E2E8F0',
+    backgroundColor: uiColors.border,
     borderRadius: 10,
     padding: 10,
   },
   refreshButtonPressed: {
-    backgroundColor: '#CBD5E1',
+    backgroundColor: uiColors.borderStrong,
   },
   refreshButtonText: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontWeight: '600',
   },
   subtle: {
-    color: '#64748B',
+    color: uiColors.textMuted,
     fontSize: 12,
   },
   title: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 24,
     fontWeight: '700',
   },

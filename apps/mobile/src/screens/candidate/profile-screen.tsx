@@ -14,6 +14,7 @@ import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'r
 import { CalendarSyncCard } from '../../components/calendar-sync-card';
 import { PasswordInput } from '../../components/password-input';
 import { ScreenShell } from '../../components/screen-shell';
+import { SignOutButton } from '../../components/sign-out-button';
 import { useAuth } from '../../context/auth-context';
 import { uiColors } from '../../theme/colors';
 import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
@@ -601,21 +602,7 @@ export function ProfileScreen() {
 
       {h.authNotice ? <Text style={styles.error}>{h.authNotice}</Text> : null}
 
-      <Pressable
-        style={interactivePressableStyle({
-          base: styles.logout,
-          disabled: h.isSigningOut,
-          disabledStyle: styles.buttonDisabled,
-          hoverStyle: sharedPressableFeedback.hover,
-          focusStyle: sharedPressableFeedback.focus,
-          pressedStyle: sharedPressableFeedback.pressed,
-        })}
-        disabled={h.isSigningOut}
-        accessibilityState={{ disabled: h.isSigningOut }}
-        onPress={h.onSignOut}
-      >
-        <Text style={styles.logoutText}>{h.isSigningOut ? 'Signing out...' : 'Sign out'}</Text>
-      </Pressable>
+      <SignOutButton isSigningOut={h.isSigningOut} onSignOut={h.onSignOut} />
     </ScreenShell>
   );
 }
@@ -678,16 +665,6 @@ const styles = StyleSheet.create({
     color: uiColors.textMuted,
     fontSize: 12,
     textTransform: 'uppercase',
-  },
-  logout: {
-    alignItems: 'center',
-    backgroundColor: uiColors.danger,
-    borderRadius: 10,
-    padding: 12,
-  },
-  logoutText: {
-    color: uiColors.dangerText,
-    fontWeight: '700',
   },
   message: {
     color: uiColors.textPrimary,

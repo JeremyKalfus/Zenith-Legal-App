@@ -1,39 +1,17 @@
-import Link from 'next/link';
 import { CandidateFirmManager } from '@/components/modules/candidate-firm-manager';
-import { StaffDashboardGuard } from '@/components/modules/staff-dashboard-guard';
+import { StaffDashboardShell } from '@/components/modules/staff-dashboard-shell';
 
 export default function CandidateManagementPage() {
   return (
-    <StaffDashboardGuard>
-      <main className="mx-auto min-h-screen max-w-7xl px-4 py-8">
-        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
-              Zenith Legal Operations
-            </p>
-            <h1 className="text-3xl font-bold text-slate-900">Candidate Firm Manager</h1>
-            <p className="text-slate-600">
-              Staff-only candidate firm assignments and status controls.
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Link
-              href="/dashboard/messages"
-              className="inline-flex h-10 items-center rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Open Messages
-            </Link>
-            <Link
-              href="/dashboard"
-              className="inline-flex h-10 items-center rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Back to dashboard
-            </Link>
-          </div>
-        </div>
-
-        <CandidateFirmManager />
-      </main>
-    </StaffDashboardGuard>
+    <StaffDashboardShell
+      title="Candidate Firm Manager"
+      description="Staff-only candidate firm assignments and status controls."
+      actions={[
+        { href: '/dashboard/messages', label: 'Open Messages' },
+        { href: '/dashboard', label: 'Back to dashboard' },
+      ]}
+    >
+      <CandidateFirmManager />
+    </StaffDashboardShell>
   );
 }

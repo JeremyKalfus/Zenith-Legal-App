@@ -1,97 +1,75 @@
 import { z } from 'npm:zod@4.3.6';
 import { errorResponse, jsonResponse } from '../_shared/http.ts';
-import { assertStaff, createServiceClient } from '../_shared/supabase.ts';
+import { createServiceClient } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
+import { clearNonCascadingUserReferences } from '../_shared/user-cleanup.ts';
+import { createEdgeHandler } from '../_shared/edge-handler.ts';
 
-const schema = z.object({
+const deleteUserSchema = z.object({
   user_id: z.string().uuid(),
 });
 
-async function clearNonCascadingUserReferences(serviceClient: ReturnType<typeof createServiceClient>, userId: string) {
-  const operations = await Promise.all([
-    serviceClient.from('notification_deliveries').update({ user_id: null }).eq('user_id', userId),
-    serviceClient.from('audit_events').update({ actor_user_id: null }).eq('actor_user_id', userId),
-    serviceClient.from('support_data_requests').update({ requester_user_id: null }).eq('requester_user_id', userId),
-    serviceClient.from('support_data_requests').update({ handled_by_staff: null }).eq('handled_by_staff', userId),
-    serviceClient.from('recruiter_contact_config').update({ updated_by: null }).eq('updated_by', userId),
-    serviceClient.from('candidate_firm_assignments').update({ assigned_by: null }).eq('assigned_by', userId),
-  ]);
 
-  for (const result of operations) {
-    if (result.error) {
-      throw new Error(`Failed to clean up user references: ${result.error.message}`);
-    }
-  }
-}
+Deno.serve(
+  createEdgeHandler(
+    async ({ request, userId }) => {
+      const actorUserId = userId as string;
+      const serviceClient = createServiceClient();
+      const parsedBody = deleteUserSchema.safeParse(await request.json());
+      if (!parsedBody.success) {
+        return errorResponse('Invalid payload', 422, 'invalid_payload');
+      }
+      const payload = parsedBody.data;
 
-Deno.serve(async (request) => {
-  if (request.method === 'OPTIONS') {
-    return jsonResponse({ ok: true });
-  }
+      if (payload.user_id === actorUserId) {
+        return errorResponse('Staff cannot delete their own account.', 403, 'self_delete_forbidden');
+      }
 
-  try {
-    const authHeader = request.headers.get('Authorization');
-    const actorUserId = await assertStaff(authHeader);
-    const serviceClient = createServiceClient();
-    const payload = schema.parse(await request.json());
+      const { data: targetProfile, error: profileError } = await serviceClient
+        .from('users_profile')
+        .select('id,role,name,email,mobile,onboarding_complete,created_at,updated_at')
+        .eq('id', payload.user_id)
+        .maybeSingle();
 
-    if (payload.user_id === actorUserId) {
-      return errorResponse('Staff cannot delete their own account.', 403, 'self_delete_forbidden');
-    }
+      if (profileError) {
+        return errorResponse(profileError.message, 400, 'user_lookup_failed');
+      }
 
-    const { data: targetProfile, error: profileError } = await serviceClient
-      .from('users_profile')
-      .select('id,role,name,email,mobile,onboarding_complete,created_at,updated_at')
-      .eq('id', payload.user_id)
-      .maybeSingle();
+      if (!targetProfile) {
+        return errorResponse('User not found.', 404, 'user_not_found');
+      }
 
-    if (profileError) {
-      return errorResponse(profileError.message, 400, 'user_lookup_failed');
-    }
+      if (targetProfile.role !== 'candidate') {
+        return errorResponse(
+          'Only candidate accounts can be deleted from this admin workflow.',
+          403,
+          'delete_role_forbidden',
+        );
+      }
 
-    if (!targetProfile) {
-      return errorResponse('User not found.', 404, 'user_not_found');
-    }
+      await clearNonCascadingUserReferences(serviceClient, payload.user_id);
 
-    if (targetProfile.role !== 'candidate') {
-      return errorResponse(
-        'Only candidate accounts can be deleted from this admin workflow.',
-        403,
-        'delete_role_forbidden',
-      );
-    }
+      const { error: deleteError } = await serviceClient.auth.admin.deleteUser(payload.user_id);
+      if (deleteError) {
+        return errorResponse(deleteError.message, 500, 'user_delete_failed');
+      }
 
-    await clearNonCascadingUserReferences(serviceClient, payload.user_id);
+      await writeAuditEvent({
+        client: serviceClient,
+        actorUserId,
+        action: 'staff_delete_candidate_user',
+        entityType: 'users_profile',
+        entityId: payload.user_id,
+        beforeJson: targetProfile as unknown as Record<string, unknown>,
+        afterJson: null,
+      });
 
-    const { error: deleteError } = await serviceClient.auth.admin.deleteUser(payload.user_id);
-
-    if (deleteError) {
-      return errorResponse(deleteError.message, 500, 'user_delete_failed');
-    }
-
-    await writeAuditEvent({
-      client: serviceClient,
-      actorUserId,
-      action: 'staff_delete_candidate_user',
-      entityType: 'users_profile',
-      entityId: payload.user_id,
-      beforeJson: targetProfile as unknown as Record<string, unknown>,
-      afterJson: null,
-    });
-
-    return jsonResponse({
-      success: true,
-      deleted_user_id: payload.user_id,
-      deleted_role: 'candidate',
-    });
-  } catch (error) {
-    const message = (error as Error).message;
-    if (message.startsWith('Unauthorized')) {
-      return errorResponse(message, 401);
-    }
-    if (message === 'Forbidden: staff access required') {
-      return errorResponse(message, 403);
-    }
-    return errorResponse(message, 500);
-  }
-});
+      return jsonResponse({
+        success: true,
+        deleted_user_id: payload.user_id,
+        deleted_role: 'candidate',
+      });
+    },
+    { auth: 'staff' },
+  ),
+);

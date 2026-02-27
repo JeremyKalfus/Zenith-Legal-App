@@ -14,21 +14,16 @@ import {
   isStreamChatConfigured,
 } from '@/lib/chat';
 import type { StaffMessageInboxItem } from '@zenith/shared';
-import { formatRelativeTimestamp, mapChannelsToStaffInboxItems } from '@zenith/shared';
-
-const STREAM_CSS_URL =
-  'https://cdn.jsdelivr.net/npm/stream-chat-react@13.14.0/dist/css/v2/index.css';
+import {
+  ensureStreamChatStylesheet,
+  formatRelativeTimestamp,
+  mapChannelsToStaffInboxItems,
+  STREAM_CHAT_CSS_URL,
+} from '@zenith/shared';
 
 function useStreamChatCSS() {
   useEffect(() => {
-    if (typeof document === 'undefined') return;
-    const id = 'stream-chat-css';
-    if (document.getElementById(id)) return;
-    const link = document.createElement('link');
-    link.id = id;
-    link.rel = 'stylesheet';
-    link.href = STREAM_CSS_URL;
-    document.head.appendChild(link);
+    ensureStreamChatStylesheet(STREAM_CHAT_CSS_URL);
   }, []);
 }
 
@@ -37,6 +32,16 @@ type ChatBootstrapResponse = {
   user_name: string;
   user_image?: string;
 };
+
+async function queryStaffInboxItems(sessionUserId: string): Promise<StaffMessageInboxItem[]> {
+  const streamClient = getChatClient();
+  const channels = await streamClient.queryChannels(
+    { type: 'messaging', members: { $in: [sessionUserId] } },
+    [{ last_message_at: -1 }],
+    { watch: true, state: true, limit: 100 },
+  );
+  return mapChannelsToStaffInboxItems(channels as unknown[]);
+}
 
 function useStaffMessagesDashboard() {
   useStreamChatCSS();
@@ -99,21 +104,7 @@ function useStaffMessagesDashboard() {
         connectedRef.current = true;
       }
 
-      const client = getChatClient();
-      const channels = await client.queryChannels(
-        {
-          type: 'messaging',
-          members: { $in: [session.user.id] },
-        },
-        [{ last_message_at: -1 }],
-        {
-          watch: true,
-          state: true,
-          limit: 100,
-        },
-      );
-
-      const inboxItems = mapChannelsToStaffInboxItems(channels as unknown[]);
+      const inboxItems = await queryStaffInboxItems(session.user.id);
       setConversations(inboxItems);
       setSelectedChannelId((current) => {
         if (current && inboxItems.some((item) => item.channelId === current)) {

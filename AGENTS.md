@@ -29,6 +29,7 @@ Every task must follow this sequence:
 3. **Implement** -- Execute each micro-step. Make the smallest viable change per step.
 4. **Verify** -- After each micro-step, run verification commands (`npm run lint`, `npm run typecheck`, `npm run test`). Fix any issues before proceeding to the next step.
 5. **Update docs** -- After all steps pass, update the relevant root documentation files (see Doc Update Policy below).
+6. **Pre-push scan** -- Before each `git push`, run `python3 -m desloppify scan --path .` and address any score regressions/findings before pushing.
 
 ## Lessons Log
 

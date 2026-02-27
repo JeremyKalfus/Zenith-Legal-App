@@ -1,15 +1,23 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { Picker } from '@react-native-picker/picker';
+import { useCallback, useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import type { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { appointmentSchema, type AppointmentInput, type AppointmentStatus } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
 import { useAuth } from '../../context/auth-context';
-import { formatAppointmentDateTime } from '../../lib/date-format';
-import { syncAppointmentsToDeviceCalendar } from '../../lib/device-calendar-sync';
 import { supabase, ensureValidSession } from '../../lib/supabase';
+import {
+  getResolvedTimezoneLabel,
+  mapToDeviceCalendarAppointment,
+  shouldHideExpiredAppointment,
+} from '../../lib/appointments-shared';
+import { useAppointmentComposer } from '../../lib/use-appointment-composer';
+import { useCalendarSyncEnabled } from '../../lib/use-calendar-sync-enabled';
+import { useAppointmentCalendarSync } from '../../lib/use-appointment-calendar-sync';
+import { appointmentSharedStyles } from '../shared/appointment-shared-styles';
+import { AppointmentCardDetails } from '../shared/appointment-card-details';
+import { AppointmentTimingControls } from '../shared/appointment-timing-controls';
 import { uiColors } from '../../theme/colors';
 import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 
@@ -26,30 +34,6 @@ type AppointmentRecord = {
   timezone_label: string;
 };
 
-const DURATION_OPTIONS = [
-  { label: '5 min', minutes: 5 },
-  { label: '15 min', minutes: 15 },
-  { label: '30 min', minutes: 30 },
-  { label: '45 min', minutes: 45 },
-  { label: '1 hour', minutes: 60 },
-  { label: '2 hours', minutes: 120 },
-] as const;
-
-const APPOINTMENT_HIDE_AFTER_MS = 24 * 60 * 60 * 1000;
-
-function shouldHideExpiredAppointment(appointment: AppointmentRecord): boolean {
-  if (appointment.status !== 'scheduled' && appointment.status !== 'declined') {
-    return false;
-  }
-
-  const endTimeMs = Date.parse(appointment.end_at_utc);
-  if (!Number.isFinite(endTimeMs)) {
-    return false;
-  }
-
-  return endTimeMs < Date.now() - APPOINTMENT_HIDE_AFTER_MS;
-}
-
 const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   pending: { bg: '#FEF3C7', text: '#92400E', label: 'Pending Review' },
   accepted: { bg: '#D1FAE5', text: '#065F46', label: 'Scheduled' },
@@ -62,10 +46,22 @@ function useAppointmentsScreen() {
   const { session } = useAuth();
   const [appointments, setAppointments] = useState<AppointmentRecord[]>([]);
   const [serverMessage, setServerMessage] = useState('');
-  const [calendarSyncEnabled, setCalendarSyncEnabled] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const lastSyncFingerprintRef = useRef('');
+  const calendarSyncEnabled = useCalendarSyncEnabled(session?.user.id);
+  const {
+    createDurationMinutes,
+    createEndAtLocal,
+    createStartAtLocal,
+    handleStartPickerChange,
+    resetComposer,
+    selectedDurationLabel,
+    setCreateDurationMinutes,
+    setShowDurationPicker,
+    setShowStartPicker,
+    showDurationPicker,
+    showStartPicker,
+  } = useAppointmentComposer();
 
   const {
     control,
@@ -81,48 +77,17 @@ function useAppointmentsScreen() {
       modality: 'virtual',
       startAtUtc: new Date(Date.now() + 3600_000).toISOString(),
       endAtUtc: new Date(Date.now() + 7200_000).toISOString(),
-      timezoneLabel:
-        Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
+      timezoneLabel: getResolvedTimezoneLabel(),
     },
   });
 
   const selectedModality = watch('modality');
-  const [createStartAtLocal, setCreateStartAtLocal] = useState(() => new Date(Date.now() + 3600_000));
-  const [showStartPicker, setShowStartPicker] = useState(false);
-  const [createDurationMinutes, setCreateDurationMinutes] = useState(30);
-  const [showDurationPicker, setShowDurationPicker] = useState(false);
-
-  const createEndAtLocal = useMemo(
-    () => new Date(createStartAtLocal.getTime() + createDurationMinutes * 60_000),
-    [createDurationMinutes, createStartAtLocal],
-  );
-  const selectedDurationLabel = useMemo(
-    () =>
-      DURATION_OPTIONS.find((option) => option.minutes === createDurationMinutes)
-        ?.label ?? `${createDurationMinutes} min`,
-    [createDurationMinutes],
-  );
 
   useEffect(() => {
     setValue('startAtUtc', createStartAtLocal.toISOString());
     setValue('endAtUtc', createEndAtLocal.toISOString());
-    setValue('timezoneLabel', Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York');
+    setValue('timezoneLabel', getResolvedTimezoneLabel());
   }, [createEndAtLocal, createStartAtLocal, setValue]);
-
-  const handleStartPickerChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (event.type === 'dismissed') {
-      setShowStartPicker(false);
-      return;
-    }
-
-    if (selectedDate) {
-      setCreateStartAtLocal(selectedDate);
-    }
-
-    if (Platform.OS === 'android') {
-      setShowStartPicker(false);
-    }
-  }, []);
 
   const loadAppointments = useCallback(async () => {
     const { data, error } = await supabase
@@ -143,30 +108,6 @@ function useAppointmentsScreen() {
   }, []);
 
   useEffect(() => {
-    const loadCalendarConnectionState = async () => {
-      if (!session?.user.id) {
-        setCalendarSyncEnabled(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('calendar_connections')
-        .select('provider')
-        .eq('user_id', session.user.id)
-        .in('provider', ['google', 'apple'])
-        .limit(1);
-
-      if (error) {
-        return;
-      }
-
-      setCalendarSyncEnabled((data?.length ?? 0) > 0);
-    };
-
-    void loadCalendarConnectionState();
-  }, [session?.user.id]);
-
-  useEffect(() => {
     void loadAppointments();
 
     const channel = supabase
@@ -184,65 +125,26 @@ function useAppointmentsScreen() {
       void supabase.removeChannel(channel);
     };
   }, [loadAppointments]);
-
-  const appointmentSyncFingerprint = useMemo(
-    () =>
-      appointments
-        .map((appointment) =>
-          [
-            appointment.id,
-            appointment.status,
-            appointment.start_at_utc,
-            appointment.end_at_utc,
-            appointment.timezone_label,
-          ].join(':'),
-        )
-        .join('|'),
-    [appointments],
+  const toDeviceCalendarAppointment = useCallback(
+    (appointment: AppointmentRecord) => mapToDeviceCalendarAppointment(appointment),
+    [],
   );
-
-  useEffect(() => {
-    if (!session?.user.id || !calendarSyncEnabled) {
-      return;
-    }
-
-    if (appointmentSyncFingerprint === lastSyncFingerprintRef.current) {
-      return;
-    }
-
-    lastSyncFingerprintRef.current = appointmentSyncFingerprint;
-
-    void syncAppointmentsToDeviceCalendar({
-      userId: session.user.id,
-      enabled: calendarSyncEnabled,
-      appointments: appointments.map((appointment) => ({
-        id: appointment.id,
-        title: appointment.title,
-        description: appointment.description,
-        modality: appointment.modality,
-        locationText: appointment.location_text,
-        videoUrl: appointment.video_url,
-        startAtUtc: appointment.start_at_utc,
-        endAtUtc: appointment.end_at_utc,
-        timezoneLabel:
-          appointment.timezone_label ||
-          Intl.DateTimeFormat().resolvedOptions().timeZone ||
-          'America/New_York',
-        status: appointment.status,
-      })),
-    }).catch(() => undefined);
-  }, [appointmentSyncFingerprint, appointments, calendarSyncEnabled, session?.user.id]);
+  useAppointmentCalendarSync({
+    appointments,
+    calendarSyncEnabled,
+    userId: session?.user.id,
+    toDeviceCalendarAppointment,
+  });
 
   const toggleForm = useCallback(() => {
     setShowForm((value) => {
       const next = !value;
       if (!next) {
-        setShowStartPicker(false);
-        setShowDurationPicker(false);
+        resetComposer();
       }
       return next;
     });
-  }, []);
+  }, [resetComposer]);
 
   const onSubmit = useCallback(
     () =>
@@ -265,7 +167,7 @@ function useAppointmentsScreen() {
 
             setServerMessage('Appointment request submitted.');
             setShowForm(false);
-            setShowDurationPicker(false);
+            resetComposer();
             reset({
               title: '',
               description: '',
@@ -276,8 +178,6 @@ function useAppointmentsScreen() {
               endAtUtc: new Date(Date.now() + 7200_000).toISOString(),
               timezoneLabel: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
             });
-            setCreateStartAtLocal(new Date(Date.now() + 3600_000));
-            setCreateDurationMinutes(30);
             await loadAppointments();
           } catch (err) {
             setServerMessage((err as Error).message);
@@ -290,7 +190,7 @@ function useAppointmentsScreen() {
           setServerMessage(firstError?.message ?? 'Please fix the highlighted fields.');
         },
       )(),
-    [handleSubmit, loadAppointments, reset],
+    [handleSubmit, loadAppointments, reset, resetComposer],
   );
 
   return {
@@ -328,17 +228,14 @@ function AppointmentCard({ appointment }: { appointment: AppointmentRecord }) {
           </Text>
         </View>
       </View>
-      <Text style={styles.cardTime}>
-        {formatAppointmentDateTime(appointment.start_at_utc)} –{' '}
-        {formatAppointmentDateTime(appointment.end_at_utc)}
-      </Text>
-      <Text style={styles.cardDetail}>
-        {appointment.modality === 'virtual' ? 'Virtual' : 'In-person'}
-        {appointment.location_text ? ` · ${appointment.location_text}` : ''}
-      </Text>
-      {appointment.description ? (
-        <Text style={styles.cardDescription}>{appointment.description}</Text>
-      ) : null}
+      <AppointmentCardDetails
+        description={appointment.description}
+        endAtUtc={appointment.end_at_utc}
+        locationText={appointment.location_text}
+        modality={appointment.modality}
+        startAtUtc={appointment.start_at_utc}
+        styles={styles}
+      />
     </View>
   );
 }
@@ -429,43 +326,19 @@ function AppointmentForm({
           </View>
         )}
       />
-      <Pressable style={styles.input} onPress={() => setShowStartPicker((value) => !value)}>
-        <Text style={styles.valueText}>Start: {formatAppointmentDateTime(createStartAtLocal.toISOString())}</Text>
-      </Pressable>
-      {showStartPicker ? (
-        <View style={styles.pickerShell}>
-          <DateTimePicker
-            value={createStartAtLocal}
-            mode="datetime"
-            display="spinner"
-            minimumDate={new Date()}
-            onChange={handleStartPickerChange}
-          />
-          {Platform.OS === 'ios' ? (
-            <Pressable style={styles.pickerDone} onPress={() => setShowStartPicker(false)}>
-              <Text style={styles.pickerDoneText}>Done</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
-      <Pressable style={styles.input} onPress={() => setShowDurationPicker((value) => !value)}>
-        <Text style={styles.valueText}>Meeting length: {selectedDurationLabel}</Text>
-      </Pressable>
-      {showDurationPicker ? (
-        <View style={styles.pickerShell}>
-          <Picker selectedValue={createDurationMinutes} onValueChange={(value) => setCreateDurationMinutes(Number(value))}>
-            {DURATION_OPTIONS.map((option) => (
-              <Picker.Item key={option.minutes} label={option.label} value={option.minutes} />
-            ))}
-          </Picker>
-          {Platform.OS === 'ios' ? (
-            <Pressable style={styles.pickerDone} onPress={() => setShowDurationPicker(false)}>
-              <Text style={styles.pickerDoneText}>Done</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
-      <Text style={styles.helperText}>Ends: {formatAppointmentDateTime(createEndAtLocal.toISOString())}</Text>
+      <AppointmentTimingControls
+        createDurationMinutes={createDurationMinutes}
+        createEndAtLocal={createEndAtLocal}
+        createStartAtLocal={createStartAtLocal}
+        handleStartPickerChange={handleStartPickerChange}
+        selectedDurationLabel={selectedDurationLabel}
+        setCreateDurationMinutes={setCreateDurationMinutes}
+        setShowDurationPicker={setShowDurationPicker}
+        setShowStartPicker={setShowStartPicker}
+        showDurationPicker={showDurationPicker}
+        showStartPicker={showStartPicker}
+        styles={styles}
+      />
       {selectedModality === 'virtual' ? (
         <Controller
           control={control}
@@ -520,27 +393,7 @@ function AppointmentForm({
 }
 
 export function AppointmentsScreen() {
-  const {
-    appointments,
-    serverMessage,
-    showForm,
-    submitting,
-    control,
-    errors,
-    selectedModality,
-    createStartAtLocal,
-    createEndAtLocal,
-    showStartPicker,
-    setShowStartPicker,
-    handleStartPickerChange,
-    createDurationMinutes,
-    setCreateDurationMinutes,
-    showDurationPicker,
-    setShowDurationPicker,
-    selectedDurationLabel,
-    toggleForm,
-    onSubmit,
-  } = useAppointmentsScreen();
+  const screen = useAppointmentsScreen();
 
   return (
     <ScreenShell>
@@ -554,41 +407,41 @@ export function AppointmentsScreen() {
           focusStyle: sharedPressableFeedback.focus,
           pressedStyle: sharedPressableFeedback.pressed,
         })}
-        onPress={toggleForm}
+        onPress={screen.toggleForm}
       >
         <Text style={styles.primaryCtaText}>
-          {showForm ? 'Close form' : 'Request appointment'}
+          {screen.showForm ? 'Close form' : 'Request appointment'}
         </Text>
       </Pressable>
 
-      {showForm ? (
+      {screen.showForm ? (
         <AppointmentForm
-          control={control}
-          errors={errors}
-          selectedModality={selectedModality}
-          createStartAtLocal={createStartAtLocal}
-          createEndAtLocal={createEndAtLocal}
-          showStartPicker={showStartPicker}
-          setShowStartPicker={setShowStartPicker}
-          handleStartPickerChange={handleStartPickerChange}
-          createDurationMinutes={createDurationMinutes}
-          setCreateDurationMinutes={setCreateDurationMinutes}
-          showDurationPicker={showDurationPicker}
-          setShowDurationPicker={setShowDurationPicker}
-          selectedDurationLabel={selectedDurationLabel}
-          submitting={submitting}
-          onSubmit={onSubmit}
+          control={screen.control}
+          errors={screen.errors}
+          selectedModality={screen.selectedModality}
+          createStartAtLocal={screen.createStartAtLocal}
+          createEndAtLocal={screen.createEndAtLocal}
+          showStartPicker={screen.showStartPicker}
+          setShowStartPicker={screen.setShowStartPicker}
+          handleStartPickerChange={screen.handleStartPickerChange}
+          createDurationMinutes={screen.createDurationMinutes}
+          setCreateDurationMinutes={screen.setCreateDurationMinutes}
+          showDurationPicker={screen.showDurationPicker}
+          setShowDurationPicker={screen.setShowDurationPicker}
+          selectedDurationLabel={screen.selectedDurationLabel}
+          submitting={screen.submitting}
+          onSubmit={screen.onSubmit}
         />
       ) : null}
 
-      {serverMessage ? (
-        <Text style={styles.serverMessage}>{serverMessage}</Text>
+      {screen.serverMessage ? (
+        <Text style={styles.serverMessage}>{screen.serverMessage}</Text>
       ) : null}
 
-      {appointments.length === 0 ? (
+      {screen.appointments.length === 0 ? (
         <Text style={styles.emptyState}>No appointments yet.</Text>
       ) : (
-        appointments.map((appointment) => (
+        screen.appointments.map((appointment) => (
           <AppointmentCard key={appointment.id} appointment={appointment} />
         ))
       )}
@@ -597,113 +450,14 @@ export function AppointmentsScreen() {
 }
 
 const styles = StyleSheet.create({
-  body: {
-    color: uiColors.textSecondary,
-  },
-  card: {
-    backgroundColor: uiColors.surface,
-    borderColor: uiColors.border,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 4,
-    padding: 12,
-  },
-  cardHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  cardTitle: {
-    color: uiColors.textPrimary,
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  cardTime: {
-    color: uiColors.link,
-    fontSize: 13,
-  },
-  cardDetail: {
-    color: uiColors.textSecondary,
-    fontSize: 13,
-  },
-  cardDescription: {
-    color: uiColors.textMuted,
-    fontSize: 13,
-    marginTop: 2,
-  },
-  emptyState: {
-    color: uiColors.textPlaceholder,
-    fontSize: 14,
-    fontStyle: 'italic',
-    paddingVertical: 16,
-    textAlign: 'center',
-  },
-  formCard: {
-    backgroundColor: uiColors.surface,
-    borderColor: uiColors.border,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 10,
-    padding: 12,
-  },
+  ...appointmentSharedStyles,
   fieldError: {
     color: uiColors.errorBright,
     fontSize: 12,
     marginTop: -4,
   },
-  input: {
-    backgroundColor: uiColors.surface,
-    borderColor: uiColors.borderStrong,
-    borderRadius: 8,
-    borderWidth: 1,
-    padding: 10,
-  },
-  valueText: {
-    color: uiColors.textPrimary,
-  },
-  pickerShell: {
-    borderColor: uiColors.borderStrong,
-    borderRadius: 8,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  pickerDone: {
-    alignItems: 'center',
-    paddingBottom: 6,
-  },
-  pickerDoneText: {
-    color: uiColors.success,
-    fontWeight: '700',
-  },
-  helperText: {
-    color: uiColors.textSecondary,
-    fontSize: 12,
-    fontWeight: '500',
-  },
   inputError: {
     borderColor: uiColors.errorBright,
-  },
-  textArea: {
-    minHeight: 60,
-    textAlignVertical: 'top',
-  },
-  primaryCta: {
-    alignItems: 'center',
-    backgroundColor: uiColors.primary,
-    borderRadius: 10,
-    padding: 12,
-  },
-  primaryCtaDisabled: {
-    opacity: 0.6,
-  },
-  primaryCtaText: {
-    color: uiColors.primaryText,
-    fontWeight: '700',
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 8,
   },
   serverMessage: {
     backgroundColor: uiColors.backgroundAlt,
@@ -711,28 +465,5 @@ const styles = StyleSheet.create({
     color: uiColors.textPrimary,
     fontSize: 14,
     padding: 10,
-  },
-  statusBadge: {
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  statusText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  tag: {
-    backgroundColor: uiColors.divider,
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  tagSelected: {
-    backgroundColor: uiColors.selectedBackground,
-  },
-  title: {
-    color: uiColors.textPrimary,
-    fontSize: 24,
-    fontWeight: '700',
   },
 });

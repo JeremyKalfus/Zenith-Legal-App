@@ -1,33 +1,29 @@
 import { z } from 'npm:zod@4.3.6';
 import { errorResponse, jsonResponse } from '../_shared/http.ts';
-import { assertStaff, createServiceClient } from '../_shared/supabase.ts';
+import { createServiceClient } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
 import { syncAppointmentForParticipants } from '../_shared/calendar-sync.ts';
+import {
+  queueAppointmentReminderNotifications,
+  queueAppointmentStatusNotifications,
+} from '../_shared/appointment-notifications.ts';
+import { createEdgeHandler } from '../_shared/edge-handler.ts';
 
-const schema = z.object({
+const appointmentReviewSchema = z.object({
   appointment_id: z.string().uuid(),
   decision: z.enum(['accepted', 'declined']),
 });
 
-function buildReminderSendAfter(startAtUtc: string): string | null {
-  const reminderAtMs = Date.parse(startAtUtc) - 15 * 60 * 1000;
-  if (!Number.isFinite(reminderAtMs)) {
-    return null;
-  }
-
-  return reminderAtMs > Date.now() ? new Date(reminderAtMs).toISOString() : null;
-}
-
-Deno.serve(async (request) => {
-  if (request.method === 'OPTIONS') {
-    return jsonResponse({ ok: true });
-  }
-
-  try {
-    const authHeader = request.headers.get('Authorization');
-    const actorUserId = await assertStaff(authHeader);
+const staffReviewAppointmentHandler = createEdgeHandler(
+  async ({ request, userId }) => {
+    const actorUserId = userId as string;
     const serviceClient = createServiceClient();
-    const payload = schema.parse(await request.json());
+    const parsedBody = appointmentReviewSchema.safeParse(await request.json());
+
+    if (!parsedBody.success) {
+      return errorResponse('Invalid appointment review payload', 422, 'invalid_payload');
+    }
+    const payload = parsedBody.data;
 
     const { data: appointment, error: fetchError } = await serviceClient
       .from('appointments')
@@ -72,7 +68,6 @@ Deno.serve(async (request) => {
     }
 
     const nextStatus = payload.decision === 'accepted' ? 'scheduled' : 'declined';
-
     const { data: updated, error: updateError } = await serviceClient
       .from('appointments')
       .update({ status: nextStatus })
@@ -99,48 +94,21 @@ Deno.serve(async (request) => {
       );
     }
 
-    await serviceClient.from('notification_deliveries').insert([
-      {
-        user_id: appointment.candidate_user_id,
-        channel: 'push',
-        event_type: 'appointment.updated',
-        payload: {
-          appointment_id: appointment.id,
-          decision: nextStatus,
-          status: nextStatus,
-        },
-        status: 'queued',
-      },
-      {
-        user_id: appointment.candidate_user_id,
-        channel: 'email',
-        event_type: 'appointment.updated',
-        payload: {
-          appointment_id: appointment.id,
-          decision: nextStatus,
-          status: nextStatus,
-        },
-        status: 'queued',
-      },
-    ]);
+    await queueAppointmentStatusNotifications({
+      serviceClient,
+      candidateUserId: appointment.candidate_user_id,
+      appointmentId: appointment.id,
+      eventType: 'appointment.updated',
+      status: nextStatus,
+    });
 
-    const reminderSendAfter = nextStatus === 'scheduled' ? buildReminderSendAfter(appointment.start_at_utc) : null;
-    if (reminderSendAfter) {
-      const reminderTargets = new Set<string>([appointment.candidate_user_id]);
-      reminderTargets.add(actorUserId);
-      await serviceClient.from('notification_deliveries').insert(
-        Array.from(reminderTargets).map((targetUserId) => ({
-          user_id: targetUserId,
-          channel: 'push',
-          event_type: 'appointment.reminder',
-          payload: {
-            appointment_id: appointment.id,
-            start_at_utc: appointment.start_at_utc,
-          },
-          send_after_utc: reminderSendAfter,
-          status: 'queued',
-        })),
-      );
+    if (nextStatus === 'scheduled') {
+      await queueAppointmentReminderNotifications({
+        serviceClient,
+        appointmentId: appointment.id,
+        startAtUtc: appointment.start_at_utc,
+        participantUserIds: [appointment.candidate_user_id, actorUserId],
+      });
     }
 
     await syncAppointmentForParticipants({
@@ -165,14 +133,8 @@ Deno.serve(async (request) => {
       previous_status: appointment.status,
       new_status: nextStatus,
     });
-  } catch (error) {
-    const message = (error as Error).message;
-    if (message === 'Forbidden: staff access required') {
-      return errorResponse(message, 403);
-    }
-    if (message.startsWith('Unauthorized')) {
-      return errorResponse(message, 401);
-    }
-    return errorResponse(message, 500);
-  }
-});
+  },
+  { auth: 'staff' },
+);
+
+Deno.serve(staffReviewAppointmentHandler);

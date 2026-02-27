@@ -51,6 +51,20 @@ function normalizeFirmRelation(
   return Array.isArray(relation) ? (relation[0] ?? null) : relation;
 }
 
+function filterAssignableFirms(
+  firms: FirmListItem[],
+  assignedFirmIds: Set<string>,
+  firmQuery: string,
+) {
+  const query = firmQuery.trim().toLowerCase();
+  return firms.filter((firm) => {
+    if (assignedFirmIds.has(firm.id)) {
+      return false;
+    }
+    return query.length === 0 || firm.name.toLowerCase().includes(query);
+  });
+}
+
 function useCandidateFirmManager() {
   const [candidates, setCandidates] = useState<CandidateListItem[]>([]);
   const [firms, setFirms] = useState<FirmListItem[]>([]);
@@ -58,16 +72,23 @@ function useCandidateFirmManager() {
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [selectedFirmId, setSelectedFirmId] = useState('');
   const [candidateQuery, setCandidateQuery] = useState('');
-  const [selectedCities, setSelectedCities] = useState<CityOption[]>([]);
-  const [selectedPracticeAreas, setSelectedPracticeAreas] = useState<PracticeArea[]>([]);
+  const [firmQuery, setFirmQuery] = useState('');
+  const [candidateFilters, setCandidateFilters] = useState<{
+    selectedCities: CityOption[];
+    selectedPracticeAreas: PracticeArea[];
+  }>({
+    selectedCities: [],
+    selectedPracticeAreas: [],
+  });
   const [showAllCityFilters, setShowAllCityFilters] = useState(false);
   const [showAllPracticeFilters, setShowAllPracticeFilters] = useState(false);
-  const [firmQuery, setFirmQuery] = useState('');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isLoadingCandidates, setIsLoadingCandidates] = useState(true);
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [pendingStatuses, setPendingStatuses] = useState<Record<string, FirmStatus>>({});
+  const selectedCities = candidateFilters.selectedCities;
+  const selectedPracticeAreas = candidateFilters.selectedPracticeAreas;
 
   const loadBaseData = useCallback(async () => {
     setIsLoadingCandidates(true);
@@ -197,18 +218,10 @@ function useCandidateFirmManager() {
     [assignments],
   );
 
-  const assignableFirms = useMemo(() => {
-    const query = firmQuery.trim().toLowerCase();
-    return firms.filter((firm) => {
-      if (assignedFirmIds.has(firm.id)) {
-        return false;
-      }
-      if (!query) {
-        return true;
-      }
-      return firm.name.toLowerCase().includes(query);
-    });
-  }, [assignedFirmIds, firmQuery, firms]);
+  const assignableFirms = useMemo(
+    () => filterAssignableFirms(firms, assignedFirmIds, firmQuery),
+    [assignedFirmIds, firmQuery, firms],
+  );
 
   useEffect(() => {
     if (assignableFirms.length === 0) {
@@ -351,19 +364,21 @@ function useCandidateFirmManager() {
   }, []);
 
   const toggleCityFilter = useCallback((city: CityOption) => {
-    setSelectedCities((current) =>
-      current.includes(city)
-        ? current.filter((value) => value !== city)
-        : [...current, city],
-    );
+    setCandidateFilters((current) => ({
+      ...current,
+      selectedCities: current.selectedCities.includes(city)
+        ? current.selectedCities.filter((value) => value !== city)
+        : [...current.selectedCities, city],
+    }));
   }, []);
 
   const togglePracticeFilter = useCallback((practiceArea: PracticeArea) => {
-    setSelectedPracticeAreas((current) =>
-      current.includes(practiceArea)
-        ? current.filter((value) => value !== practiceArea)
-        : [...current, practiceArea],
-    );
+    setCandidateFilters((current) => ({
+      ...current,
+      selectedPracticeAreas: current.selectedPracticeAreas.includes(practiceArea)
+        ? current.selectedPracticeAreas.filter((value) => value !== practiceArea)
+        : [...current.selectedPracticeAreas, practiceArea],
+    }));
   }, []);
 
   return {

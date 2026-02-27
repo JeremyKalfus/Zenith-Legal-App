@@ -1,15 +1,21 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { Picker } from '@react-native-picker/picker';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { AppointmentStatus } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
 import { useAuth } from '../../context/auth-context';
-import { formatAppointmentDateTime } from '../../lib/date-format';
-import { syncAppointmentsToDeviceCalendar } from '../../lib/device-calendar-sync';
 import { ensureValidSession, supabase } from '../../lib/supabase';
+import {
+  mapToDeviceCalendarAppointment,
+  shouldHideExpiredAppointment,
+} from '../../lib/appointments-shared';
+import { useAppointmentComposer } from '../../lib/use-appointment-composer';
+import { useCalendarSyncEnabled } from '../../lib/use-calendar-sync-enabled';
+import { useAppointmentCalendarSync } from '../../lib/use-appointment-calendar-sync';
 import { uiColors } from '../../theme/colors';
 import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
+import { appointmentSharedStyles } from '../shared/appointment-shared-styles';
+import { AppointmentCardDetails } from '../shared/appointment-card-details';
+import { AppointmentTimingControls } from '../shared/appointment-timing-controls';
 
 type StaffAppointment = {
   id: string;
@@ -30,30 +36,6 @@ type CandidateOption = {
   name: string;
 };
 
-const DURATION_OPTIONS = [
-  { label: '5 min', minutes: 5 },
-  { label: '15 min', minutes: 15 },
-  { label: '30 min', minutes: 30 },
-  { label: '45 min', minutes: 45 },
-  { label: '1 hour', minutes: 60 },
-  { label: '2 hours', minutes: 120 },
-] as const;
-
-const APPOINTMENT_HIDE_AFTER_MS = 24 * 60 * 60 * 1000;
-
-function shouldHideExpiredAppointment(appointment: StaffAppointment): boolean {
-  if (appointment.status !== 'scheduled' && appointment.status !== 'declined') {
-    return false;
-  }
-
-  const endTimeMs = Date.parse(appointment.end_at_utc);
-  if (!Number.isFinite(endTimeMs)) {
-    return false;
-  }
-
-  return endTimeMs < Date.now() - APPOINTMENT_HIDE_AFTER_MS;
-}
-
 function getStatusLabel(status: AppointmentStatus | 'accepted'): string {
   return status === 'accepted' ? 'scheduled' : status;
 }
@@ -70,17 +52,25 @@ function useStaffAppointmentsScreen() {
   const { session } = useAuth();
   const [appointments, setAppointments] = useState<StaffAppointment[]>([]);
   const [candidates, setCandidates] = useState<CandidateOption[]>([]);
-  const [calendarSyncEnabled, setCalendarSyncEnabled] = useState(false);
-  const lastSyncFingerprintRef = useRef('');
+  const calendarSyncEnabled = useCalendarSyncEnabled(session?.user.id);
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [candidateSearchText, setCandidateSearchText] = useState('');
 
   const [createTitle, setCreateTitle] = useState('');
   const [createDescription, setCreateDescription] = useState('');
-  const [createStartAtLocal, setCreateStartAtLocal] = useState(() => new Date(Date.now() + 3600_000));
-  const [showStartPicker, setShowStartPicker] = useState(false);
-  const [createDurationMinutes, setCreateDurationMinutes] = useState(30);
-  const [showDurationPicker, setShowDurationPicker] = useState(false);
+  const {
+    createDurationMinutes,
+    createEndAtLocal,
+    createStartAtLocal,
+    handleStartPickerChange,
+    resetComposer,
+    selectedDurationLabel,
+    setCreateDurationMinutes,
+    setShowDurationPicker,
+    setShowStartPicker,
+    showDurationPicker,
+    showStartPicker,
+  } = useAppointmentComposer();
   const [showForm, setShowForm] = useState(false);
   const [createModality, setCreateModality] = useState<'virtual' | 'in_person'>('virtual');
   const [createLocation, setCreateLocation] = useState('');
@@ -126,30 +116,6 @@ function useStaffAppointmentsScreen() {
     setStatusMessage('');
   }, []);
 
-  useEffect(() => {
-    const loadCalendarConnectionState = async () => {
-      if (!session?.user.id) {
-        setCalendarSyncEnabled(false);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('calendar_connections')
-        .select('provider')
-        .eq('user_id', session.user.id)
-        .in('provider', ['google', 'apple'])
-        .limit(1);
-
-      if (error) {
-        return;
-      }
-
-      setCalendarSyncEnabled((data?.length ?? 0) > 0);
-    };
-
-    void loadCalendarConnectionState();
-  }, [session?.user.id]);
-
   const loadCandidates = useCallback(async () => {
     const { data, error } = await supabase
       .from('users_profile')
@@ -172,54 +138,17 @@ function useStaffAppointmentsScreen() {
     void loadCandidates();
   }, [loadAppointments, loadCandidates]);
 
-  const appointmentSyncFingerprint = useMemo(
-    () =>
-      appointments
-        .map((appointment) =>
-          [
-            appointment.id,
-            appointment.status,
-            appointment.start_at_utc,
-            appointment.end_at_utc,
-            appointment.timezone_label,
-          ].join(':'),
-        )
-        .join('|'),
-    [appointments],
+  const toDeviceCalendarAppointment = useCallback(
+    (appointment: StaffAppointment) =>
+      mapToDeviceCalendarAppointment(appointment, appointment.candidate_name),
+    [],
   );
-
-  useEffect(() => {
-    if (!session?.user.id || !calendarSyncEnabled) {
-      return;
-    }
-
-    if (appointmentSyncFingerprint === lastSyncFingerprintRef.current) {
-      return;
-    }
-
-    lastSyncFingerprintRef.current = appointmentSyncFingerprint;
-
-    void syncAppointmentsToDeviceCalendar({
-      userId: session.user.id,
-      enabled: calendarSyncEnabled,
-      appointments: appointments.map((appointment) => ({
-        id: appointment.id,
-        title: appointment.title,
-        description: appointment.description,
-        modality: appointment.modality,
-        locationText: appointment.location_text,
-        videoUrl: appointment.video_url,
-        startAtUtc: appointment.start_at_utc,
-        endAtUtc: appointment.end_at_utc,
-        timezoneLabel:
-          appointment.timezone_label ||
-          Intl.DateTimeFormat().resolvedOptions().timeZone ||
-          'America/New_York',
-        status: appointment.status,
-        participantName: appointment.candidate_name,
-      })),
-    }).catch(() => undefined);
-  }, [appointmentSyncFingerprint, appointments, calendarSyncEnabled, session?.user.id]);
+  useAppointmentCalendarSync({
+    appointments,
+    calendarSyncEnabled,
+    userId: session?.user.id,
+    toDeviceCalendarAppointment,
+  });
 
   const filteredCandidates = useMemo(() => {
     const search = candidateSearchText.trim().toLowerCase();
@@ -239,41 +168,15 @@ function useStaffAppointmentsScreen() {
   const selectedCandidateName =
     candidates.find((candidate) => candidate.id === selectedCandidateId)?.name ?? '';
 
-  const createEndAtLocal = useMemo(
-    () => new Date(createStartAtLocal.getTime() + createDurationMinutes * 60_000),
-    [createDurationMinutes, createStartAtLocal],
-  );
-
-  const selectedDurationLabel = useMemo(
-    () => DURATION_OPTIONS.find((option) => option.minutes === createDurationMinutes)?.label ?? `${createDurationMinutes} min`,
-    [createDurationMinutes],
-  );
-
   const toggleForm = useCallback(() => {
     setShowForm((value) => {
       const next = !value;
       if (!next) {
-        setShowStartPicker(false);
-        setShowDurationPicker(false);
+        resetComposer();
       }
       return next;
     });
-  }, []);
-
-  const handleStartPickerChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
-    if (event.type === 'dismissed') {
-      setShowStartPicker(false);
-      return;
-    }
-
-    if (selectedDate) {
-      setCreateStartAtLocal(selectedDate);
-    }
-
-    if (Platform.OS === 'android') {
-      setShowStartPicker(false);
-    }
-  }, []);
+  }, [resetComposer]);
 
   const handleReview = useCallback(
     async (appointmentId: string, decision: 'accepted' | 'declined') => {
@@ -341,12 +244,9 @@ function useStaffAppointmentsScreen() {
 
       setStatusMessage('Appointment scheduled.');
       setShowForm(false);
-      setShowStartPicker(false);
-      setShowDurationPicker(false);
       setCreateTitle('');
       setCreateDescription('');
-      setCreateStartAtLocal(new Date(Date.now() + 3600_000));
-      setCreateDurationMinutes(30);
+      resetComposer();
       setCreateLocation('');
       setCreateVideoUrl('');
       await loadAppointments();
@@ -364,6 +264,7 @@ function useStaffAppointmentsScreen() {
     createTitle,
     createVideoUrl,
     loadAppointments,
+    resetComposer,
     selectedCandidateId,
   ]);
 
@@ -521,47 +422,19 @@ export function StaffAppointmentsScreen() {
           </Pressable>
         </View>
 
-        <Pressable style={styles.input} onPress={() => setShowStartPicker((value) => !value)}>
-          <Text style={styles.valueText}>Start: {formatAppointmentDateTime(createStartAtLocal.toISOString())}</Text>
-        </Pressable>
-
-        {showStartPicker ? (
-          <View style={styles.pickerShell}>
-            <DateTimePicker
-              value={createStartAtLocal}
-              mode="datetime"
-              display="spinner"
-              minimumDate={new Date()}
-              onChange={handleStartPickerChange}
-            />
-            {Platform.OS === 'ios' ? (
-              <Pressable style={styles.pickerDone} onPress={() => setShowStartPicker(false)}>
-                <Text style={styles.pickerDoneText}>Done</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
-
-        <Pressable style={styles.input} onPress={() => setShowDurationPicker((value) => !value)}>
-          <Text style={styles.valueText}>Meeting length: {selectedDurationLabel}</Text>
-        </Pressable>
-
-        {showDurationPicker ? (
-          <View style={styles.pickerShell}>
-            <Picker selectedValue={createDurationMinutes} onValueChange={(value) => setCreateDurationMinutes(Number(value))}>
-              {DURATION_OPTIONS.map((option) => (
-                <Picker.Item key={option.minutes} label={option.label} value={option.minutes} />
-              ))}
-            </Picker>
-            {Platform.OS === 'ios' ? (
-              <Pressable style={styles.pickerDone} onPress={() => setShowDurationPicker(false)}>
-                <Text style={styles.pickerDoneText}>Done</Text>
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
-
-        <Text style={styles.helperText}>Ends: {formatAppointmentDateTime(createEndAtLocal.toISOString())}</Text>
+        <AppointmentTimingControls
+          createDurationMinutes={createDurationMinutes}
+          createEndAtLocal={createEndAtLocal}
+          createStartAtLocal={createStartAtLocal}
+          handleStartPickerChange={handleStartPickerChange}
+          selectedDurationLabel={selectedDurationLabel}
+          setCreateDurationMinutes={setCreateDurationMinutes}
+          setShowDurationPicker={setShowDurationPicker}
+          setShowStartPicker={setShowStartPicker}
+          showDurationPicker={showDurationPicker}
+          showStartPicker={showStartPicker}
+          styles={styles}
+        />
 
         {createModality === 'in_person' ? (
           <TextInput
@@ -613,14 +486,14 @@ export function StaffAppointmentsScreen() {
                 </View>
               </View>
               <Text style={styles.cardSubtitle}>{appointment.candidate_name}</Text>
-              <Text style={styles.cardTime}>
-                {formatAppointmentDateTime(appointment.start_at_utc)} – {formatAppointmentDateTime(appointment.end_at_utc)}
-              </Text>
-              <Text style={styles.cardDetail}>
-                {appointment.modality === 'virtual' ? 'Virtual' : 'In-person'}
-                {appointment.location_text ? ` · ${appointment.location_text}` : ''}
-              </Text>
-              {appointment.description ? <Text style={styles.cardDescription}>{appointment.description}</Text> : null}
+              <AppointmentCardDetails
+                description={appointment.description}
+                endAtUtc={appointment.end_at_utc}
+                locationText={appointment.location_text}
+                modality={appointment.modality}
+                startAtUtc={appointment.start_at_utc}
+                styles={styles}
+              />
 
               <View style={styles.actionRow}>
                 <Pressable
@@ -659,13 +532,14 @@ export function StaffAppointmentsScreen() {
                   </View>
                 </View>
                 <Text style={styles.cardSubtitle}>{appointment.candidate_name}</Text>
-                <Text style={styles.cardTime}>
-                  {formatAppointmentDateTime(appointment.start_at_utc)} – {formatAppointmentDateTime(appointment.end_at_utc)}
-                </Text>
-                <Text style={styles.cardDetail}>
-                  {appointment.modality === 'virtual' ? 'Virtual' : 'In-person'}
-                  {appointment.location_text ? ` · ${appointment.location_text}` : ''}
-                </Text>
+                <AppointmentCardDetails
+                  description={appointment.description}
+                  endAtUtc={appointment.end_at_utc}
+                  locationText={appointment.location_text}
+                  modality={appointment.modality}
+                  startAtUtc={appointment.start_at_utc}
+                  styles={styles}
+                />
               </View>
             );
           })}
@@ -676,46 +550,10 @@ export function StaffAppointmentsScreen() {
 }
 
 const styles = StyleSheet.create({
-  title: {
-    color: '#0F172A',
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  body: {
-    color: uiColors.textSecondary,
-  },
-  formCard: {
-    backgroundColor: uiColors.surface,
-    borderColor: uiColors.border,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 10,
-    padding: 12,
-  },
+  ...appointmentSharedStyles,
   input: {
-    backgroundColor: uiColors.surface,
-    borderColor: uiColors.borderStrong,
-    borderRadius: 8,
-    borderWidth: 1,
+    ...appointmentSharedStyles.input,
     color: uiColors.textPrimary,
-    padding: 10,
-  },
-  valueText: {
-    color: uiColors.textPrimary,
-  },
-  pickerShell: {
-    borderColor: uiColors.borderStrong,
-    borderRadius: 8,
-    borderWidth: 1,
-    overflow: 'hidden',
-  },
-  pickerDone: {
-    alignItems: 'center',
-    paddingBottom: 6,
-  },
-  pickerDoneText: {
-    color: uiColors.success,
-    fontWeight: '700',
   },
   searchResults: {
     borderColor: uiColors.borderStrong,
@@ -750,40 +588,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 10,
   },
-  helperText: {
-    color: uiColors.textSecondary,
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  textArea: {
-    minHeight: 60,
-    textAlignVertical: 'top',
-  },
-  row: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  tag: {
-    backgroundColor: uiColors.divider,
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  tagSelected: {
-    backgroundColor: uiColors.selectedBackground,
-  },
   sectionHeader: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 16,
     fontWeight: '600',
     marginTop: 8,
-  },
-  emptyState: {
-    color: '#94A3B8',
-    fontSize: 14,
-    fontStyle: 'italic',
-    paddingVertical: 16,
-    textAlign: 'center',
   },
   statusMessage: {
     backgroundColor: uiColors.backgroundAlt,
@@ -792,51 +601,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     padding: 10,
   },
-  card: {
-    backgroundColor: '#ffffff',
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 4,
-    padding: 12,
-  },
-  cardHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
   cardTitle: {
-    color: '#0F172A',
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '600',
+    ...appointmentSharedStyles.cardTitle,
   },
   cardSubtitle: {
-    color: '#334155',
+    color: uiColors.textStrong,
     fontSize: 13,
     fontWeight: '500',
   },
-  cardTime: {
-    color: '#2563EB',
-    fontSize: 13,
-  },
-  cardDetail: {
-    color: '#475569',
-    fontSize: 13,
-  },
-  cardDescription: {
-    color: '#64748B',
-    fontSize: 13,
-    marginTop: 2,
-  },
-  statusBadge: {
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
   statusText: {
-    fontSize: 11,
-    fontWeight: '600',
+    ...appointmentSharedStyles.statusText,
     textTransform: 'capitalize',
   },
   actionRow: {
@@ -857,21 +631,8 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '700',
   },
-  primaryCta: {
-    alignItems: 'center',
-    backgroundColor: uiColors.primary,
-    borderRadius: 10,
-    padding: 12,
-  },
-  primaryCtaDisabled: {
-    opacity: 0.6,
-  },
-  primaryCtaText: {
-    color: uiColors.primaryText,
-    fontWeight: '700',
-  },
   declineButton: {
-    backgroundColor: '#ffffff',
+    backgroundColor: uiColors.surface,
     borderColor: '#DC2626',
     borderWidth: 1,
   },

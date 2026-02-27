@@ -76,6 +76,19 @@ export function IntakeScreen({
 
   const selectedCities = watch('preferredCities') ?? [];
   const selectedPracticeAreas = watch('practiceAreas') ?? [];
+  const nextPracticeAreas = (
+    currentValues: CandidateRegistrationFormValues['practiceAreas'],
+    area: (typeof PRACTICE_AREAS)[number],
+  ) => {
+    const current = currentValues ?? [];
+    if (current.includes(area)) {
+      return current.filter((value) => value !== area);
+    }
+    if (current.length >= 3) {
+      return current;
+    }
+    return [...current, area];
+  };
 
   return (
     <SafeAreaView
@@ -239,18 +252,7 @@ export function IntakeScreen({
                     key={area}
                     label={area}
                     selected={(field.value ?? []).includes(area)}
-                    onToggle={() => {
-                      const current = field.value ?? [];
-                      const alreadySelected = current.includes(area);
-                      if (alreadySelected) {
-                        field.onChange(current.filter((value) => value !== area));
-                        return;
-                      }
-                      if (current.length >= 3) {
-                        return;
-                      }
-                      field.onChange([...current, area]);
-                    }}
+                    onToggle={() => field.onChange(nextPracticeAreas(field.value, area))}
                   />
                 ))}
               </View>

@@ -1,9 +1,9 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { CalendarSyncCard } from '../../components/calendar-sync-card';
 import { ScreenShell } from '../../components/screen-shell';
+import { SignOutButton } from '../../components/sign-out-button';
 import { useAuth } from '../../context/auth-context';
 import { uiColors } from '../../theme/colors';
-import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 
 export function StaffProfileScreen() {
   const { isSigningOut, profile, signOut } = useAuth();
@@ -21,64 +21,40 @@ export function StaffProfileScreen() {
 
       <CalendarSyncCard />
 
-      <Pressable
-        style={interactivePressableStyle({
-          base: styles.logout,
-          disabled: isSigningOut,
-          disabledStyle: styles.buttonDisabled,
-          hoverStyle: sharedPressableFeedback.hover,
-          focusStyle: sharedPressableFeedback.focus,
-          pressedStyle: sharedPressableFeedback.pressed,
-        })}
-        disabled={isSigningOut}
-        accessibilityState={{ disabled: isSigningOut }}
-        onPress={() => {
+      <SignOutButton
+        isSigningOut={isSigningOut}
+        onSignOut={() => {
           void signOut();
         }}
-      >
-        <Text style={styles.logoutText}>{isSigningOut ? 'Signing out...' : 'Sign out'}</Text>
-      </Pressable>
+      />
     </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  buttonDisabled: {
-    opacity: 0.6,
-  },
   card: {
-    backgroundColor: '#ffffff',
-    borderColor: '#E2E8F0',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.border,
     borderRadius: 12,
     borderWidth: 1,
     gap: 8,
     padding: 12,
   },
-  logout: {
-    alignItems: 'center',
-    backgroundColor: uiColors.danger,
-    borderRadius: 10,
-    padding: 12,
-  },
-  logoutText: {
-    color: uiColors.dangerText,
-    fontWeight: '700',
-  },
   sectionTitle: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 16,
     fontWeight: '700',
   },
   subtle: {
-    color: '#475569',
+    color: uiColors.textSecondary,
   },
   title: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 24,
     fontWeight: '700',
   },
   value: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 18,
     fontWeight: '600',
   },
