@@ -2,10 +2,6 @@ import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRecruiterContact } from '../context/recruiter-contact-context';
 import { uiColors } from '../theme/colors';
 
-const ZENITH_RECRUITER_PHONE_DISPLAY = '(202) 486-3535';
-const ZENITH_RECRUITER_PHONE_DIAL = '+12024863535';
-const ZENITH_RECRUITER_EMAIL = 'mason@zenithlegal.com';
-
 function toDialablePhone(phone: string): string {
   const trimmed = phone.trim();
   const digits = trimmed.replace(/\D/g, '');
@@ -28,9 +24,9 @@ function toDialablePhone(phone: string): string {
 
 export function GlobalRecruiterBanner() {
   const { contact } = useRecruiterContact();
-  const displayPhone = contact.phone?.trim() || ZENITH_RECRUITER_PHONE_DISPLAY;
-  const dialablePhone = toDialablePhone(contact.phone?.trim() || ZENITH_RECRUITER_PHONE_DIAL);
-  const email = contact.email?.trim() || ZENITH_RECRUITER_EMAIL;
+  const displayPhone = contact.phone.trim();
+  const dialablePhone = toDialablePhone(displayPhone);
+  const email = contact.email.trim();
 
   return (
     <View style={styles.container} accessibilityRole="header">

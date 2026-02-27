@@ -27,6 +27,9 @@
 - [x] Admin web staff messaging inbox + candidate deletion workflow (candidate-only hard delete)
 - [x] Candidate dashboard authorization UX semantics (waiting decline deletes assignment; authorized decline labeled cancel)
 - [x] Code quality pass: duplicate consolidation, theme centralization, hook extraction, edge function refactoring (desloppify strict 85.7 → 86.2)
+- [x] Semantic firm-status badge palette across candidate/staff/admin listing surfaces
+- [x] Staff mobile per-candidate banner contact override controls (save + reset to global default)
+- [x] Mobile icon/logo mark scaled +14% across app icon assets (`icon`, `adaptive-icon`, `splash-icon`, `favicon`)
 - [ ] Vendor credential wiring for end-to-end runtime (requires secrets)
 - [x] Device-level mobile release signing baseline (Apple App ID/App Store Connect app created; Expo EAS project linked; Android keystore + iOS dist cert/provisioning profile created)
 - [ ] Android `eas submit` / Play Console integration credential (Google Play service account)
@@ -46,8 +49,6 @@
 3. **Observability wiring** -- Sentry DSN and PostHog key integration points are defined but not connected.
 4. **Admin README** -- Replace default Next.js boilerplate README with project-specific documentation.
 5. **Store submission configuration + metadata** -- Finish Android submit setup (Google Play service account), document manual Transporter fallback for iOS uploads, and complete App Store Connect / Play Console metadata/compliance forms.
-6. **Shrink+center icon logo** -- Adjust the app icon/logo artwork so the mark is smaller and centered consistently for app icon/store presentation.
-7. **Add feature that allows staff to set user-based banner display** -- Add staff-configurable banner visibility/settings targeted per user (not only global banner behavior).
 
 ## Blockers and Dependencies
 
@@ -130,10 +131,11 @@
 - Standalone/TestFlight iOS push notifications tested after APNs key setup (now configured).
 - Store metadata/compliance forms complete in both store consoles.
 
-### 6. Shrink+center icon logo and add staff user-based banner display control
+### 6. Improve test health for candidate operations flows
 
-**Scope:** (a) Update the app/logo icon artwork to be visually smaller and centered in its container/assets, and (b) implement a staff-facing feature to configure banner display per user.
+**Scope:** Increase automated coverage in admin/mobile candidate operations paths (assignment status updates, staff banner override save/reset behavior, and candidate banner resolution precedence) to improve the current low test-health dimension.
 
 **Verification:**
-- Updated icon/logo renders centered with correct padding in target app surfaces/assets.
-- Staff can set banner display state for a specific user and candidate app reflects the user-specific banner setting.
+- Candidate operations regressions are covered by unit/integration tests.
+- Test health score improves without increasing wontfix debt.
+- `npm run verify` passes.

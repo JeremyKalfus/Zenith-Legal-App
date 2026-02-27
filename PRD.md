@@ -53,11 +53,17 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Staff assigns firms to candidates via `assign_firm_to_candidate`.
 - Staff candidate list views (mobile + admin) support `search AND (city OR practice)` filtering using `candidate_preferences` (`cities`, `practice_areas`, legacy `practice_area` fallback).
 - Candidates see assigned firms on their dashboard.
+- Candidate and staff firm listings render status-specific badges (Waiting=amber, Authorized=teal, Submitted=blue, Interview=violet, Rejected=red, Offer=green).
 - Candidates authorize firm submissions via `authorize_firm_submission`.
 - Candidates declining while status is `Waiting on your authorization to contact/submit` removes that firm assignment from the dashboard (assignment deleted).
 - Candidates can cancel a prior authorization while status is `Authorized, will submit soon` (UI label `Cancel`; backend reverts status to waiting).
 - Staff updates assignment status via `staff_update_assignment_status`.
 - Staff can unassign firms via `staff_unassign_firm_from_candidate`.
+
+### Recruiter Contact Banner
+- Staff can set candidate-specific banner phone/email overrides from the staff mobile Candidates flow.
+- Candidate-specific overrides are stored in `candidate_recruiter_contact_overrides` and take precedence over global `recruiter_contact_config` values.
+- Candidates without an override use the global recruiter contact values; if global values are unavailable, app env defaults are used.
 
 ### Messaging
 - Stream Chat integration for real-time messaging (native: stream-chat-expo; web: stream-chat-react with CDN CSS injection).
@@ -118,7 +124,6 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ## Open Questions
 
 - What is the intended behavior when a candidate's appointment overlaps with a pending (not yet scheduled) appointment?
-- What are the exact product rules for staff-configured user-specific banners (priority, targeting, expiration, and override behavior vs global banners)?
 - What are the specific notification delivery channels beyond push (email, SMS)?
 - What is the support/data request lifecycle beyond the initial request creation?
 - Are there plans for candidate self-service firm discovery (vs recruiter-only assignment)?

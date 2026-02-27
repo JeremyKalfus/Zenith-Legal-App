@@ -1,7 +1,7 @@
 'use client';
 
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
-import { FIRM_STATUSES } from '@zenith/shared';
+import { FIRM_STATUSES, type FirmStatus } from '@zenith/shared';
 import { type UseFormRegister, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -10,6 +10,7 @@ import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
 import { supabaseClient } from '@/lib/supabase-client';
 import { bulkPasteSchema, parseFirmLines, type BulkPasteInput } from '@/schemas/ingest';
+import { getFirmStatusBadgeClasses } from '@/features/firm-status-badge';
 
 type Candidate = { id: string; name: string; email: string };
 type Firm = { id: string; name: string };
@@ -17,7 +18,7 @@ type Assignment = {
   id: string;
   candidate_user_id: string;
   firm_id: string;
-  status_enum: string;
+  status_enum: FirmStatus;
   candidates: Array<{ name: string }> | null;
   firms: Array<{ name: string }> | null;
 };
@@ -185,7 +186,11 @@ function useOperationsDashboard() {
             {assignment.candidates?.[0]?.name ?? 'Candidate'}
           </td>
           <td className="px-2 py-2">{assignment.firms?.[0]?.name ?? 'Firm'}</td>
-          <td className="px-2 py-2">{assignment.status_enum}</td>
+          <td className="px-2 py-2">
+            <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${getFirmStatusBadgeClasses(assignment.status_enum)}`}>
+              {assignment.status_enum}
+            </span>
+          </td>
         </tr>
       )),
     [assignments],

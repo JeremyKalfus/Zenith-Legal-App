@@ -30,6 +30,16 @@ Every task must follow this sequence:
 4. **Verify** -- After each micro-step, run verification commands (`npm run lint`, `npm run typecheck`, `npm run test`). Fix any issues before proceeding to the next step.
 5. **Update docs** -- After all steps pass, update the relevant root documentation files (see Doc Update Policy below).
 
+## Lessons Log
+
+- Pointer: see `/Users/jeremykalfus/CodingProjects/Zenith Legal App/lessons.md`.
+- How to use:
+  - Append one entry for each meaningful mistake, regression, or root-cause discovery.
+  - Include what failed, why it failed, what was changed, and the prevention rule.
+  - Reference concrete paths/commands involved when applicable.
+- Operational note:
+  - Supabase CLI migrations/deploys can be run directly without requesting passwords/keys when the local CLI session is already authenticated and the project is already linked.
+
 ## Doc Update Policy
 
 After completing work, update these root docs when applicable:
@@ -288,4 +298,3 @@ This is the canonical Codex overlay used by the README install command.
 
 <!-- desloppify-overlay: codex -->
 <!-- desloppify-end -->
-

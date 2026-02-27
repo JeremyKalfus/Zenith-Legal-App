@@ -10,6 +10,8 @@ import {
   View,
 } from 'react-native';
 import { ScreenShell } from '../../components/screen-shell';
+import { env } from '../../config/env';
+import { useAuth } from '../../context/auth-context';
 import {
   assignFirmToCandidate,
   listActiveFirms,
@@ -20,8 +22,10 @@ import {
   unassignFirmFromCandidate,
   updateCandidateAssignmentStatus,
 } from '../../features/staff-candidate-management';
+import { supabase } from '../../lib/supabase';
 import { uiColors } from '../../theme/colors';
 import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
+import { getFirmStatusBadgeColors } from '../../features/firm-status-badge';
 
 type StatusModalState = {
   assignmentId: string;
@@ -33,15 +37,38 @@ const USER_ONLY_AUTHORIZED_STATUS = 'Authorized, will submit soon' as const;
 const STAFF_SETTABLE_FIRM_STATUSES = FIRM_STATUSES.filter(
   (status) => status !== USER_ONLY_AUTHORIZED_STATUS,
 ) as FirmStatus[];
+const BANNER_OVERRIDES_UNAVAILABLE_MESSAGE =
+  'Candidate-specific banner overrides are unavailable in this environment. Apply the latest Supabase migration and refresh schema cache.';
+
+function isMissingBannerOverrideTableError(error: { message?: string; code?: string } | null | undefined): boolean {
+  if (!error) {
+    return false;
+  }
+
+  const message = error.message?.toLowerCase() ?? '';
+  return (
+    error.code === 'PGRST205' ||
+    message.includes("could not find the table 'public.candidate_recruiter_contact_overrides'") ||
+    message.includes('candidate_recruiter_contact_overrides')
+  );
+}
 
 export function StaffCandidateFirmsScreen({
   candidate,
 }: {
   candidate: StaffCandidateListItem;
 }) {
+  const { profile } = useAuth();
   const [assignments, setAssignments] = useState<StaffCandidateAssignmentRow[]>([]);
   const [firms, setFirms] = useState<StaffFirmOption[]>([]);
   const [firmQuery, setFirmQuery] = useState('');
+  const [defaultBannerPhone, setDefaultBannerPhone] = useState(env.supportPhone);
+  const [defaultBannerEmail, setDefaultBannerEmail] = useState(env.supportEmail);
+  const [bannerPhoneDraft, setBannerPhoneDraft] = useState(env.supportPhone);
+  const [bannerEmailDraft, setBannerEmailDraft] = useState(env.supportEmail);
+  const [bannerOverridesAvailable, setBannerOverridesAvailable] = useState(true);
+  const [bannerNotice, setBannerNotice] = useState<string | null>(null);
+  const [hasBannerOverride, setHasBannerOverride] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -50,12 +77,49 @@ export function StaffCandidateFirmsScreen({
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [assignmentRows, firmRows] = await Promise.all([
+      const [assignmentRows, firmRows, globalContactResult, overrideResult] = await Promise.all([
         listCandidateAssignments(candidate.id),
         listActiveFirms(),
+        supabase
+          .from('recruiter_contact_config')
+          .select('phone,email')
+          .eq('is_active', true)
+          .maybeSingle(),
+        supabase
+          .from('candidate_recruiter_contact_overrides')
+          .select('phone,email')
+          .eq('candidate_user_id', candidate.id)
+          .maybeSingle(),
       ]);
+
+      if (globalContactResult.error) {
+        throw new Error(globalContactResult.error.message);
+      }
+      const isOverrideTableMissing = isMissingBannerOverrideTableError(overrideResult.error);
+      if (overrideResult.error && !isOverrideTableMissing) {
+        throw new Error(overrideResult.error.message);
+      }
+
+      const globalPhone = globalContactResult.data?.phone?.trim() || env.supportPhone;
+      const globalEmail = globalContactResult.data?.email?.trim() || env.supportEmail;
+      const overridePhone = isOverrideTableMissing ? null : overrideResult.data?.phone?.trim();
+      const overrideEmail = isOverrideTableMissing ? null : overrideResult.data?.email?.trim();
+
       setAssignments(assignmentRows);
       setFirms(firmRows);
+      setDefaultBannerPhone(globalPhone);
+      setDefaultBannerEmail(globalEmail);
+      setBannerOverridesAvailable(!isOverrideTableMissing);
+      setBannerNotice(isOverrideTableMissing ? BANNER_OVERRIDES_UNAVAILABLE_MESSAGE : null);
+      if (overridePhone && overrideEmail) {
+        setBannerPhoneDraft(overridePhone);
+        setBannerEmailDraft(overrideEmail);
+        setHasBannerOverride(true);
+      } else {
+        setBannerPhoneDraft(globalPhone);
+        setBannerEmailDraft(globalEmail);
+        setHasBannerOverride(false);
+      }
       setMessage(null);
     } catch (error) {
       setMessage((error as Error).message);
@@ -158,6 +222,84 @@ export function StaffCandidateFirmsScreen({
     [loadData],
   );
 
+  const handleSaveBannerContact = useCallback(async () => {
+    if (!bannerOverridesAvailable) {
+      setMessage(BANNER_OVERRIDES_UNAVAILABLE_MESSAGE);
+      return;
+    }
+
+    const phone = bannerPhoneDraft.trim();
+    const email = bannerEmailDraft.trim().toLowerCase();
+    if (!phone || !email) {
+      setMessage('Phone and email are required.');
+      return;
+    }
+
+    setBusyAction('banner:save');
+    setMessage(null);
+    try {
+      const { error } = await supabase
+        .from('candidate_recruiter_contact_overrides')
+        .upsert(
+          {
+            candidate_user_id: candidate.id,
+            phone,
+            email,
+            updated_by: profile?.id ?? null,
+          },
+          { onConflict: 'candidate_user_id' },
+        );
+
+      if (error) {
+        if (isMissingBannerOverrideTableError(error)) {
+          setBannerOverridesAvailable(false);
+          setBannerNotice(BANNER_OVERRIDES_UNAVAILABLE_MESSAGE);
+          throw new Error(BANNER_OVERRIDES_UNAVAILABLE_MESSAGE);
+        }
+        throw new Error(error.message);
+      }
+
+      setMessage('Candidate banner override saved.');
+      await loadData();
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setBusyAction(null);
+    }
+  }, [bannerEmailDraft, bannerOverridesAvailable, bannerPhoneDraft, candidate.id, loadData, profile?.id]);
+
+  const handleResetBannerContact = useCallback(async () => {
+    if (!bannerOverridesAvailable) {
+      setMessage(BANNER_OVERRIDES_UNAVAILABLE_MESSAGE);
+      return;
+    }
+
+    setBusyAction('banner:reset');
+    setMessage(null);
+    try {
+      const { error } = await supabase
+        .from('candidate_recruiter_contact_overrides')
+        .delete()
+        .eq('candidate_user_id', candidate.id);
+
+      if (error) {
+        if (isMissingBannerOverrideTableError(error)) {
+          setBannerOverridesAvailable(false);
+          setBannerNotice(BANNER_OVERRIDES_UNAVAILABLE_MESSAGE);
+          throw new Error(BANNER_OVERRIDES_UNAVAILABLE_MESSAGE);
+        }
+        throw new Error(error.message);
+      }
+
+      setMessage('Candidate banner reset to global default.');
+      await loadData();
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setBusyAction(null);
+    }
+  }, [bannerOverridesAvailable, candidate.id, loadData]);
+
   return (
     <ScreenShell showBanner={false}>
       <Text style={styles.title}>{candidate.name || 'Candidate'}</Text>
@@ -171,6 +313,71 @@ export function StaffCandidateFirmsScreen({
       {message ? <Text style={styles.message}>{message}</Text> : null}
 
       <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Candidate Banner Contact</Text>
+        <View style={styles.bannerCard}>
+          <Text style={styles.bannerStatus}>
+            {hasBannerOverride ? 'Override active for this candidate.' : 'Using global default contact.'}
+          </Text>
+          <Text style={styles.bannerDefaultText}>
+            Default: {defaultBannerPhone} • {defaultBannerEmail}
+          </Text>
+          {bannerNotice ? <Text style={styles.bannerNotice}>{bannerNotice}</Text> : null}
+          <TextInput
+            style={styles.input}
+            placeholder="Banner phone"
+            placeholderTextColor="#94A3B8"
+            editable={bannerOverridesAvailable}
+            value={bannerPhoneDraft}
+            onChangeText={setBannerPhoneDraft}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Banner email"
+            placeholderTextColor="#94A3B8"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            editable={bannerOverridesAvailable}
+            value={bannerEmailDraft}
+            onChangeText={setBannerEmailDraft}
+          />
+          <View style={styles.rowActions}>
+            <Pressable
+              style={interactivePressableStyle({
+                base: styles.primaryButtonSmall,
+                disabled: busyAction !== null || !bannerOverridesAvailable,
+                disabledStyle: styles.buttonDisabled,
+                hoverStyle: sharedPressableFeedback.hover,
+                focusStyle: sharedPressableFeedback.focus,
+                pressedStyle: sharedPressableFeedback.pressed,
+              })}
+              disabled={busyAction !== null || !bannerOverridesAvailable}
+              onPress={() => void handleSaveBannerContact()}
+            >
+              <Text style={styles.primaryButtonSmallText}>
+                {busyAction === 'banner:save' ? 'Saving...' : 'Save override'}
+              </Text>
+            </Pressable>
+            <Pressable
+              style={interactivePressableStyle({
+                base: styles.secondaryButtonSmall,
+                disabled: busyAction !== null || !hasBannerOverride || !bannerOverridesAvailable,
+                disabledStyle: styles.buttonDisabled,
+                hoverStyle: sharedPressableFeedback.hover,
+                focusStyle: sharedPressableFeedback.focus,
+                pressedStyle: sharedPressableFeedback.pressed,
+              })}
+              disabled={busyAction !== null || !hasBannerOverride || !bannerOverridesAvailable}
+              onPress={() => void handleResetBannerContact()}
+            >
+              <Text style={styles.secondaryButtonSmallText}>
+                {busyAction === 'banner:reset' ? 'Resetting...' : 'Reset to default'}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Assigned Firms</Text>
         {isLoading ? (
           <Text style={styles.emptyText}>Loading assignments...</Text>
@@ -181,10 +388,31 @@ export function StaffCandidateFirmsScreen({
             const rowBusy =
               busyAction === `status:${assignment.id}` ||
               busyAction === `unassign:${assignment.id}`;
+            const statusBadgeColors = getFirmStatusBadgeColors(assignment.status_enum);
+
             return (
               <View key={assignment.id} style={styles.card}>
                 <Text style={styles.cardTitle}>{assignment.firm.name}</Text>
-                <Text style={styles.cardText}>{assignment.status_enum}</Text>
+                <View
+                  style={[
+                    styles.statusBadge,
+                    {
+                      backgroundColor: statusBadgeColors.backgroundColor,
+                      borderColor: statusBadgeColors.borderColor,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.statusBadgeText,
+                      {
+                        color: statusBadgeColors.textColor,
+                      },
+                    ]}
+                  >
+                    {assignment.status_enum}
+                  </Text>
+                </View>
                 <Text style={styles.cardSubtle}>
                   Updated {new Date(assignment.status_updated_at).toLocaleString()}
                 </Text>
@@ -389,14 +617,30 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
-  cardText: {
-    color: '#0F766E',
-    marginTop: 4,
-  },
   cardTitle: {
     color: '#0F172A',
     fontSize: 16,
     fontWeight: '700',
+  },
+  bannerCard: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+    padding: 12,
+  },
+  bannerDefaultText: {
+    color: '#64748B',
+    fontSize: 12,
+  },
+  bannerNotice: {
+    color: '#92400E',
+    fontSize: 12,
+  },
+  bannerStatus: {
+    color: '#334155',
+    fontWeight: '600',
   },
   dangerButtonSmall: {
     alignItems: 'center',
@@ -524,6 +768,20 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     fontWeight: '600',
   },
+  secondaryButtonSmall: {
+    alignItems: 'center',
+    borderColor: '#CBD5E1',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexShrink: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  secondaryButtonSmallText: {
+    color: '#0F172A',
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   statusOption: {
     borderColor: '#CBD5E1',
     borderRadius: 10,
@@ -545,6 +803,18 @@ const styles = StyleSheet.create({
   },
   statusOptionTextSelected: {
     color: '#115E59',
+    fontWeight: '700',
+  },
+  statusBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusBadgeText: {
+    fontSize: 12,
     fontWeight: '700',
   },
   subtitle: {
