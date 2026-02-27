@@ -1,11 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import type { AppointmentStatus } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
+import { useAuth } from '../../context/auth-context';
 import { formatAppointmentDateTime } from '../../lib/date-format';
+import { syncAppointmentsToDeviceCalendar } from '../../lib/device-calendar-sync';
 import { ensureValidSession, supabase } from '../../lib/supabase';
+import { uiColors } from '../../theme/colors';
+import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 
 type StaffAppointment = {
   id: string;
@@ -17,6 +21,7 @@ type StaffAppointment = {
   start_at_utc: string;
   end_at_utc: string;
   status: AppointmentStatus | 'accepted';
+  timezone_label: string;
   candidate_name: string;
 };
 
@@ -62,8 +67,11 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 };
 
 function useStaffAppointmentsScreen() {
+  const { session } = useAuth();
   const [appointments, setAppointments] = useState<StaffAppointment[]>([]);
   const [candidates, setCandidates] = useState<CandidateOption[]>([]);
+  const [calendarSyncEnabled, setCalendarSyncEnabled] = useState(false);
+  const lastSyncFingerprintRef = useRef('');
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [candidateSearchText, setCandidateSearchText] = useState('');
 
@@ -72,6 +80,8 @@ function useStaffAppointmentsScreen() {
   const [createStartAtLocal, setCreateStartAtLocal] = useState(() => new Date(Date.now() + 3600_000));
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [createDurationMinutes, setCreateDurationMinutes] = useState(30);
+  const [showDurationPicker, setShowDurationPicker] = useState(false);
+  const [showForm, setShowForm] = useState(false);
   const [createModality, setCreateModality] = useState<'virtual' | 'in_person'>('virtual');
   const [createLocation, setCreateLocation] = useState('');
   const [createVideoUrl, setCreateVideoUrl] = useState('');
@@ -84,7 +94,7 @@ function useStaffAppointmentsScreen() {
     const { data, error } = await supabase
       .from('appointments')
       .select(
-        'id,title,description,modality,location_text,video_url,start_at_utc,end_at_utc,status,candidate:users_profile!appointments_candidate_user_id_fkey(name)',
+        'id,title,description,modality,location_text,video_url,start_at_utc,end_at_utc,status,timezone_label,candidate:users_profile!appointments_candidate_user_id_fkey(name)',
       )
       .order('start_at_utc', { ascending: true });
 
@@ -107,6 +117,7 @@ function useStaffAppointmentsScreen() {
         start_at_utc: row.start_at_utc as string,
         end_at_utc: row.end_at_utc as string,
         status: row.status as AppointmentStatus | 'accepted',
+        timezone_label: (row.timezone_label as string | null) ?? 'America/New_York',
         candidate_name: name,
       };
     });
@@ -114,6 +125,30 @@ function useStaffAppointmentsScreen() {
     setAppointments(mapped.filter((appointment) => !shouldHideExpiredAppointment(appointment)));
     setStatusMessage('');
   }, []);
+
+  useEffect(() => {
+    const loadCalendarConnectionState = async () => {
+      if (!session?.user.id) {
+        setCalendarSyncEnabled(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('calendar_connections')
+        .select('provider')
+        .eq('user_id', session.user.id)
+        .in('provider', ['google', 'apple'])
+        .limit(1);
+
+      if (error) {
+        return;
+      }
+
+      setCalendarSyncEnabled((data?.length ?? 0) > 0);
+    };
+
+    void loadCalendarConnectionState();
+  }, [session?.user.id]);
 
   const loadCandidates = useCallback(async () => {
     const { data, error } = await supabase
@@ -137,6 +172,55 @@ function useStaffAppointmentsScreen() {
     void loadCandidates();
   }, [loadAppointments, loadCandidates]);
 
+  const appointmentSyncFingerprint = useMemo(
+    () =>
+      appointments
+        .map((appointment) =>
+          [
+            appointment.id,
+            appointment.status,
+            appointment.start_at_utc,
+            appointment.end_at_utc,
+            appointment.timezone_label,
+          ].join(':'),
+        )
+        .join('|'),
+    [appointments],
+  );
+
+  useEffect(() => {
+    if (!session?.user.id || !calendarSyncEnabled) {
+      return;
+    }
+
+    if (appointmentSyncFingerprint === lastSyncFingerprintRef.current) {
+      return;
+    }
+
+    lastSyncFingerprintRef.current = appointmentSyncFingerprint;
+
+    void syncAppointmentsToDeviceCalendar({
+      userId: session.user.id,
+      enabled: calendarSyncEnabled,
+      appointments: appointments.map((appointment) => ({
+        id: appointment.id,
+        title: appointment.title,
+        description: appointment.description,
+        modality: appointment.modality,
+        locationText: appointment.location_text,
+        videoUrl: appointment.video_url,
+        startAtUtc: appointment.start_at_utc,
+        endAtUtc: appointment.end_at_utc,
+        timezoneLabel:
+          appointment.timezone_label ||
+          Intl.DateTimeFormat().resolvedOptions().timeZone ||
+          'America/New_York',
+        status: appointment.status,
+        participantName: appointment.candidate_name,
+      })),
+    }).catch(() => undefined);
+  }, [appointmentSyncFingerprint, appointments, calendarSyncEnabled, session?.user.id]);
+
   const filteredCandidates = useMemo(() => {
     const search = candidateSearchText.trim().toLowerCase();
     if (!search) {
@@ -159,6 +243,22 @@ function useStaffAppointmentsScreen() {
     () => new Date(createStartAtLocal.getTime() + createDurationMinutes * 60_000),
     [createDurationMinutes, createStartAtLocal],
   );
+
+  const selectedDurationLabel = useMemo(
+    () => DURATION_OPTIONS.find((option) => option.minutes === createDurationMinutes)?.label ?? `${createDurationMinutes} min`,
+    [createDurationMinutes],
+  );
+
+  const toggleForm = useCallback(() => {
+    setShowForm((value) => {
+      const next = !value;
+      if (!next) {
+        setShowStartPicker(false);
+        setShowDurationPicker(false);
+      }
+      return next;
+    });
+  }, []);
 
   const handleStartPickerChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
     if (event.type === 'dismissed') {
@@ -240,6 +340,9 @@ function useStaffAppointmentsScreen() {
       }
 
       setStatusMessage('Appointment scheduled.');
+      setShowForm(false);
+      setShowStartPicker(false);
+      setShowDurationPicker(false);
       setCreateTitle('');
       setCreateDescription('');
       setCreateStartAtLocal(new Date(Date.now() + 3600_000));
@@ -270,6 +373,8 @@ function useStaffAppointmentsScreen() {
   return {
     pending,
     others,
+    showForm,
+    toggleForm,
     statusMessage,
     reviewingId,
     handleReview,
@@ -293,6 +398,9 @@ function useStaffAppointmentsScreen() {
     createEndAtLocal,
     createDurationMinutes,
     setCreateDurationMinutes,
+    showDurationPicker,
+    setShowDurationPicker,
+    selectedDurationLabel,
     showStartPicker,
     setShowStartPicker,
     handleStartPickerChange,
@@ -305,6 +413,8 @@ export function StaffAppointmentsScreen() {
   const {
     pending,
     others,
+    showForm,
+    toggleForm,
     statusMessage,
     reviewingId,
     handleReview,
@@ -328,6 +438,9 @@ export function StaffAppointmentsScreen() {
     createEndAtLocal,
     createDurationMinutes,
     setCreateDurationMinutes,
+    showDurationPicker,
+    setShowDurationPicker,
+    selectedDurationLabel,
     showStartPicker,
     setShowStartPicker,
     handleStartPickerChange,
@@ -336,42 +449,53 @@ export function StaffAppointmentsScreen() {
   } = useStaffAppointmentsScreen();
 
   return (
-    <ScreenShell>
+    <ScreenShell showBanner={false}>
       <Text style={styles.title}>Appointment Review</Text>
       <Text style={styles.body}>Review and approve candidate appointment requests.</Text>
 
-      <View style={styles.createCard}>
-        <Text style={styles.sectionHeader}>Schedule for Candidate</Text>
+      <Pressable
+        style={interactivePressableStyle({
+          base: styles.primaryCta,
+          hoverStyle: sharedPressableFeedback.hover,
+          focusStyle: sharedPressableFeedback.focus,
+          pressedStyle: sharedPressableFeedback.pressed,
+        })}
+        onPress={toggleForm}
+      >
+        <Text style={styles.primaryCtaText}>
+          {showForm ? 'Close form' : 'Schedule for candidate'}
+        </Text>
+      </Pressable>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Search candidates"
-          value={candidateSearchText}
-          onChangeText={setCandidateSearchText}
-        />
-        <View style={styles.pickerShell}>
-          <Picker selectedValue={selectedCandidateId} onValueChange={(value) => setSelectedCandidateId(String(value))}>
-            {filteredCandidates.map((candidate) => (
-              <Picker.Item key={candidate.id} label={candidate.name} value={candidate.id} />
-            ))}
-          </Picker>
-        </View>
-        {selectedCandidateName ? <Text style={styles.helperText}>Selected: {selectedCandidateName}</Text> : null}
-
-        <View style={styles.modalityRow}>
-          <Pressable
-            style={[styles.modeChip, createModality === 'virtual' ? styles.modeChipSelected : null]}
-            onPress={() => setCreateModality('virtual')}
-          >
-            <Text style={createModality === 'virtual' ? styles.modeChipTextSelected : styles.modeChipText}>Virtual</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.modeChip, createModality === 'in_person' ? styles.modeChipSelected : null]}
-            onPress={() => setCreateModality('in_person')}
-          >
-            <Text style={createModality === 'in_person' ? styles.modeChipTextSelected : styles.modeChipText}>In-person</Text>
-          </Pressable>
-        </View>
+      {showForm ? (
+        <View style={styles.formCard}>
+          <TextInput
+            style={styles.input}
+            placeholder="Search candidates"
+            value={candidateSearchText}
+            onChangeText={setCandidateSearchText}
+          />
+          <View style={styles.searchResults}>
+            {filteredCandidates.length > 0 ? (
+              filteredCandidates.map((candidate) => {
+                const isSelected = candidate.id === selectedCandidateId;
+                return (
+                  <Pressable
+                    key={candidate.id}
+                    style={[styles.searchResultItem, isSelected ? styles.searchResultItemSelected : null]}
+                    onPress={() => setSelectedCandidateId(candidate.id)}
+                  >
+                    <Text style={isSelected ? styles.searchResultTextSelected : styles.searchResultText}>
+                      {candidate.name}
+                    </Text>
+                  </Pressable>
+                );
+              })
+            ) : (
+              <Text style={styles.searchEmptyText}>No candidates match your search.</Text>
+            )}
+          </View>
+          {selectedCandidateName ? <Text style={styles.helperText}>Selected: {selectedCandidateName}</Text> : null}
 
         <TextInput style={styles.input} placeholder="Title" value={createTitle} onChangeText={setCreateTitle} />
         <TextInput
@@ -381,6 +505,21 @@ export function StaffAppointmentsScreen() {
           onChangeText={setCreateDescription}
           multiline
         />
+
+        <View style={styles.row}>
+          <Pressable
+            style={[styles.tag, createModality === 'virtual' ? styles.tagSelected : null]}
+            onPress={() => setCreateModality('virtual')}
+          >
+            <Text>Virtual</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.tag, createModality === 'in_person' ? styles.tagSelected : null]}
+            onPress={() => setCreateModality('in_person')}
+          >
+            <Text>In-person</Text>
+          </Pressable>
+        </View>
 
         <Pressable style={styles.input} onPress={() => setShowStartPicker((value) => !value)}>
           <Text style={styles.valueText}>Start: {formatAppointmentDateTime(createStartAtLocal.toISOString())}</Text>
@@ -403,14 +542,24 @@ export function StaffAppointmentsScreen() {
           </View>
         ) : null}
 
-        <Text style={styles.helperText}>Meeting length</Text>
-        <View style={styles.pickerShell}>
-          <Picker selectedValue={createDurationMinutes} onValueChange={(value) => setCreateDurationMinutes(Number(value))}>
-            {DURATION_OPTIONS.map((option) => (
-              <Picker.Item key={option.minutes} label={option.label} value={option.minutes} />
-            ))}
-          </Picker>
-        </View>
+        <Pressable style={styles.input} onPress={() => setShowDurationPicker((value) => !value)}>
+          <Text style={styles.valueText}>Meeting length: {selectedDurationLabel}</Text>
+        </Pressable>
+
+        {showDurationPicker ? (
+          <View style={styles.pickerShell}>
+            <Picker selectedValue={createDurationMinutes} onValueChange={(value) => setCreateDurationMinutes(Number(value))}>
+              {DURATION_OPTIONS.map((option) => (
+                <Picker.Item key={option.minutes} label={option.label} value={option.minutes} />
+              ))}
+            </Picker>
+            {Platform.OS === 'ios' ? (
+              <Pressable style={styles.pickerDone} onPress={() => setShowDurationPicker(false)}>
+                <Text style={styles.pickerDoneText}>Done</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
 
         <Text style={styles.helperText}>Ends: {formatAppointmentDateTime(createEndAtLocal.toISOString())}</Text>
 
@@ -434,13 +583,21 @@ export function StaffAppointmentsScreen() {
         ) : null}
 
         <Pressable
-          style={[styles.actionButton, styles.acceptButton, creating ? styles.disabledButton : null]}
+          style={interactivePressableStyle({
+            base: styles.primaryCta,
+            disabled: creating,
+            disabledStyle: styles.primaryCtaDisabled,
+            hoverStyle: sharedPressableFeedback.hover,
+            focusStyle: sharedPressableFeedback.focus,
+            pressedStyle: sharedPressableFeedback.pressed,
+          })}
           onPress={() => void handleCreateAppointment()}
           disabled={creating}
         >
-          <Text style={styles.acceptButtonText}>{creating ? 'Scheduling...' : 'Schedule Appointment'}</Text>
+          <Text style={styles.primaryCtaText}>{creating ? 'Scheduling...' : 'Schedule appointment'}</Text>
         </Pressable>
       </View>
+      ) : null}
 
       {statusMessage ? <Text style={styles.statusMessage}>{statusMessage}</Text> : null}
 
@@ -525,29 +682,29 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   body: {
-    color: '#475569',
+    color: uiColors.textSecondary,
   },
-  createCard: {
-    backgroundColor: '#ffffff',
-    borderColor: '#E2E8F0',
+  formCard: {
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.border,
     borderRadius: 12,
     borderWidth: 1,
-    gap: 8,
+    gap: 10,
     padding: 12,
   },
   input: {
-    borderColor: '#CBD5E1',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
     borderRadius: 8,
     borderWidth: 1,
-    color: '#0F172A',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    color: uiColors.textPrimary,
+    padding: 10,
   },
   valueText: {
-    color: '#0F172A',
+    color: uiColors.textPrimary,
   },
   pickerShell: {
-    borderColor: '#CBD5E1',
+    borderColor: uiColors.borderStrong,
     borderRadius: 8,
     borderWidth: 1,
     overflow: 'hidden',
@@ -557,11 +714,44 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   pickerDoneText: {
-    color: '#166534',
+    color: uiColors.success,
     fontWeight: '700',
   },
+  searchResults: {
+    borderColor: uiColors.borderStrong,
+    borderRadius: 8,
+    borderWidth: 1,
+    maxHeight: 200,
+    overflow: 'hidden',
+  },
+  searchResultItem: {
+    borderBottomColor: uiColors.border,
+    borderBottomWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  searchResultItemSelected: {
+    backgroundColor: uiColors.selectedBackground,
+  },
+  searchResultText: {
+    color: uiColors.textPrimary,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  searchResultTextSelected: {
+    color: uiColors.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  searchEmptyText: {
+    color: uiColors.textMuted,
+    fontSize: 13,
+    fontStyle: 'italic',
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
   helperText: {
-    color: '#334155',
+    color: uiColors.textSecondary,
     fontSize: 12,
     fontWeight: '500',
   },
@@ -569,28 +759,18 @@ const styles = StyleSheet.create({
     minHeight: 60,
     textAlignVertical: 'top',
   },
-  modalityRow: {
+  row: {
     flexDirection: 'row',
     gap: 8,
   },
-  modeChip: {
-    borderColor: '#CBD5E1',
-    borderRadius: 999,
-    borderWidth: 1,
+  tag: {
+    backgroundColor: uiColors.divider,
+    borderRadius: 20,
     paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingVertical: 7,
   },
-  modeChipSelected: {
-    backgroundColor: '#DCFCE7',
-    borderColor: '#16A34A',
-  },
-  modeChipText: {
-    color: '#334155',
-    fontWeight: '600',
-  },
-  modeChipTextSelected: {
-    color: '#166534',
-    fontWeight: '700',
+  tagSelected: {
+    backgroundColor: uiColors.selectedBackground,
   },
   sectionHeader: {
     color: '#0F172A',
@@ -606,9 +786,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   statusMessage: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: uiColors.backgroundAlt,
     borderRadius: 8,
-    color: '#0F172A',
+    color: uiColors.textPrimary,
     fontSize: 14,
     padding: 10,
   },
@@ -670,14 +850,24 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 10,
   },
-  disabledButton: {
-    opacity: 0.7,
-  },
   acceptButton: {
     backgroundColor: '#059669',
   },
   acceptButtonText: {
     color: '#ffffff',
+    fontWeight: '700',
+  },
+  primaryCta: {
+    alignItems: 'center',
+    backgroundColor: uiColors.primary,
+    borderRadius: 10,
+    padding: 12,
+  },
+  primaryCtaDisabled: {
+    opacity: 0.6,
+  },
+  primaryCtaText: {
+    color: uiColors.primaryText,
     fontWeight: '700',
   },
   declineButton: {

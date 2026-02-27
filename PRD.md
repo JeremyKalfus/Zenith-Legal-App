@@ -77,6 +77,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Candidates update email, password, and intake fields.
 - Profile data stored in `users_profile` and `candidate_preferences` tables.
 - Candidates can delete their account in-app from Profile (self-service deletion flow with confirmation).
+- Candidate and staff Profile tabs include a Calendar Sync settings card with provider status and connect actions.
 
 ### Notifications
 - Push token registration.
@@ -104,9 +105,12 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 
 ### Calendar Integration
 - `connect_calendar_provider` edge function (Google, Apple).
+- Mobile app exposes user-facing setup in Profile:
+  - Google Calendar: OAuth authorization code flow with PKCE and in-app token exchange.
+  - Apple Calendar: one-tap connect path for provider-enabled sync.
 - Appointment writes/reviews trigger per-user calendar sync for candidate + staff participants:
   - Google: direct Calendar API create/update/delete when access token is available.
-  - Apple: ICS data-link sync representation stored per appointment/user.
+  - Mobile app: device-native `expo-calendar` event sync for connected users (scheduled upsert, declined/cancelled delete).
 - `calendar_connections` and `calendar_event_links` tables persist provider connection state and synced event links.
 
 ## Open Questions
@@ -114,6 +118,5 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - What is the intended behavior when a candidate's appointment overlaps with a pending (not yet scheduled) appointment?
 - What are the exact product rules for staff-configured user-specific banners (priority, targeting, expiration, and override behavior vs global banners)?
 - What are the specific notification delivery channels beyond push (email, SMS)?
-- How should the calendar integration sync appointments to external calendars?
 - What is the support/data request lifecycle beyond the initial request creation?
 - Are there plans for candidate self-service firm discovery (vs recruiter-only assignment)?

@@ -39,7 +39,7 @@
 
 | Workspace | Path | Stack | Purpose |
 |---|---|---|---|
-| Mobile | `apps/mobile/` | Expo SDK 54, React Native 0.81, React Navigation, react-hook-form, Zod, stream-chat-expo (native), stream-chat-react (web) | Candidate and staff mobile app; web build via Expo web |
+| Mobile | `apps/mobile/` | Expo SDK 54, React Native 0.81, React Navigation, react-hook-form, Zod, expo-auth-session, expo-web-browser, stream-chat-expo (native), stream-chat-react (web) | Candidate and staff mobile app; web build via Expo web |
 | Admin | `apps/admin/` | Next.js 16, React 19, Tailwind 4, shadcn primitives, Zod | Recruiter web dashboard |
 | Shared | `packages/shared/` | TypeScript, Zod | Domain types, validation schemas, phone utilities, staff-messaging helpers |
 | Backend | `supabase/` | PostgreSQL 15, Deno edge functions, `@supabase/supabase-js@2.57.4` | Database, auth, serverless API |
@@ -81,13 +81,22 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 - `candidate_firm_assignments` -- Staff-managed candidate-to-firm assignments
 - `candidate_authorizations` -- Candidate decisions on firm submissions
 - `appointments` / `appointment_participants` -- Scheduling with scheduled-overlap constraints and explicit participant tracking for candidate/staff reminders + calendar sync
-- `calendar_connections` / `calendar_event_links` -- External calendar sync (Google API sync + Apple ICS link sync), tracked per appointment+provider+user
+- `calendar_connections` / `calendar_event_links` -- Calendar provider connection and sync tracking, keyed per appointment+provider+user
 - `notification_preferences` / `push_tokens` / `notification_deliveries` -- Notification pipeline with delayed delivery support via `send_after_utc`
 - `audit_events` -- Immutable audit log
 - `support_data_requests` -- Candidate support requests
 - `recruiter_contact_config` -- Configurable recruiter phone/email for mobile banner
 
 All tables enforce Row Level Security. Staff-only mutations are routed through edge functions that call `assertStaff()`.
+
+## Calendar Connection UX (Mobile)
+
+- `apps/mobile/src/components/calendar-sync-card.tsx` is a shared profile settings card used by both candidate and staff Profile tabs.
+- Google Calendar setup uses `expo-auth-session` (`AuthRequest` + PKCE + authorization code exchange) and sends tokens to `connect_calendar_provider`.
+- Apple setup is a one-tap connect path that stores provider state through `connect_calendar_provider`.
+- Connection status is read from `calendar_connections` (`provider`, `sync_state`, `updated_at`) with user-scoped RLS access.
+- Mobile Google OAuth client configuration is provided via `EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID`.
+- Appointment screens run device-native calendar sync via `expo-calendar` (candidate + staff), creating/updating scheduled events and removing declined/cancelled events from device calendars when provider connection is enabled.
 
 ## Shared Package (`@zenith/shared`)
 
