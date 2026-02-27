@@ -1,7 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FIRM_STATUSES, type FirmStatus } from '@zenith/shared';
+import {
+  CITY_OPTIONS,
+  filterCandidatesBySearchCityPractice,
+  FIRM_STATUSES,
+  normalizeCandidatePreferences,
+  PRACTICE_AREAS,
+  type CityOption,
+  type FirmStatus,
+  type PracticeArea,
+} from '@zenith/shared';
 import { supabaseClient } from '@/lib/supabase-client';
 import { getFunctionErrorMessage } from '@/lib/function-error';
 import { Button } from '../ui/button';
@@ -13,6 +22,8 @@ type CandidateListItem = {
   name: string;
   email: string;
   mobile: string;
+  preferredCities: CityOption[];
+  practiceAreas: PracticeArea[];
 };
 
 type FirmListItem = {
@@ -46,6 +57,10 @@ function useCandidateFirmManager() {
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [selectedFirmId, setSelectedFirmId] = useState('');
   const [candidateQuery, setCandidateQuery] = useState('');
+  const [selectedCities, setSelectedCities] = useState<CityOption[]>([]);
+  const [selectedPracticeAreas, setSelectedPracticeAreas] = useState<PracticeArea[]>([]);
+  const [showAllCityFilters, setShowAllCityFilters] = useState(false);
+  const [showAllPracticeFilters, setShowAllPracticeFilters] = useState(false);
   const [firmQuery, setFirmQuery] = useState('');
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isLoadingCandidates, setIsLoadingCandidates] = useState(true);
@@ -73,7 +88,47 @@ function useCandidateFirmManager() {
     if (candidateResult.error) {
       setStatusMessage(candidateResult.error.message);
     } else {
-      const candidateRows = (candidateResult.data ?? []) as CandidateListItem[];
+      const baseCandidateRows = (candidateResult.data ?? []) as {
+        id: string;
+        name: string;
+        email: string;
+        mobile: string;
+      }[];
+
+      const candidateIds = baseCandidateRows.map((candidate) => candidate.id);
+      const preferenceByUserId = new Map<string, ReturnType<typeof normalizeCandidatePreferences>>();
+
+      if (candidateIds.length > 0) {
+        const { data: preferenceData, error: preferenceError } = await supabaseClient
+          .from('candidate_preferences')
+          .select('user_id,cities,practice_areas,practice_area')
+          .in('user_id', candidateIds);
+
+        if (preferenceError) {
+          setStatusMessage((previous) => previous ?? preferenceError.message);
+        } else {
+          for (const row of (preferenceData ?? []) as Record<string, unknown>[]) {
+            const userId = row.user_id;
+            if (typeof userId !== 'string') {
+              continue;
+            }
+            preferenceByUserId.set(userId, normalizeCandidatePreferences(row));
+          }
+        }
+      }
+
+      const candidateRows = baseCandidateRows.map((candidate) => {
+        const normalizedPreferences = preferenceByUserId.get(candidate.id) ?? {
+          preferredCities: [],
+          practiceAreas: [],
+        };
+        return {
+          ...candidate,
+          preferredCities: normalizedPreferences.preferredCities,
+          practiceAreas: normalizedPreferences.practiceAreas,
+        };
+      });
+
       setCandidates(candidateRows);
       setSelectedCandidateId((current) => current || candidateRows[0]?.id || '');
     }
@@ -127,17 +182,14 @@ function useCandidateFirmManager() {
     void loadAssignments(selectedCandidateId);
   }, [loadAssignments, selectedCandidateId]);
 
-  const filteredCandidates = useMemo(() => {
-    const query = candidateQuery.trim().toLowerCase();
-    if (!query) {
-      return candidates;
-    }
-    return candidates.filter((candidate) =>
-      [candidate.name, candidate.email, candidate.mobile]
-        .filter(Boolean)
-        .some((value) => value.toLowerCase().includes(query)),
-    );
-  }, [candidateQuery, candidates]);
+  const filteredCandidates = useMemo(
+    () => filterCandidatesBySearchCityPractice(candidates, {
+      query: candidateQuery,
+      selectedCities,
+      selectedPracticeAreas,
+    }),
+    [candidateQuery, candidates, selectedCities, selectedPracticeAreas],
+  );
 
   const assignedFirmIds = useMemo(
     () => new Set(assignments.map((assignment) => assignment.firm_id)),
@@ -297,9 +349,31 @@ function useCandidateFirmManager() {
     }));
   }, []);
 
+  const toggleCityFilter = useCallback((city: CityOption) => {
+    setSelectedCities((current) =>
+      current.includes(city)
+        ? current.filter((value) => value !== city)
+        : [...current, city],
+    );
+  }, []);
+
+  const togglePracticeFilter = useCallback((practiceArea: PracticeArea) => {
+    setSelectedPracticeAreas((current) =>
+      current.includes(practiceArea)
+        ? current.filter((value) => value !== practiceArea)
+        : [...current, practiceArea],
+    );
+  }, []);
+
   return {
     candidateQuery,
     setCandidateQuery,
+    selectedCities,
+    selectedPracticeAreas,
+    showAllCityFilters,
+    setShowAllCityFilters,
+    showAllPracticeFilters,
+    setShowAllPracticeFilters,
     firmQuery,
     setFirmQuery,
     selectedCandidateId,
@@ -316,6 +390,8 @@ function useCandidateFirmManager() {
     assignments,
     pendingStatuses,
     handlePendingStatusChange,
+    toggleCityFilter,
+    togglePracticeFilter,
     handleAssignFirm,
     handleUpdateStatus,
     handleUnassign,
@@ -327,6 +403,14 @@ function useCandidateFirmManager() {
 function CandidateListPanel({
   candidateQuery,
   onCandidateQueryChange,
+  selectedCities,
+  selectedPracticeAreas,
+  showAllCityFilters,
+  onToggleShowAllCityFilters,
+  showAllPracticeFilters,
+  onToggleShowAllPracticeFilters,
+  onToggleCity,
+  onTogglePracticeArea,
   isLoading,
   candidates,
   selectedCandidateId,
@@ -334,6 +418,14 @@ function CandidateListPanel({
 }: {
   candidateQuery: string;
   onCandidateQueryChange: (value: string) => void;
+  selectedCities: CityOption[];
+  selectedPracticeAreas: PracticeArea[];
+  showAllCityFilters: boolean;
+  onToggleShowAllCityFilters: () => void;
+  showAllPracticeFilters: boolean;
+  onToggleShowAllPracticeFilters: () => void;
+  onToggleCity: (city: CityOption) => void;
+  onTogglePracticeArea: (practiceArea: PracticeArea) => void;
   isLoading: boolean;
   candidates: CandidateListItem[];
   selectedCandidateId: string;
@@ -351,6 +443,62 @@ function CandidateListPanel({
           value={candidateQuery}
           onChange={(event) => onCandidateQueryChange(event.target.value)}
         />
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Filter by city</p>
+          <div className={['flex flex-wrap gap-2', showAllCityFilters ? '' : 'max-h-[34px] overflow-hidden'].join(' ')}>
+            {CITY_OPTIONS.map((city) => {
+              const selected = selectedCities.includes(city);
+              return (
+                <button
+                  key={city}
+                  type="button"
+                  className={[
+                    'rounded-full px-3 py-1.5 text-xs font-medium',
+                    selected ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-900 hover:bg-slate-300',
+                  ].join(' ')}
+                  onClick={() => onToggleCity(city)}
+                >
+                  {city}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            className="text-xs font-semibold text-slate-700 hover:text-slate-900"
+            onClick={onToggleShowAllCityFilters}
+          >
+            {showAllCityFilters ? 'Show less' : 'See more'}
+          </button>
+        </div>
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Filter by practice</p>
+          <div className={['flex flex-wrap gap-2', showAllPracticeFilters ? '' : 'max-h-[34px] overflow-hidden'].join(' ')}>
+            {PRACTICE_AREAS.map((practiceArea) => {
+              const selected = selectedPracticeAreas.includes(practiceArea);
+              return (
+                <button
+                  key={practiceArea}
+                  type="button"
+                  className={[
+                    'rounded-full px-3 py-1.5 text-xs font-medium',
+                    selected ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-900 hover:bg-slate-300',
+                  ].join(' ')}
+                  onClick={() => onTogglePracticeArea(practiceArea)}
+                >
+                  {practiceArea}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            className="text-xs font-semibold text-slate-700 hover:text-slate-900"
+            onClick={onToggleShowAllPracticeFilters}
+          >
+            {showAllPracticeFilters ? 'Show less' : 'See more'}
+          </button>
+        </div>
         <div className="max-h-[480px] overflow-auto rounded-md border border-slate-200">
           {isLoading ? (
             <p className="p-3 text-sm text-slate-500">Loading candidates...</p>
@@ -459,6 +607,14 @@ export function CandidateFirmManager() {
       <CandidateListPanel
         candidateQuery={ctx.candidateQuery}
         onCandidateQueryChange={ctx.setCandidateQuery}
+        selectedCities={ctx.selectedCities}
+        selectedPracticeAreas={ctx.selectedPracticeAreas}
+        showAllCityFilters={ctx.showAllCityFilters}
+        onToggleShowAllCityFilters={() => ctx.setShowAllCityFilters((value) => !value)}
+        showAllPracticeFilters={ctx.showAllPracticeFilters}
+        onToggleShowAllPracticeFilters={() => ctx.setShowAllPracticeFilters((value) => !value)}
+        onToggleCity={ctx.toggleCityFilter}
+        onTogglePracticeArea={ctx.togglePracticeFilter}
         isLoading={ctx.isLoadingCandidates}
         candidates={ctx.filteredCandidates}
         selectedCandidateId={ctx.selectedCandidateId}

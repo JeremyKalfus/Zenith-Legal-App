@@ -41,7 +41,7 @@
 |---|---|---|---|
 | Mobile | `apps/mobile/` | Expo SDK 54, React Native 0.81, React Navigation, react-hook-form, Zod, expo-auth-session, expo-web-browser, stream-chat-expo (native), stream-chat-react (web) | Candidate and staff mobile app; web build via Expo web |
 | Admin | `apps/admin/` | Next.js 16, React 19, Tailwind 4, shadcn primitives, Zod | Recruiter web dashboard |
-| Shared | `packages/shared/` | TypeScript, Zod | Domain types, validation schemas, phone utilities, staff-messaging helpers |
+| Shared | `packages/shared/` | TypeScript, Zod | Domain types, validation schemas, phone utilities, staff-messaging helpers, candidate filter/normalization helpers |
 | Backend | `supabase/` | PostgreSQL 15, Deno edge functions, `@supabase/supabase-js@2.57.4` | Database, auth, serverless API |
 
 ## Edge Functions
@@ -105,8 +105,11 @@ The shared package (`packages/shared/`) exports modules consumed by both admin a
 - **`domain.ts`** -- Zod schemas, enums, and TypeScript types for the domain model.
 - **`phone.ts`** -- Phone number formatting and validation utilities.
 - **`staff-messaging.ts`** -- Staff messaging helpers consolidated from duplicate implementations in admin and mobile: `StaffMessageInboxItem` type, `parseCandidateUserIdFromChannelId`, `mapChannelsToStaffInboxItems`, `formatRelativeTimestamp`.
+- **`candidate-filters.ts`** -- Candidate preference normalization and shared staff-candidate filtering logic (`search AND (city OR practice)`), including legacy `practice_area` fallback when `practice_areas` is empty.
 
 The package uses `"main": "src/index.ts"` (no build step). Admin consumes it via `transpilePackages: ['@zenith/shared']` in `next.config.ts`. Mobile consumes it directly.
+
+Staff candidate list flows (mobile `staff-candidates-screen` and admin `candidate-firm-manager`) now hydrate profile rows from `users_profile` with `candidate_preferences` (`cities`, `practice_areas`, `practice_area`) and apply the shared filter helper for consistent behavior across both surfaces.
 
 ## Mobile Theme System
 

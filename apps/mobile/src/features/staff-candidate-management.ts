@@ -1,4 +1,10 @@
-import { FIRM_STATUSES, type FirmStatus } from '@zenith/shared';
+import {
+  FIRM_STATUSES,
+  normalizeCandidatePreferences,
+  type CityOption,
+  type FirmStatus,
+  type PracticeArea,
+} from '@zenith/shared';
 import { supabase } from '../lib/supabase';
 import { getFunctionErrorMessage } from '../lib/function-error';
 
@@ -7,6 +13,8 @@ export type StaffCandidateListItem = {
   name: string;
   email: string;
   mobile: string;
+  preferredCities: CityOption[];
+  practiceAreas: PracticeArea[];
 };
 
 export type StaffFirmOption = {
@@ -59,7 +67,48 @@ export async function listStaffCandidates(): Promise<StaffCandidateListItem[]> {
     throw new Error(error.message);
   }
 
-  return (data ?? []) as StaffCandidateListItem[];
+  const candidateRows = (data ?? []) as {
+    id: string;
+    name: string;
+    email: string;
+    mobile: string;
+  }[];
+
+  if (candidateRows.length === 0) {
+    return [];
+  }
+
+  const candidateIds = candidateRows.map((row) => row.id);
+  const { data: preferenceData, error: preferenceError } = await supabase
+    .from('candidate_preferences')
+    .select('user_id,cities,practice_areas,practice_area')
+    .in('user_id', candidateIds);
+
+  if (preferenceError) {
+    throw new Error(preferenceError.message);
+  }
+
+  const preferenceByUserId = new Map<string, ReturnType<typeof normalizeCandidatePreferences>>();
+  for (const row of (preferenceData ?? []) as Record<string, unknown>[]) {
+    const userId = row.user_id;
+    if (typeof userId !== 'string') {
+      continue;
+    }
+    preferenceByUserId.set(userId, normalizeCandidatePreferences(row));
+  }
+
+  return candidateRows.map((candidate) => {
+    const normalizedPreferences = preferenceByUserId.get(candidate.id) ?? {
+      preferredCities: [],
+      practiceAreas: [],
+    };
+
+    return {
+      ...candidate,
+      preferredCities: normalizedPreferences.preferredCities,
+      practiceAreas: normalizedPreferences.practiceAreas,
+    };
+  });
 }
 
 export async function listActiveFirms(): Promise<StaffFirmOption[]> {
