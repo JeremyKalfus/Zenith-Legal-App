@@ -14,10 +14,10 @@ export function CandidatePageTitle({ title }: { title: string }) {
 
 const styles = StyleSheet.create({
   logo: {
-    height: 92,
-    marginRight: -8,
-    marginTop: -20,
-    width: 92,
+    height: 40,
+    marginRight: 0,
+    marginTop: -4,
+    width: 40,
   },
   row: {
     alignItems: 'flex-start',
