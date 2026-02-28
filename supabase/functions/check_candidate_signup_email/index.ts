@@ -24,17 +24,17 @@ Deno.serve(
         const email = parsed.data.email.trim().toLowerCase();
         const serviceClient = createServiceClient();
 
-        const { data: existingProfile, error } = await serviceClient
+        const { data: existingProfiles, error } = await serviceClient
           .from('users_profile')
           .select('id')
           .ilike('email', email)
-          .maybeSingle();
+          .limit(1);
 
         if (error) {
           return structuredError('database_error', 'Unable to validate email address', 500);
         }
 
-        if (existingProfile) {
+        if (Array.isArray(existingProfiles) && existingProfiles.length > 0) {
           return structuredError(
             'duplicate_email',
             'An account with this email already exists. Sign in or reset your password.',
