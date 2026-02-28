@@ -12,6 +12,13 @@ type StaffProfile = {
 const MASON_EMAIL = 'mason@zenithlegal.com';
 const STAFF_STREAM_IMAGE_URL = Deno.env.get('STREAM_STAFF_IMAGE_URL') ?? undefined;
 
+type StreamErrorLike = {
+  code?: unknown;
+  message?: unknown;
+  status?: unknown;
+  statusCode?: unknown;
+};
+
 function getStaffStreamImage(email?: string | null): string | undefined {
   return email?.trim().toLowerCase() === MASON_EMAIL ? STAFF_STREAM_IMAGE_URL : undefined;
 }
@@ -24,6 +31,50 @@ function getStreamServerClient() {
   }
 
   return StreamChat.getInstance(streamApiKey, streamApiSecret);
+}
+
+function asStreamError(error: unknown): StreamErrorLike {
+  if (typeof error === 'object' && error !== null) {
+    return error as StreamErrorLike;
+  }
+  return {};
+}
+
+function getStreamErrorMessage(error: unknown): string {
+  const parsed = asStreamError(error);
+  if (typeof parsed.message === 'string' && parsed.message.trim()) {
+    return parsed.message;
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function isStatus(error: unknown, status: number): boolean {
+  const parsed = asStreamError(error);
+  return parsed.status === status || parsed.statusCode === status;
+}
+
+function isNotFoundError(error: unknown): boolean {
+  if (isStatus(error, 404)) {
+    return true;
+  }
+  const message = getStreamErrorMessage(error).toLowerCase();
+  return message.includes('not found') || message.includes('does not exist');
+}
+
+function isAlreadyExistsError(error: unknown): boolean {
+  if (isStatus(error, 409)) {
+    return true;
+  }
+  const message = getStreamErrorMessage(error).toLowerCase();
+  return message.includes('already exists');
+}
+
+function isAlreadyMemberError(error: unknown): boolean {
+  const message = getStreamErrorMessage(error).toLowerCase();
+  return message.includes('already member') || message.includes('already members');
 }
 
 export async function sendCandidateRecruiterChannelMessage(params: {
@@ -89,7 +140,30 @@ export async function sendCandidateRecruiterChannelMessage(params: {
     name: `${candidateProfile.name ?? 'Candidate'} · Zenith Legal`,
   });
 
-  await channel.create();
+  try {
+    await channel.query();
+  } catch (error) {
+    if (!isNotFoundError(error)) {
+      throw error;
+    }
+
+    try {
+      await channel.create();
+    } catch (createError) {
+      if (!isAlreadyExistsError(createError)) {
+        throw createError;
+      }
+    }
+  }
+
+  try {
+    await channel.addMembers(Array.from(memberProfiles.keys()));
+  } catch (error) {
+    if (!isAlreadyMemberError(error)) {
+      throw error;
+    }
+  }
+
   await channel.sendMessage({
     text,
     user_id: actorUserId,

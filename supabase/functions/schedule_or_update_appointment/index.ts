@@ -200,14 +200,31 @@ const scheduleOrUpdateAppointmentHandler = createEdgeHandler(
       if (!payload.id) {
         const appointmentStartLabel = formatAppointmentTimestampForMessage(appointment);
         const statusLabel = getAppointmentStatusLabel(appointment.status);
-        await sendCandidateRecruiterChannelMessage({
-          serviceClient,
-          candidateUserId,
-          actorUserId: resolvedUserId,
-          text:
-            `Appointment created: "${appointment.title}" on ${appointmentStartLabel} ` +
-            `(${appointment.timezone_label}). Status: ${statusLabel}.`,
-        });
+        try {
+          await sendCandidateRecruiterChannelMessage({
+            serviceClient,
+            candidateUserId,
+            actorUserId: resolvedUserId,
+            text:
+              `Appointment created: "${appointment.title}" on ${appointmentStartLabel} ` +
+              `(${appointment.timezone_label}). Status: ${statusLabel}.`,
+          });
+        } catch (error) {
+          console.error(
+            JSON.stringify({
+              event: 'appointment_channel_message_failed',
+              appointment_id: appointment.id,
+              candidate_user_id: candidateUserId,
+              actor_user_id: resolvedUserId,
+              actor_is_staff: actorIsStaff,
+              message_error:
+                error instanceof Error && error.message
+                  ? error.message
+                  : String(error),
+            }),
+          );
+          throw new Error('Unable to post appointment update message. Please retry.');
+        }
       }
 
     await writeAuditEvent({

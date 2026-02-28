@@ -11,7 +11,6 @@ import {
 } from 'stream-chat-react';
 import { getChatClient } from '../../lib/chat';
 import { ScreenShell } from '../../components/screen-shell';
-import { CandidatePageTitle } from '../../components/candidate-page-title';
 import { ensureStreamChatStylesheet, STREAM_CHAT_CSS_URL } from '@zenith/shared';
 import { useResolvedCandidateChatChannel } from '../../lib/use-resolved-candidate-chat-channel';
 
@@ -30,12 +29,10 @@ export function MessagesScreen({
 }) {
   useStreamChatCSS();
   const { channel, errorMessage, isLoading } = useResolvedCandidateChatChannel(candidateUserId);
-  const showCandidateTitle = !candidateUserId;
 
   if (isLoading) {
     return (
       <ScreenShell showBanner={showRecruiterBanner}>
-        {showCandidateTitle ? <CandidatePageTitle title="Messages" /> : null}
         <View style={styles.center}>
           <ActivityIndicator />
           <Text style={styles.loadingText}>Connecting to chat...</Text>
@@ -47,7 +44,6 @@ export function MessagesScreen({
   if (errorMessage || !channel) {
     return (
       <ScreenShell showBanner={showRecruiterBanner}>
-        {showCandidateTitle ? <CandidatePageTitle title="Messages" /> : null}
         <View style={styles.center}>
           <Text style={styles.error}>
             {errorMessage || 'Unable to load chat channel.'}
@@ -59,7 +55,6 @@ export function MessagesScreen({
 
   return (
     <ScreenShell showBanner={showRecruiterBanner}>
-      {showCandidateTitle ? <CandidatePageTitle title="Messages" /> : null}
       <View style={styles.chatWrapper}>
         <Chat client={getChatClient()} theme="str-chat__theme-light">
           <Channel channel={channel}>
