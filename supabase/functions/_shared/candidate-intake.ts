@@ -26,8 +26,6 @@ export const cityOptions = [
 export const practiceAreas = [
   'Antitrust',
   'White Collar',
-  "Int'l arb",
-  "Int'l reg",
   'Gov Contracts',
   'SEC / CFTC',
   'IP / Tech Trans',
@@ -39,6 +37,9 @@ export const practiceAreas = [
   'Corp: Cap Mkts',
   'Real Estate',
   'Tax & Benefits',
+  'Media/Ent',
+  "Int'l arb",
+  "Int'l reg",
   'Other',
 ] as const;
 
@@ -54,6 +55,32 @@ function optionalTrimmedString(max: number) {
       const trimmed = input.trim();
       return trimmed.length > 0 ? trimmed : undefined;
     });
+}
+
+function optionalIsoDateString() {
+  return z
+    .string()
+    .optional()
+    .transform((input) => {
+      if (typeof input !== 'string') {
+        return undefined;
+      }
+      const trimmed = input.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    })
+    .refine((value) => {
+      if (!value) {
+        return true;
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return false;
+      }
+      const parsed = new Date(`${value}T00:00:00.000Z`);
+      if (Number.isNaN(parsed.getTime())) {
+        return false;
+      }
+      return parsed.toISOString().slice(0, 10) === value;
+    }, 'jdDegreeDate must be a valid date in YYYY-MM-DD format');
 }
 
 const optionalMobileInputSchema = z
@@ -77,6 +104,7 @@ export const candidateIntakeSchema = z
     otherCityText: optionalTrimmedString(120),
     practiceAreas: z.array(z.enum(practiceAreas)).max(3).default([]),
     otherPracticeText: optionalTrimmedString(120),
+    jdDegreeDate: optionalIsoDateString(),
     acceptedPrivacyPolicy: z.boolean(),
     acceptedCommunicationConsent: z.boolean(),
   })
@@ -120,6 +148,14 @@ export const candidateRegistrationSchema = candidateIntakeSchema.extend({
 
 export type CandidateIntakePayload = z.infer<typeof candidateIntakeSchema>;
 
+function isMissingUsersProfileColumnError(message: string): boolean {
+  const lowered = message.toLowerCase();
+  return (
+    (lowered.includes('users_profile.jd_degree_date') && lowered.includes('does not exist')) ||
+    lowered.includes('column "jd_degree_date" does not exist')
+  );
+}
+
 export function normalizeCandidateMobileForRegistration(input: string): string {
   try {
     return normalizeUsPhoneForAuth(input);
@@ -137,6 +173,7 @@ type PersistCandidateIntakeParams = {
   intake: CandidateIntakePayload;
   source: string;
   upsertConsentsOnlyWhenChanged?: boolean;
+  onboardingComplete?: boolean;
 };
 
 export async function persistCandidateIntakeData({
@@ -146,18 +183,38 @@ export async function persistCandidateIntakeData({
   intake,
   source,
   upsertConsentsOnlyWhenChanged = false,
+  onboardingComplete = true,
 }: PersistCandidateIntakeParams) {
-  const upsertProfile = await client.from('users_profile').upsert(
-    {
-      id: userId,
-      role,
-      name: intake.name ?? null,
-      email: intake.email,
-      mobile: intake.mobile ?? null,
-      onboarding_complete: true,
-    },
+  const fullProfilePayload = {
+    id: userId,
+    role,
+    name: intake.name ?? null,
+    email: intake.email,
+    mobile: intake.mobile ?? null,
+    jd_degree_date: intake.jdDegreeDate ?? null,
+    onboarding_complete: onboardingComplete,
+  };
+  const legacyProfilePayload = {
+    id: userId,
+    role,
+    name: intake.name ?? null,
+    email: intake.email,
+    mobile: intake.mobile ?? null,
+    onboarding_complete: onboardingComplete,
+  };
+
+  let upsertProfile = await client.from('users_profile').upsert(
+    fullProfilePayload,
     { onConflict: 'id' },
   );
+
+  if (upsertProfile.error && isMissingUsersProfileColumnError(upsertProfile.error.message ?? '')) {
+    upsertProfile = await client.from('users_profile').upsert(
+      legacyProfilePayload,
+      { onConflict: 'id' },
+    );
+  }
+
   if (upsertProfile.error) {
     throw new Error(`profile_insert_failed:${upsertProfile.error.message}`);
   }

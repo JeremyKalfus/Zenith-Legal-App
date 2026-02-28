@@ -55,12 +55,12 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 | `mobile_sign_in_with_identifier_password` | Public | Password sign-in |
 | `create_or_update_candidate_profile` | User JWT | Intake profile upsert |
 | `delete_my_account` | User JWT | Candidate self-service account deletion (hard delete auth user + cascaded app data; non-cascading refs nulled first) |
-| `schedule_or_update_appointment` | User JWT | Appointment create/update for candidates and staff; normalizes accepted->scheduled status semantics, enqueues immediate notifications, 15-minute reminders, and calendar sync |
+| `schedule_or_update_appointment` | User JWT | Appointment create/update for candidates and staff; normalizes accepted->scheduled status semantics, enqueues immediate notifications, 15-minute reminders, calendar sync, and posts candidate-channel chat updates on create |
 | `authorize_firm_submission` | User JWT | Candidate authorizes/declines firm |
 | `chat_auth_bootstrap` | User JWT | Provisions Stream Chat token; candidates (and staff targeting a candidate) also get/create deterministic `candidate-<user_id>` channel. Staff can omit `user_id` to bootstrap inbox listing without creating/selecting a channel. Returns 404 if `users_profile` row missing (no fallback creation) |
 | `connect_calendar_provider` | User JWT | Connect Google/Apple calendar credentials/tokens for per-user appointment sync |
 | `staff_review_appointment` | Staff JWT | Review appointment requests (pending -> scheduled/declined with overlap detection), enqueue notifications/reminders, and trigger calendar sync |
-| `assign_firm_to_candidate` | Staff JWT | Assign firm to candidate |
+| `assign_firm_to_candidate` | Staff JWT | Assign firm to candidate and post candidate-channel chat updates |
 | `staff_update_assignment_status` | Staff JWT | Update assignment status |
 | `staff_unassign_firm_from_candidate` | Staff JWT | Remove firm assignment |
 | `staff_delete_user` | Staff JWT | Hard-delete candidate user accounts from admin workflow (candidate-only scope) |
@@ -76,7 +76,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 21 migrations in `supabase/migrations/`. Key tables:
 
 - `users_profile` -- User identity and role (candidate/staff)
-- `users_profile` includes candidate profile metadata used across mobile/admin surfaces (`profile_picture_url`, `jd_degree_date`)
+- `users_profile` includes candidate profile metadata used across mobile/admin surfaces (`jd_degree_date`)
 - `candidate_preferences` -- Cities, practice_areas (array, max 3), optional practice_area (legacy)
 - `candidate_consents` -- Privacy and communication consents with versioning
 - `firms` -- Law firm directory
@@ -89,7 +89,6 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 - `support_data_requests` -- Candidate support requests
 - `recruiter_contact_config` -- Configurable recruiter phone/email for mobile banner
 - `candidate_recruiter_contact_overrides` -- Per-candidate recruiter banner phone/email overrides managed by staff
-- Supabase Storage bucket `profile-pictures` -- Candidate-owned profile image uploads (`<user_id>/<file>`) with authenticated owner insert/update/delete policies; public read URL stored in `users_profile.profile_picture_url`
 
 All tables enforce Row Level Security. Staff-only mutations are routed through edge functions that call `assertStaff()`.
 
@@ -114,7 +113,7 @@ The shared package (`packages/shared/`) exports modules consumed by both admin a
 The package uses `"main": "src/index.ts"` (no build step). Admin consumes it via `transpilePackages: ['@zenith/shared']` in `next.config.ts`. Mobile consumes it directly.
 
 Staff candidate list flows (mobile `staff-candidates-screen` and admin `candidate-firm-manager`) now hydrate profile rows from `users_profile` with `candidate_preferences` (`cities`, `practice_areas`, `practice_area`) and apply the shared filter helper for consistent behavior across both surfaces.
-The same staff candidate profile surfaces render `users_profile.profile_picture_url` and `users_profile.jd_degree_date` for recruiter/admin visibility.
+The same staff candidate profile surfaces render candidate identity details and `users_profile.jd_degree_date` for recruiter/admin visibility.
 
 ## Mobile Theme System
 
@@ -152,7 +151,7 @@ Refactored components using this pattern:
 - **Edge function errors**: Client uses `getFunctionErrorMessage()` to read the actual error from `FunctionsHttpError.context` (Response body); uses `Response.clone()` when available so the body is not consumed. Avoids generic "Edge Function returned a non-2xx status code" when the function returns JSON `{ error: "..." }`.
 - **Chat bootstrap modes**: `chat_auth_bootstrap` supports (1) candidate self-bootstrap, (2) staff bootstrap for a specific candidate channel via `user_id`, and (3) staff token-only bootstrap for inbox channel listing when `user_id` is omitted.
 - **Admin web staff messaging**: Admin dashboard staff users use the same `chat_auth_bootstrap` token-only inbox bootstrap + candidate-channel bootstrap flow as the main app, powered by Stream Chat (`NEXT_PUBLIC_STREAM_API_KEY` on admin web).
-- **Chat profile image sync**: `chat_auth_bootstrap` upserts candidate Stream users with `users_profile.profile_picture_url`, and admin inbox previews enrich channel rows from `users_profile` so recruiter conversation previews show candidate avatars.
+- **Chat profile sync**: `chat_auth_bootstrap` upserts candidate Stream users with profile name metadata, and admin inbox previews enrich channel rows from `users_profile` so recruiter conversation previews show candidate names/initials.
 
 ## Secrets and Configuration
 

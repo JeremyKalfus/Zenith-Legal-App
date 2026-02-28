@@ -3,6 +3,7 @@ import { errorResponse, jsonResponse } from '../_shared/http.ts';
 import { assertStaff, createAuthedClient, createServiceClient } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
 import { syncAppointmentForParticipants } from '../_shared/calendar-sync.ts';
+import { sendCandidateRecruiterChannelMessage } from '../_shared/stream-chat.ts';
 import {
   queueAppointmentReminderNotifications,
   queueAppointmentStatusNotifications,
@@ -42,6 +43,41 @@ function normalizeStatus(status: z.infer<typeof schema>['status'] | undefined) {
   }
 
   return status;
+}
+
+function formatAppointmentTimestampForMessage(appointment: {
+  start_at_utc: string;
+  timezone_label: string;
+}) {
+  const startAt = new Date(appointment.start_at_utc);
+  if (Number.isNaN(startAt.getTime())) {
+    return appointment.start_at_utc;
+  }
+
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: appointment.timezone_label,
+    }).format(startAt);
+  } catch {
+    return startAt.toISOString();
+  }
+}
+
+function getAppointmentStatusLabel(status: string) {
+  if (status === 'scheduled' || status === 'accepted') {
+    return 'Scheduled';
+  }
+  if (status === 'declined') {
+    return 'Declined';
+  }
+  if (status === 'cancelled') {
+    return 'Cancelled';
+  }
+  return 'Pending review';
 }
 
 const scheduleOrUpdateAppointmentHandler = createEdgeHandler(
@@ -158,6 +194,19 @@ const scheduleOrUpdateAppointmentHandler = createEdgeHandler(
           appointmentId: appointment.id,
           startAtUtc: appointment.start_at_utc,
           participantUserIds: reminderTargets,
+        });
+      }
+
+      if (!payload.id) {
+        const appointmentStartLabel = formatAppointmentTimestampForMessage(appointment);
+        const statusLabel = getAppointmentStatusLabel(appointment.status);
+        await sendCandidateRecruiterChannelMessage({
+          serviceClient,
+          candidateUserId,
+          actorUserId: resolvedUserId,
+          text:
+            `Appointment created: "${appointment.title}" on ${appointmentStartLabel} ` +
+            `(${appointment.timezone_label}). Status: ${statusLabel}.`,
         });
       }
 

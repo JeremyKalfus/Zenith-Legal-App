@@ -18,7 +18,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ## User Roles
 
 ### Candidate (job-seeking lawyer)
-- Registers via email/password, completes an intake profile (name, email, mobile, profile picture, JD degree date, preferred cities, practice area, privacy/communication consents).
+- Registers via email/password, completes an intake profile (name, email, mobile, JD degree date, preferred cities, practice area, privacy/communication consents).
 - Views a dashboard of law firms they have been assigned to by staff.
 - Authorizes or declines firm submissions (recruiter submitting their resume to a firm).
 - Messages the recruiter team via real-time chat.
@@ -48,7 +48,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Role-based routing: candidate tabs vs staff tabs after sign-in.
 
 ### Candidate Intake and Onboarding
-- Multi-field intake form: name, email, mobile, profile picture (add/change/remove), JD degree date, preferred cities (14 options + Other), practice areas (0–3 of 16 options + Other), privacy policy consent, communication consent.
+- Multi-field intake form: name, email, mobile, JD degree date, preferred cities (14 options + Other), practice areas (0–3 of 17 options + Other, including `Media/Ent`), privacy policy consent, communication consent.
 - On password registration, candidate accounts are created with `onboarding_complete = false` and must finish intake before entering candidate tabs.
 - Intake data persisted via `create_or_update_candidate_profile` edge function.
 - Onboarding-complete flag gates access to main app screens.
@@ -63,6 +63,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Candidates can cancel a prior authorization while status is `Authorized, will submit soon` (UI label `Cancel`; backend reverts status to waiting).
 - Staff updates assignment status via `staff_update_assignment_status`.
 - Staff can unassign firms via `staff_unassign_firm_from_candidate`.
+- New firm assignments post an automatic shared chat update in the candidate channel so both candidate and recruiter staff see it.
 
 ### Recruiter Contact Banner
 - Staff can set candidate-specific banner phone/email overrides from the staff mobile Candidates flow.
@@ -73,7 +74,8 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Stream Chat integration for real-time messaging (native: stream-chat-expo; web: stream-chat-react with CDN CSS injection).
 - One deterministic channel per candidate: `candidate-<user_id>`; channel members are the candidate plus all staff.
 - Staff Messages tab is inbox-first and lists existing candidate DM channels (channels with at least one message); any staff member can reply in the shared candidate channel.
-- Admin staff inbox previews include candidate profile pictures when available.
+- Admin staff inbox previews show candidate initials in avatars.
+- Staff mobile inbox uses a conversation-manager list layout (avatar, timestamp, preview, unread badge).
 - `chat_auth_bootstrap` edge function provisions Stream tokens and channel; requires an existing `users_profile` row (no auto-creation).
 - `process_chat_webhook` handles inbound webhook events from Stream.
 - Client calls `ensureValidSession()` before bootstrap; errors from the function are surfaced via `getFunctionErrorMessage` (response body extraction).
@@ -82,12 +84,13 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Candidates request appointments with title, description, modality (virtual/in-person), optional location (in-person) and video URL (virtual), start/end times, timezone.
 - Appointment requests start in `pending` status.
 - Staff can schedule appointments directly for candidates (mobile + admin workflows) or review pending requests via `staff_review_appointment` (`pending` -> `scheduled`/`declined`).
+- Appointment creation posts an automatic shared chat update in the candidate channel for both candidate and recruiter staff members.
 - Overlap detection prevents conflicting scheduled appointments.
 - Scheduled and declined appointments are hidden from candidate and staff views 24 hours after planned end time.
 - Real-time subscription updates appointment list.
 
 ### Profile Management
-- Candidates update email, password, profile picture (change/remove), and intake fields (including JD degree date).
+- Candidates update email, password, and intake fields (including JD degree date).
 - Profile data stored in `users_profile` and `candidate_preferences` tables.
 - Candidates can delete their account in-app from Profile (self-service deletion flow with confirmation).
 - Candidate and staff Profile tabs include a Calendar Sync settings card with provider status and connect actions.

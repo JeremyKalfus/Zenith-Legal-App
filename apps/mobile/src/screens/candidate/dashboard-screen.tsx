@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { FIRM_STATUSES } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
+import { CandidatePageTitle } from '../../components/candidate-page-title';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/auth-context';
 import type { CandidateFirmAssignment } from '../../types/domain';
@@ -161,7 +162,7 @@ export function DashboardScreen({
 
   return (
     <ScreenShell>
-      <Text style={styles.title}>Dashboard</Text>
+      <CandidatePageTitle title="Dashboard" />
       <Text style={styles.body}>
         Firms appear here only when they are actively in one of the tracked
         status stages.
@@ -359,11 +360,6 @@ const styles = StyleSheet.create({
   },
   statusBadgeText: {
     fontSize: 12,
-    fontWeight: '700',
-  },
-  title: {
-    color: uiColors.textPrimary,
-    fontSize: 24,
     fontWeight: '700',
   },
 });

@@ -9,6 +9,35 @@ import { getFunctionErrorMessage } from '../../lib/function-error';
 import { ensureValidSession, supabase } from '../../lib/supabase';
 import { uiColors } from '../../theme/colors';
 
+function deriveConversationName(conversation: StaffMessageInboxItem): string {
+  const candidateName = conversation.candidateDisplayName?.trim();
+  if (candidateName) {
+    return candidateName;
+  }
+
+  const cleaned = conversation.channelName
+    .replace(/\s*(?:·|-)\s*Zenith Legal\s*$/i, '')
+    .trim();
+  return cleaned || conversation.channelName;
+}
+
+function getInitials(value: string): string {
+  const parts = value
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (parts.length === 0) {
+    return 'ZL';
+  }
+
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
+}
+
 export function StaffMessagesScreen({
   onOpenConversation,
 }: {
@@ -108,7 +137,7 @@ export function StaffMessagesScreen({
   return (
     <ScreenShell showBanner={false}>
       <Text style={styles.title}>Messages</Text>
-      <Text style={styles.body}>Recruiter inbox for candidate conversations.</Text>
+      <Text style={styles.body}>Recruiter inbox</Text>
       <Text style={styles.subtle}>{subtitle}</Text>
 
       <Pressable
@@ -128,30 +157,45 @@ export function StaffMessagesScreen({
         ) : conversations.length === 0 ? (
           <Text style={styles.emptyText}>No channels with messages yet.</Text>
         ) : (
-          conversations.map((conversation) => (
+          conversations.map((conversation, index) => {
+            const displayName = deriveConversationName(conversation);
+            const timestamp = formatRelativeTimestamp(conversation.lastMessageAt);
+            const isLast = index === conversations.length - 1;
+
+            return (
             <Pressable
               key={conversation.channelId}
-              style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+              style={({ pressed }) => [
+                styles.conversationRow,
+                !isLast ? styles.conversationRowBorder : null,
+                pressed ? styles.conversationRowPressed : null,
+              ]}
               onPress={() => onOpenConversation(conversation)}
             >
-              <View style={styles.cardHeader}>
-                <Text numberOfLines={1} style={styles.cardTitle}>
-                  {conversation.channelName}
-                </Text>
-                <Text style={styles.cardTimestamp}>
-                  {formatRelativeTimestamp(conversation.lastMessageAt)}
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{getInitials(displayName)}</Text>
+              </View>
+              <View style={styles.conversationMain}>
+                <View style={styles.conversationTopRow}>
+                  <Text numberOfLines={1} style={styles.conversationName}>
+                    {displayName}
+                  </Text>
+                  <Text style={styles.conversationTimestamp}>
+                    {timestamp}
+                  </Text>
+                </View>
+                <Text numberOfLines={1} style={styles.conversationPreview}>
+                  {conversation.lastMessagePreview}
                 </Text>
               </View>
-              <Text numberOfLines={2} style={styles.cardPreview}>
-                {conversation.lastMessagePreview}
-              </Text>
               {conversation.unreadCount > 0 ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{conversation.unreadCount}</Text>
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadBadgeText}>{conversation.unreadCount}</Text>
                 </View>
               ) : null}
             </Pressable>
-          ))
+            );
+          })
         )}
       </View>
     </ScreenShell>
@@ -159,55 +203,62 @@ export function StaffMessagesScreen({
 }
 
 const styles = StyleSheet.create({
-  badge: {
-    alignSelf: 'flex-start',
-    backgroundColor: uiColors.textPrimary,
+  avatar: {
+    alignItems: 'center',
+    backgroundColor: uiColors.backgroundAlt,
     borderRadius: 999,
-    marginTop: 8,
-    minWidth: 24,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    borderColor: uiColors.borderStrong,
+    borderWidth: 1,
+    height: 52,
+    justifyContent: 'center',
+    width: 52,
   },
-  badgeText: {
-    color: uiColors.primaryText,
-    fontSize: 12,
+  avatarText: {
+    color: uiColors.textPrimary,
+    fontSize: 16,
     fontWeight: '700',
-    textAlign: 'center',
   },
   body: {
     color: uiColors.textSecondary,
   },
-  card: {
-    backgroundColor: uiColors.surface,
-    borderColor: uiColors.border,
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 12,
+  conversationMain: {
+    flex: 1,
+    minWidth: 0,
   },
-  cardHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'space-between',
-  },
-  cardPreview: {
-    color: uiColors.textStrong,
-    marginTop: 4,
-  },
-  cardPressed: {
-    backgroundColor: uiColors.background,
-  },
-  cardTimestamp: {
-    color: uiColors.textMuted,
-    flexShrink: 0,
-    fontSize: 12,
-    marginLeft: 8,
-  },
-  cardTitle: {
+  conversationName: {
     color: uiColors.textPrimary,
     flex: 1,
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: '700',
+  },
+  conversationPreview: {
+    color: uiColors.textSecondary,
+    fontSize: 16,
+    marginTop: 3,
+  },
+  conversationRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+  },
+  conversationRowBorder: {
+    borderBottomColor: uiColors.border,
+    borderBottomWidth: 1,
+  },
+  conversationRowPressed: {
+    backgroundColor: uiColors.background,
+  },
+  conversationTimestamp: {
+    color: uiColors.textMuted,
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  conversationTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   emptyText: {
     color: uiColors.textMuted,
@@ -219,7 +270,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   list: {
-    gap: 10,
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
   refreshButton: {
     alignItems: 'center',
@@ -242,5 +297,20 @@ const styles = StyleSheet.create({
     color: uiColors.textPrimary,
     fontSize: 24,
     fontWeight: '700',
+  },
+  unreadBadge: {
+    alignItems: 'center',
+    backgroundColor: uiColors.textPrimary,
+    borderRadius: 999,
+    justifyContent: 'center',
+    minWidth: 24,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  unreadBadgeText: {
+    color: uiColors.primaryText,
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 });

@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildJdDegreeDateFromParts,
   appointmentSchema,
   appointmentReviewSchema,
   APPOINTMENT_STATUSES,
   candidateIntakeSchema,
   candidateRegistrationSchema,
   FIRM_STATUSES,
+  PRACTICE_AREAS,
+  getJdDegreeDateLabel,
+  getJdDegreeDayOptions,
+  getJdDegreeYearOptions,
+  parseJdDegreeDateParts,
 } from './domain';
 
 describe('candidate intake schema', () => {
@@ -66,6 +72,16 @@ describe('candidate intake schema', () => {
     }
   });
 
+  it('includes Media/Ent before international options', () => {
+    const mediaEntIndex = PRACTICE_AREAS.indexOf('Media/Ent');
+    const internationalArbIndex = PRACTICE_AREAS.indexOf("Int'l arb");
+    const internationalRegIndex = PRACTICE_AREAS.indexOf("Int'l reg");
+
+    expect(mediaEntIndex).toBeGreaterThanOrEqual(0);
+    expect(internationalArbIndex).toBeGreaterThan(mediaEntIndex);
+    expect(internationalRegIndex).toBeGreaterThan(mediaEntIndex);
+  });
+
   it('normalizes mobile to E.164 with US default country code', () => {
     const result = candidateIntakeSchema.parse({
       email: 'jane@example.com',
@@ -93,6 +109,33 @@ describe('candidate intake schema', () => {
     }
   });
 
+  it('accepts a valid JD degree date', () => {
+    const result = candidateIntakeSchema.parse({
+      email: 'jane@example.com',
+      preferredCities: [],
+      jdDegreeDate: '2025-05-15',
+      acceptedPrivacyPolicy: true,
+      acceptedCommunicationConsent: true,
+    });
+
+    expect(result.jdDegreeDate).toBe('2025-05-15');
+  });
+
+  it('rejects an invalid JD degree date', () => {
+    const result = candidateIntakeSchema.safeParse({
+      email: 'jane@example.com',
+      preferredCities: [],
+      jdDegreeDate: '2025-02-30',
+      acceptedPrivacyPolicy: true,
+      acceptedCommunicationConsent: true,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.jdDegreeDate).toBeTruthy();
+    }
+  });
+
   it('keeps the exact status order and values', () => {
     expect(FIRM_STATUSES).toEqual([
       'Waiting on your authorization to contact/submit',
@@ -102,6 +145,33 @@ describe('candidate intake schema', () => {
       'Rejected by firm',
       'Offer received!',
     ]);
+  });
+
+  it('builds JD degree year dropdown options', () => {
+    const options = getJdDegreeYearOptions({ fromYear: 2024, toYear: 2026 });
+    expect(options).toEqual(['2026', '2025', '2024']);
+  });
+
+  it('builds JD degree day options for the selected month and year', () => {
+    expect(getJdDegreeDayOptions({ year: '2024', month: '02' }).at(-1)).toBe('29');
+    expect(getJdDegreeDayOptions({ year: '2025', month: '02' }).at(-1)).toBe('28');
+  });
+
+  it('parses and rebuilds JD degree date parts', () => {
+    const parts = parseJdDegreeDateParts('2026-05-15');
+    expect(parts).toEqual({ year: '2026', month: '05', day: '15' });
+    expect(
+      buildJdDegreeDateFromParts({
+        year: '2026',
+        month: '05',
+        day: '15',
+      }),
+    ).toBe('2026-05-15');
+  });
+
+  it('formats JD degree date label from stored date value', () => {
+    expect(getJdDegreeDateLabel('2026-05-15')).toBe('May 15, 2026');
+    expect(getJdDegreeDateLabel(null)).toBe('Not provided');
   });
 });
 

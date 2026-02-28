@@ -3,6 +3,7 @@ import {
   CITY_OPTIONS,
   type CityOption,
   candidateIntakeSchema,
+  getJdDegreeDateLabel,
   normalizePhoneNumber,
   PRACTICE_AREAS,
   sanitizePhoneInput,
@@ -10,8 +11,10 @@ import {
 import { z } from 'zod';
 import { useCallback, useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CalendarSyncCard } from '../../components/calendar-sync-card';
+import { CandidatePageTitle } from '../../components/candidate-page-title';
 import { PasswordInput } from '../../components/password-input';
 import { ScreenShell } from '../../components/screen-shell';
 import { SignOutButton } from '../../components/sign-out-button';
@@ -21,6 +24,35 @@ import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/
 
 type CandidateProfileFormValues = z.input<typeof candidateIntakeSchema>;
 const COLLAPSED_BUBBLE_ROWS_HEIGHT = 34;
+const EMPTY_SELECTED_CITIES: CityOption[] = [];
+const EMPTY_SELECTED_PRACTICE_AREAS: (typeof PRACTICE_AREAS)[number][] = [];
+
+function toJdDegreeLocalDate(value: string | null | undefined): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date;
+}
+
+function toJdDegreeIsoDate(value: Date): string {
+  const year = String(value.getFullYear());
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 function MultiSelectOption({
   label,
@@ -70,6 +102,7 @@ function useProfileScreen() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState('');
+  const [showJdDatePicker, setShowJdDatePicker] = useState(false);
 
   const {
     control,
@@ -88,6 +121,7 @@ function useProfileScreen() {
       otherCityText: '',
       practiceAreas: [],
       otherPracticeText: '',
+      jdDegreeDate: '',
       acceptedPrivacyPolicy: false,
       acceptedCommunicationConsent: true,
     },
@@ -106,6 +140,7 @@ function useProfileScreen() {
       otherCityText: profile.otherCityText ?? '',
       practiceAreas: profile.practiceAreas ?? [],
       otherPracticeText: profile.otherPracticeText ?? '',
+      jdDegreeDate: profile.jd_degree_date ?? '',
       acceptedPrivacyPolicy: profile.acceptedPrivacyPolicy,
       acceptedCommunicationConsent: true,
     });
@@ -117,10 +152,34 @@ function useProfileScreen() {
     setPasswordMessage('');
     setDeleteConfirmText('');
     setDeleteMessage('');
+    setShowJdDatePicker(false);
   }, [profile, reset]);
 
-  const selectedCities = watch('preferredCities') ?? [];
-  const selectedPracticeAreas = watch('practiceAreas') ?? [];
+  const selectedCities = watch('preferredCities') ?? EMPTY_SELECTED_CITIES;
+  const selectedPracticeAreas = watch('practiceAreas') ?? EMPTY_SELECTED_PRACTICE_AREAS;
+  const selectedJdDegreeDate = watch('jdDegreeDate') ?? '';
+  const selectedJdDegreeDateLabel = selectedJdDegreeDate
+    ? getJdDegreeDateLabel(selectedJdDegreeDate)
+    : 'Select JD degree date';
+  const selectedJdDegreeDateValue = toJdDegreeLocalDate(selectedJdDegreeDate) ?? new Date();
+  const onJdDateChange = useCallback(
+    (event: DateTimePickerEvent, nextDate?: Date) => {
+      if (event.type !== 'set' || !nextDate) {
+        if (Platform.OS !== 'ios') {
+          setShowJdDatePicker(false);
+        }
+        return;
+      }
+
+      setValue('jdDegreeDate', toJdDegreeIsoDate(nextDate), {
+        shouldValidate: true,
+      });
+      if (Platform.OS !== 'ios') {
+        setShowJdDatePicker(false);
+      }
+    },
+    [setValue],
+  );
 
   const confirmDeletePrompt = useCallback(async (): Promise<boolean> => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -160,23 +219,20 @@ function useProfileScreen() {
     }
   }, [clearAuthNotice, emailDraft, updateEmail]);
 
-  const onSubmitProfile = useCallback(
-    handleSubmit(async (values) => {
-      setBusy(true);
-      setMessage('');
-      clearAuthNotice();
-      try {
-        const parsed = candidateIntakeSchema.parse(values);
-        await updateCandidateProfileIntake(parsed);
-        setMessage('Profile updated.');
-      } catch (error) {
-        setMessage((error as Error).message);
-      } finally {
-        setBusy(false);
-      }
-    }),
-    [clearAuthNotice, handleSubmit, updateCandidateProfileIntake],
-  );
+  const onSubmitProfile = handleSubmit(async (values) => {
+    setBusy(true);
+    setMessage('');
+    clearAuthNotice();
+    try {
+      const parsed = candidateIntakeSchema.parse(values);
+      await updateCandidateProfileIntake(parsed);
+      setMessage('Profile updated.');
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  });
 
   const onSubmitPassword = useCallback(async () => {
     setPasswordBusy(true);
@@ -288,12 +344,18 @@ function useProfileScreen() {
     profile,
     profileLoadError,
     selectedCities,
+    selectedJdDegreeDate,
+    selectedJdDegreeDateLabel,
+    selectedJdDegreeDateValue,
     selectedPracticeAreas,
+    onJdDateChange,
     setConfirmNewPassword,
     setDeleteConfirmText,
     setEmailDraft,
     setNewPassword,
+    setShowJdDatePicker,
     setValue,
+    showJdDatePicker,
     showAllCities,
     showAllPracticeAreas,
     toggleShowAllCities,
@@ -400,6 +462,40 @@ function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
         />
       ) : null}
       {h.errors.otherCityText ? <Text style={styles.error}>{h.errors.otherCityText.message}</Text> : null}
+
+      <Text style={styles.label}>JD degree date (optional)</Text>
+      <Pressable style={styles.input} onPress={() => h.setShowJdDatePicker((value) => !value)}>
+        <Text style={h.selectedJdDegreeDate ? styles.valueText : styles.valueTextPlaceholder}>
+          {h.selectedJdDegreeDateLabel}
+        </Text>
+      </Pressable>
+      {h.showJdDatePicker ? (
+        <View style={styles.pickerShell}>
+          <DateTimePicker
+            value={h.selectedJdDegreeDateValue}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'inline' : 'default'}
+            maximumDate={new Date()}
+            onChange={h.onJdDateChange}
+          />
+          <View style={styles.pickerActionRow}>
+            <Pressable
+              style={styles.pickerAction}
+              onPress={() =>
+                h.setValue('jdDegreeDate', '', {
+                  shouldValidate: true,
+                })
+              }
+            >
+              <Text style={styles.pickerActionText}>Clear</Text>
+            </Pressable>
+            <Pressable style={styles.pickerAction} onPress={() => h.setShowJdDatePicker(false)}>
+              <Text style={styles.pickerActionText}>Done</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+      {h.errors.jdDegreeDate ? <Text style={styles.error}>{h.errors.jdDegreeDate.message}</Text> : null}
 
       <Text style={styles.label}>Practice Area (choose 0-3)</Text>
       <Controller
@@ -565,14 +661,14 @@ export function ProfileScreen() {
 
   return (
     <ScreenShell>
-      <Text style={styles.title}>Profile</Text>
+      <CandidatePageTitle title="Profile" />
 
       {h.profile ? (
         <>
           <EmailCard h={h} />
-          <CalendarSyncCard />
           <ProfileDetailsCard h={h} />
           <PasswordCard h={h} />
+          <CalendarSyncCard />
           <DeleteAccountCard h={h} />
         </>
       ) : h.isHydratingProfile ? (
@@ -643,12 +739,12 @@ const styles = StyleSheet.create({
   },
   expandButton: {
     alignSelf: 'flex-start',
-    marginTop: -4,
+    marginTop: -8,
   },
   expandButtonText: {
-    color: uiColors.primary,
+    color: uiColors.textSecondary,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   helper: {
     color: uiColors.textMuted,
@@ -688,6 +784,28 @@ const styles = StyleSheet.create({
     color: uiColors.surface,
     fontSize: 12,
     fontWeight: '700',
+  },
+  pickerAction: {
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  pickerActionRow: {
+    borderTopColor: uiColors.border,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  pickerActionText: {
+    color: uiColors.primary,
+    fontWeight: '600',
+  },
+  pickerShell: {
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
+    borderRadius: 8,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
   placeholderCard: {
     backgroundColor: uiColors.surface,
@@ -730,14 +848,15 @@ const styles = StyleSheet.create({
     color: uiColors.textPrimary,
     fontWeight: '700',
   },
+  valueText: {
+    color: uiColors.textPrimary,
+  },
+  valueTextPlaceholder: {
+    color: uiColors.textSecondary,
+  },
   sectionTitle: {
     color: uiColors.textPrimary,
     fontSize: 16,
-    fontWeight: '700',
-  },
-  title: {
-    color: uiColors.textPrimary,
-    fontSize: 24,
     fontWeight: '700',
   },
   wrap: {

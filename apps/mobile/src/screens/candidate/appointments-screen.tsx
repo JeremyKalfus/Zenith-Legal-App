@@ -5,6 +5,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { appointmentSchema, type AppointmentInput, type AppointmentStatus } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
+import { CandidatePageTitle } from '../../components/candidate-page-title';
 import { useAuth } from '../../context/auth-context';
 import { supabase, ensureValidSession } from '../../lib/supabase';
 import {
@@ -402,7 +403,7 @@ export function AppointmentsScreen() {
 
   return (
     <ScreenShell>
-      <Text style={styles.title}>Appointments</Text>
+      <CandidatePageTitle title="Appointments" />
       <Text style={styles.body}>Push reminders trigger 15 minutes before scheduled meetings.</Text>
 
       <Pressable

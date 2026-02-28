@@ -3,6 +3,7 @@ import { errorResponse, jsonResponse } from '../_shared/http.ts';
 import { createServiceClient } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
 import { createEdgeHandler } from '../_shared/edge-handler.ts';
+import { sendCandidateRecruiterChannelMessage } from '../_shared/stream-chat.ts';
 
 const schema = z.object({
   candidate_id: z.string().uuid(),
@@ -78,6 +79,15 @@ Deno.serve(
         entityType: 'candidate_firm_assignments',
         entityId: data.id,
         afterJson: data,
+      });
+
+      await sendCandidateRecruiterChannelMessage({
+        serviceClient,
+        candidateUserId: payload.candidate_id,
+        actorUserId,
+        text:
+          `Firm assignment created: ${firm.name}. ` +
+          'Current status is "Waiting on your authorization to contact/submit".',
       });
 
       return jsonResponse({
