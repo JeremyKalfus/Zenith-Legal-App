@@ -381,3 +381,16 @@
 **Rationale:** Recruiters and candidates both need to quickly parse pipeline stage at a glance; consistent colors reduce cognitive load and status ambiguity.
 
 **Consequences:** All listing surfaces now share one palette (Waiting=amber, Authorized=teal, Submitted=blue, Interview=violet, Rejected=red, Offer=green), implemented via dedicated mobile/admin helper mappings.
+
+### [2026-02-28] Email-first signup with routed signup-completion intake
+
+**Decision:** Change candidate signup to a two-step flow: email-only precheck in Auth Menu (`check_candidate_signup_email`), then route to `signupCompletion` intake with locked email plus password/confirm-password before account creation.
+
+**Options considered:**
+1. Keep account creation on auth menu (email+password) then collect profile later -- fewer screens, but less control over duplicate-email UX and screenshot mismatch.
+2. Email precheck then routed signup-completion intake (chosen) -- one extra step, but deterministic routing and clearer account-exists handling.
+3. Route directly to full intake without precheck and fail at submit -- simplest backend, but weaker UX on existing-email collisions.
+
+**Rationale:** The requested UX requires Sign Up to be email-first and to route users into a finish-profile style screen with locked email and credentials collected there. Precheck enables immediate “account exists” handling and tab-switch to login before full form entry.
+
+**Consequences:** Added public edge function `check_candidate_signup_email` and new unauthenticated route `SignupFinishProfile`. Auth menu now hides password on Sign Up. Intake screen gained `signupCompletion` mode with locked email, password fields, and privacy-only consent UI.

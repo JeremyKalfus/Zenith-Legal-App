@@ -1,16 +1,25 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { CandidateTabs } from './candidate-tabs';
 import { StaffTabs } from './staff-tabs';
 import { IntakeScreen } from '../screens/auth/intake-screen';
+import { AuthMenuScreen } from '../screens/auth/auth-menu-screen';
 import { SignInScreen } from '../screens/auth/sign-in-screen';
 import { useAuth } from '../context/auth-context';
 import { uiColors } from '../theme/colors';
 import { interactivePressableStyle, sharedPressableFeedback } from '../theme/pressable';
 
-const Stack = createNativeStackNavigator();
+export type AuthStackParamList = {
+  AuthMenu: undefined;
+  SignupFinishProfile: {
+    email: string;
+  };
+  SignInReset: undefined;
+};
+
+const Stack = createNativeStackNavigator<AuthStackParamList>();
 
 export function RootNavigator() {
   const {
@@ -24,17 +33,14 @@ export function RootNavigator() {
     session,
     signOut,
   } = useAuth();
-  const [authStep, setAuthStep] = useState<'intake' | 'signin'>('intake');
-
-  useEffect(() => {
-    if (needsPasswordReset) {
-      setAuthStep('signin');
-    }
-  }, [needsPasswordReset]);
 
   const isAuthenticated = useMemo(
     () => !!session?.user && !needsPasswordReset,
     [needsPasswordReset, session?.user],
+  );
+  const needsOnboardingCompletion = useMemo(
+    () => isAuthenticated && profile?.role === 'candidate' && !profile.onboarding_complete,
+    [isAuthenticated, profile?.onboarding_complete, profile?.role],
   );
 
   if (isLoading) {
@@ -52,18 +58,31 @@ export function RootNavigator() {
     <NavigationContainer>
       {!isAuthenticated ? (
         <Stack.Navigator screenOptions={{ headerShown: false }}>
-          {authStep === 'intake' ? (
-            <Stack.Screen name="Intake">
-              {() => (
-                <IntakeScreen
-                  onSignIn={() => setAuthStep('signin')}
-                />
-              )}
+          {needsPasswordReset ? (
+            <Stack.Screen name="SignInReset">
+              {() => <SignInScreen onBack={() => undefined} />}
             </Stack.Screen>
           ) : (
-            <Stack.Screen name="SignIn">
-              {() => <SignInScreen onBack={() => setAuthStep('intake')} />}
-            </Stack.Screen>
+            <>
+              <Stack.Screen name="AuthMenu">
+                {({ navigation }) => (
+                  <AuthMenuScreen
+                    onContinueSignup={(email) => {
+                      navigation.navigate('SignupFinishProfile', { email });
+                    }}
+                  />
+                )}
+              </Stack.Screen>
+              <Stack.Screen name="SignupFinishProfile">
+                {({ route }) => (
+                  <IntakeScreen
+                    mode="signupCompletion"
+                    prefilledEmail={route.params.email}
+                    key={route.params.email}
+                  />
+                )}
+              </Stack.Screen>
+            </>
           )}
         </Stack.Navigator>
       ) : needsProfileHydrationGate ? (
@@ -103,6 +122,8 @@ export function RootNavigator() {
             <Text style={styles.secondaryButtonText}>{isSigningOut ? 'Signing out...' : 'Sign out'}</Text>
           </Pressable>
         </View>
+      ) : needsOnboardingCompletion ? (
+        <IntakeScreen mode="finishProfile" />
       ) : profile?.role === 'staff' ? (
         <StaffTabs />
       ) : (

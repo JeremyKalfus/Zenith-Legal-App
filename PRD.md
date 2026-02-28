@@ -18,7 +18,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ## User Roles
 
 ### Candidate (job-seeking lawyer)
-- Registers via email/password, completes an intake profile (name, email, mobile, preferred cities, practice area, privacy/communication consents).
+- Registers via email/password, completes an intake profile (name, email, mobile, profile picture, JD degree date, preferred cities, practice area, privacy/communication consents).
 - Views a dashboard of law firms they have been assigned to by staff.
 - Authorizes or declines firm submissions (recruiter submitting their resume to a firm).
 - Messages the recruiter team via real-time chat.
@@ -38,6 +38,9 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 
 ### Authentication
 - Email/password registration and sign-in (custom edge functions: `register_candidate_password`, `mobile_sign_in_with_identifier_password`).
+- Unauthenticated candidates use a single combined auth menu screen with `Sign Up`/`Log In` tabs.
+- `Sign Up` now captures only email first, checks availability, and routes available emails into a dedicated `Finish your profile` registration flow.
+- Signup completion captures intake fields plus password/confirm-password on the `Finish your profile` screen with email locked to the prechecked value.
 - Email magic link sign-in.
 - SMS OTP verification.
 - Password reset flow.
@@ -45,7 +48,8 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Role-based routing: candidate tabs vs staff tabs after sign-in.
 
 ### Candidate Intake and Onboarding
-- Multi-field intake form: name, email, mobile, preferred cities (14 options + Other), practice areas (0–3 of 16 options + Other), privacy policy consent, communication consent.
+- Multi-field intake form: name, email, mobile, profile picture (add/change/remove), JD degree date, preferred cities (14 options + Other), practice areas (0–3 of 16 options + Other), privacy policy consent, communication consent.
+- On password registration, candidate accounts are created with `onboarding_complete = false` and must finish intake before entering candidate tabs.
 - Intake data persisted via `create_or_update_candidate_profile` edge function.
 - Onboarding-complete flag gates access to main app screens.
 
@@ -69,6 +73,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Stream Chat integration for real-time messaging (native: stream-chat-expo; web: stream-chat-react with CDN CSS injection).
 - One deterministic channel per candidate: `candidate-<user_id>`; channel members are the candidate plus all staff.
 - Staff Messages tab is inbox-first and lists existing candidate DM channels (channels with at least one message); any staff member can reply in the shared candidate channel.
+- Admin staff inbox previews include candidate profile pictures when available.
 - `chat_auth_bootstrap` edge function provisions Stream tokens and channel; requires an existing `users_profile` row (no auto-creation).
 - `process_chat_webhook` handles inbound webhook events from Stream.
 - Client calls `ensureValidSession()` before bootstrap; errors from the function are surfaced via `getFunctionErrorMessage` (response body extraction).
@@ -82,7 +87,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Real-time subscription updates appointment list.
 
 ### Profile Management
-- Candidates update email, password, and intake fields.
+- Candidates update email, password, profile picture (change/remove), and intake fields (including JD degree date).
 - Profile data stored in `users_profile` and `candidate_preferences` tables.
 - Candidates can delete their account in-app from Profile (self-service deletion flow with confirmation).
 - Candidate and staff Profile tabs include a Calendar Sync settings card with provider status and connect actions.

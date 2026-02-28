@@ -21,6 +21,7 @@ import {
 import { env, getSupabaseClientConfigError } from '../config/env';
 import type { CandidateProfile, IntakeDraft } from '../types/domain';
 import { registerPushToken } from '../lib/notifications';
+import { removeProfilePictureByUrl, uploadProfilePictureForUser } from '../lib/profile-picture';
 
 type AuthMethods = {
   emailOtpEnabled: boolean;
@@ -190,6 +191,22 @@ function mapRegistrationErrorToUserMessage(error: unknown): string {
   return mapPasswordAuthErrorToUserMessage(error);
 }
 
+function mapSignupEmailCheckErrorToUserMessage(error: unknown): string {
+  const message = extractErrorMessage(error).toLowerCase();
+
+  if (message.includes('validation_error')) {
+    return 'Enter a valid email address.';
+  }
+  if (message.includes('duplicate_email')) {
+    return 'An account with this email already exists. Sign in or reset your password.';
+  }
+  if (message.includes('network request failed') || message.includes('failed to fetch')) {
+    return 'Cannot reach Supabase right now. Check your internet/VPN and retry.';
+  }
+
+  return extractErrorMessage(error);
+}
+
 function extractCallbackType(url: string | null | undefined): string | null {
   if (!url) {
     return null;
@@ -271,6 +288,7 @@ type AuthContextValue = {
   isLoading: boolean;
   isSigningOut: boolean;
   setIntakeDraft: (draft: CandidateIntake) => void;
+  checkCandidateSignupEmailAvailability: (email: string) => Promise<void>;
   registerCandidateWithPassword: (input: CandidateRegistration) => Promise<void>;
   signInWithEmailPassword: (email: string, password: string) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
@@ -281,6 +299,10 @@ type AuthContextValue = {
   verifySmsOtp: (phone: string, token: string) => Promise<void>;
   persistDraftAfterVerification: () => Promise<void>;
   updateCandidateProfileIntake: (input: CandidateIntake) => Promise<void>;
+  updateCandidateProfilePicture: (input: {
+    sourceUri: string | null;
+    mimeTypeHint?: string | null;
+  }) => Promise<string | null>;
   deleteAccount: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -315,7 +337,17 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+function isMissingUsersProfileColumnError(message: string): boolean {
+  const lowered = message.toLowerCase();
+  return (
+    (lowered.includes('users_profile.profile_picture_url') && lowered.includes('does not exist')) ||
+    (lowered.includes('users_profile.jd_degree_date') && lowered.includes('does not exist')) ||
+    lowered.includes('column "profile_picture_url" does not exist') ||
+    lowered.includes('column "jd_degree_date" does not exist')
+  );
+}
+
+async function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, label: string): Promise<T> {
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutHandle = setTimeout(() => {
@@ -324,7 +356,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
   });
 
   try {
-    return await Promise.race([promise, timeoutPromise]);
+    return await Promise.race([Promise.resolve(promise), timeoutPromise]);
   } finally {
     if (timeoutHandle) {
       clearTimeout(timeoutHandle);
@@ -334,13 +366,36 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 
 async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
   try {
-    const [profileResult, preferencesResult, consentsResult] = await withTimeout(
-      Promise.all([
+    const fullProfileSelect =
+      'id, role, name, email, mobile, profile_picture_url, jd_degree_date, onboarding_complete';
+    const legacyProfileSelect = 'id, role, name, email, mobile, onboarding_complete';
+
+    let profileIncludesOptionalColumns = true;
+    let profileResult = await withTimeout(
+      supabase
+        .from('users_profile')
+        .select(fullProfileSelect)
+        .eq('id', userId)
+        .maybeSingle(),
+      5000,
+      'Profile fetch',
+    );
+
+    if (profileResult.error && isMissingUsersProfileColumnError(profileResult.error.message)) {
+      profileIncludesOptionalColumns = false;
+      profileResult = await withTimeout(
         supabase
           .from('users_profile')
-          .select('id, role, name, email, mobile, onboarding_complete')
+          .select(legacyProfileSelect)
           .eq('id', userId)
           .maybeSingle(),
+        5000,
+        'Profile legacy fetch',
+      );
+    }
+
+    const [preferencesResult, consentsResult] = await withTimeout(
+      Promise.all([
         supabase
           .from('candidate_preferences')
           .select('cities, other_city_text, practice_areas, practice_area, other_practice_text')
@@ -353,7 +408,7 @@ async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
           .maybeSingle(),
       ]),
       5000,
-      'Profile fetch',
+      'Profile related fetch',
     );
 
     if (profileResult.error) {
@@ -385,17 +440,30 @@ async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
       };
     }
 
-    const profileRow = profileResult.data as Pick<
-      CandidateProfile,
-      'id' | 'role' | 'name' | 'email' | 'mobile' | 'onboarding_complete'
-    >;
+    const profileRow = profileResult.data as {
+      id: string;
+      role: CandidateProfile['role'];
+      name: string | null;
+      email: string;
+      mobile: string | null;
+      onboarding_complete?: boolean | null;
+      profile_picture_url?: string | null;
+      jd_degree_date?: string | null;
+    };
     const preferences = (preferencesResult.data as CandidatePreferencesRow | null) ?? null;
     const consents = (consentsResult.data as CandidateConsentsRow | null) ?? null;
 
     return {
       ok: true,
       profile: {
-        ...profileRow,
+        id: profileRow.id,
+        role: profileRow.role,
+        name: profileRow.name,
+        email: profileRow.email,
+        mobile: profileRow.mobile,
+        profile_picture_url: profileIncludesOptionalColumns ? (profileRow.profile_picture_url ?? null) : null,
+        jd_degree_date: profileIncludesOptionalColumns ? (profileRow.jd_degree_date ?? null) : null,
+        onboarding_complete: profileRow.onboarding_complete ?? true,
         preferredCities: Array.isArray(preferences?.cities) ? preferences.cities : [],
         otherCityText: preferences?.other_city_text ?? null,
         practiceAreas: Array.isArray(preferences?.practice_areas)
@@ -746,20 +814,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     void (async () => {
-      const { error } = await supabase.from('users_profile').update({ email: sessionEmail }).eq('id', userId);
-      if (error || cancelled) {
-        return;
-      }
-
-      setProfile((previous) => {
-        if (!previous || previous.id !== userId) {
-          return previous;
+      try {
+        const { error } = await supabase.from('users_profile').update({ email: sessionEmail }).eq('id', userId);
+        if (error || cancelled) {
+          return;
         }
-        return {
-          ...previous,
-          email: sessionEmail,
-        };
-      });
+
+        setProfile((previous) => {
+          if (!previous || previous.id !== userId) {
+            return previous;
+          }
+          return {
+            ...previous,
+            email: sessionEmail,
+          };
+        });
+      } catch {
+        // Non-blocking best-effort sync.
+      }
     })();
 
     return () => {
@@ -790,6 +862,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLoading,
       isSigningOut,
       setIntakeDraft: (draft) => setIntakeDraftState(draft),
+      checkCandidateSignupEmailAvailability: async (email: string) => {
+        if (authConfigError) {
+          throw new Error(authConfigError);
+        }
+
+        const normalizedEmail = email.trim().toLowerCase();
+        if (!normalizedEmail) {
+          throw new Error('Enter your email address.');
+        }
+
+        try {
+          await callPublicFunctionJson<{ ok: true; available: true }>(
+            'check_candidate_signup_email',
+            { email: normalizedEmail },
+          );
+        } catch (error) {
+          throw new Error(mapSignupEmailCheckErrorToUserMessage(error));
+        }
+      },
       registerCandidateWithPassword: async (input: CandidateRegistration) => {
         if (authConfigError) {
           throw new Error(authConfigError);
@@ -816,14 +907,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error(authConfigError);
         }
         try {
-          const result = await callPublicFunctionJson<{
-            ok: true;
-            session: PasswordAuthSessionPayload;
-          }>('mobile_sign_in_with_identifier_password', {
-            identifier: email.trim().toLowerCase(),
+          const { error } = await supabase.auth.signInWithPassword({
+            email: email.trim().toLowerCase(),
             password,
           });
-          await setSupabaseSessionFromPasswordAuth(result.session);
+          if (error) {
+            throw error;
+          }
         } catch (error) {
           throw new Error(mapPasswordAuthErrorToUserMessage(error));
         }
@@ -972,6 +1062,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const transitionSeq = authTransitionSeqRef.current + 1;
         authTransitionSeqRef.current = transitionSeq;
         await hydrateProfileForSession(session, transitionSeq);
+      },
+      updateCandidateProfilePicture: async ({
+        sourceUri,
+        mimeTypeHint,
+      }: {
+        sourceUri: string | null;
+        mimeTypeHint?: string | null;
+      }) => {
+        const activeSession = await ensureValidSession();
+        const userId = activeSession.user.id;
+
+        const { data: currentProfileRow, error: currentProfileError } = await supabase
+          .from('users_profile')
+          .select('profile_picture_url')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (currentProfileError) {
+          throw new Error(currentProfileError.message);
+        }
+
+        const existingProfilePictureUrl =
+          ((currentProfileRow as { profile_picture_url?: string | null } | null)?.profile_picture_url ??
+            profile?.profile_picture_url) ??
+          null;
+
+        let nextProfilePictureUrl: string | null = null;
+        if (sourceUri) {
+          nextProfilePictureUrl = await uploadProfilePictureForUser({
+            userId,
+            sourceUri,
+            mimeTypeHint,
+          });
+        }
+
+        const { error: updateError } = await supabase
+          .from('users_profile')
+          .update({ profile_picture_url: nextProfilePictureUrl })
+          .eq('id', userId);
+
+        if (updateError) {
+          if (nextProfilePictureUrl) {
+            await removeProfilePictureByUrl(nextProfilePictureUrl).catch(() => undefined);
+          }
+          throw new Error(updateError.message);
+        }
+
+        if (
+          existingProfilePictureUrl &&
+          existingProfilePictureUrl !== nextProfilePictureUrl
+        ) {
+          await removeProfilePictureByUrl(existingProfilePictureUrl).catch(() => undefined);
+        }
+
+        setProfile((previous) => {
+          if (!previous || previous.id !== userId) {
+            return previous;
+          }
+          return {
+            ...previous,
+            profile_picture_url: nextProfilePictureUrl,
+          };
+        });
+
+        return nextProfilePictureUrl;
       },
       deleteAccount: async () => {
         if (!session?.user.id) {
