@@ -14,6 +14,7 @@ import { Controller, useForm } from 'react-hook-form';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CalendarSyncCard } from '../../components/calendar-sync-card';
+import { CandidatePageTitle } from '../../components/candidate-page-title';
 import { PasswordInput } from '../../components/password-input';
 import { ScreenShell } from '../../components/screen-shell';
 import { SignOutButton } from '../../components/sign-out-button';
@@ -660,7 +661,7 @@ export function ProfileScreen() {
 
   return (
     <ScreenShell>
-      <Text style={styles.title}>Profile</Text>
+      <CandidatePageTitle title="Profile" />
 
       {h.profile ? (
         <>
@@ -856,11 +857,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: uiColors.textPrimary,
     fontSize: 16,
-    fontWeight: '700',
-  },
-  title: {
-    color: uiColors.textPrimary,
-    fontSize: 24,
     fontWeight: '700',
   },
   wrap: {
