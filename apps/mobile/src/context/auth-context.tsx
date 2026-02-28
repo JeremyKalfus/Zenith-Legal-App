@@ -207,6 +207,15 @@ function mapSignupEmailCheckErrorToUserMessage(error: unknown): string {
   return extractErrorMessage(error);
 }
 
+function isSignupEmailCheckUnavailableError(error: unknown): boolean {
+  const message = extractErrorMessage(error).toLowerCase();
+  return (
+    message.includes('not_found') ||
+    message.includes('request failed (404)') ||
+    message.includes('function not found')
+  );
+}
+
 function extractCallbackType(url: string | null | undefined): string | null {
   if (!url) {
     return null;
@@ -878,6 +887,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             { email: normalizedEmail },
           );
         } catch (error) {
+          if (isSignupEmailCheckUnavailableError(error)) {
+            // Fail open when precheck function is not deployed yet; final registration still enforces uniqueness.
+            return;
+          }
           throw new Error(mapSignupEmailCheckErrorToUserMessage(error));
         }
       },
