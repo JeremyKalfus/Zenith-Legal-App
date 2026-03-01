@@ -3,6 +3,8 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   CITY_OPTIONS,
   filterCandidatesBySearchCityPractice,
+  getJdDegreeDateLabel,
+  getJdDegreeYear,
   PRACTICE_AREAS,
   type CityOption,
   type PracticeArea,
@@ -39,6 +41,7 @@ export function StaffCandidatesScreen({
   const [query, setQuery] = useState('');
   const [selectedCities, setSelectedCities] = useState<CityOption[]>([]);
   const [selectedPracticeAreas, setSelectedPracticeAreas] = useState<PracticeArea[]>([]);
+  const [selectedJdYears, setSelectedJdYears] = useState<string[]>([]);
   const [showAllCityFilters, setShowAllCityFilters] = useState(false);
   const [showAllPracticeFilters, setShowAllPracticeFilters] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,8 +69,21 @@ export function StaffCandidatesScreen({
       query,
       selectedCities,
       selectedPracticeAreas,
+      selectedJdYears,
     });
-  }, [candidates, query, selectedCities, selectedPracticeAreas]);
+  }, [candidates, query, selectedCities, selectedPracticeAreas, selectedJdYears]);
+
+  const jdYearOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          candidates
+            .map((candidate) => getJdDegreeYear(candidate.jdDegreeDate))
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ).sort((left, right) => Number(right) - Number(left)),
+    [candidates],
+  );
 
   return (
     <ScreenShell showBanner={false}>
@@ -129,6 +145,29 @@ export function StaffCandidatesScreen({
         <Text style={styles.expandButtonText}>{showAllPracticeFilters ? 'Show less' : 'See more'}</Text>
       </Pressable>
 
+      <Text style={styles.filterLabel}>Filter by JD year</Text>
+      {jdYearOptions.length === 0 ? (
+        <Text style={styles.emptyText}>No JD years available.</Text>
+      ) : (
+        <View style={styles.chipWrap}>
+          {jdYearOptions.map((year) => {
+            const selected = selectedJdYears.includes(year);
+            return (
+              <FilterChip
+                key={year}
+                label={year}
+                selected={selected}
+                onPress={() => {
+                  setSelectedJdYears((current) => (selected
+                    ? current.filter((value) => value !== year)
+                    : [...current, year]));
+                }}
+              />
+            );
+          })}
+        </View>
+      )}
+
       <Pressable style={styles.secondaryButton} onPress={() => void loadCandidates()}>
         <Text style={styles.secondaryButtonText}>{isLoading ? 'Refreshing...' : 'Refresh list'}</Text>
       </Pressable>
@@ -147,9 +186,21 @@ export function StaffCandidatesScreen({
               style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
               onPress={() => onOpenCandidate(candidate)}
             >
-              <Text style={styles.cardTitle}>{candidate.name || 'Unnamed Candidate'}</Text>
-              <Text style={styles.cardText}>{candidate.email}</Text>
-              <Text style={styles.cardSubtle}>{candidate.mobile}</Text>
+              <View style={styles.cardHeader}>
+                <View style={styles.avatarPlaceholder}>
+                  <Text style={styles.avatarPlaceholderText}>
+                    {(candidate.name || 'C').trim().charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={styles.cardMeta}>
+                  <Text style={styles.cardTitle}>{candidate.name || 'Unnamed Candidate'}</Text>
+                  <Text style={styles.cardText}>{candidate.email}</Text>
+                  <Text style={styles.cardSubtle}>{candidate.mobile || 'No mobile on file'}</Text>
+                  <Text style={styles.cardSubtle}>
+                    JD degree date: {getJdDegreeDateLabel(candidate.jdDegreeDate)}
+                  </Text>
+                </View>
+              </View>
             </Pressable>
           ))
         )}
@@ -162,6 +213,21 @@ const styles = StyleSheet.create({
   body: {
     color: uiColors.textSecondary,
   },
+  avatarPlaceholder: {
+    alignItems: 'center',
+    backgroundColor: uiColors.divider,
+    borderColor: uiColors.border,
+    borderRadius: 24,
+    borderWidth: 1,
+    height: 48,
+    justifyContent: 'center',
+    width: 48,
+  },
+  avatarPlaceholderText: {
+    color: uiColors.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
   card: {
     backgroundColor: uiColors.surface,
     borderColor: uiColors.border,
@@ -171,6 +237,15 @@ const styles = StyleSheet.create({
   },
   cardPressed: {
     backgroundColor: uiColors.background,
+  },
+  cardHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  cardMeta: {
+    flex: 1,
+    minWidth: 0,
   },
   cardSubtle: {
     color: uiColors.textMuted,

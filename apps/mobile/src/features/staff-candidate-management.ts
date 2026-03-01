@@ -10,9 +10,10 @@ import { getFunctionErrorMessage } from '../lib/function-error';
 
 export type StaffCandidateListItem = {
   id: string;
-  name: string;
+  name: string | null;
   email: string;
-  mobile: string;
+  mobile: string | null;
+  jdDegreeDate: string | null;
   preferredCities: CityOption[];
   practiceAreas: PracticeArea[];
 };
@@ -59,7 +60,7 @@ function isTrackedFirmStatus(value: unknown): value is FirmStatus {
 export async function listStaffCandidates(): Promise<StaffCandidateListItem[]> {
   const { data, error } = await supabase
     .from('users_profile')
-    .select('id,name,email,mobile')
+    .select('id,name,email,mobile,jd_degree_date')
     .eq('role', 'candidate')
     .order('name', { ascending: true });
 
@@ -69,9 +70,10 @@ export async function listStaffCandidates(): Promise<StaffCandidateListItem[]> {
 
   const candidateRows = (data ?? []) as {
     id: string;
-    name: string;
+    name: string | null;
     email: string;
-    mobile: string;
+    mobile: string | null;
+    jd_degree_date: string | null;
   }[];
 
   if (candidateRows.length === 0) {
@@ -105,6 +107,7 @@ export async function listStaffCandidates(): Promise<StaffCandidateListItem[]> {
 
     return {
       ...candidate,
+      jdDegreeDate: candidate.jd_degree_date ?? null,
       preferredCities: normalizedPreferences.preferredCities,
       practiceAreas: normalizedPreferences.practiceAreas,
     };

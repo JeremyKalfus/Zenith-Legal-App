@@ -394,3 +394,42 @@
 **Rationale:** The requested UX requires Sign Up to be email-first and to route users into a finish-profile style screen with locked email and credentials collected there. Precheck enables immediate “account exists” handling and tab-switch to login before full form entry.
 
 **Consequences:** Added public edge function `check_candidate_signup_email` and new unauthenticated route `SignupFinishProfile`. Auth menu now hides password on Sign Up. Intake screen gained `signupCompletion` mode with locked email, password fields, and privacy-only consent UI.
+
+### [2026-02-28] JD date filtering depends on migration parity + shared JD-year filter semantics
+
+**Decision:** Treat `users_profile.jd_degree_date` as required schema for staff candidate-management surfaces and implement JD filtering as year-based chips in shared filter logic (`search AND (city OR practice OR JD year)`).
+
+**Options considered:**
+1. Keep `jd_degree_date` optional in app queries with no filter support -- avoids migration dependency but does not satisfy JD filter requirements.
+2. Add UI-only filters without schema enforcement -- brittle and fails when remote schema is behind.
+3. Apply migration parity first and add shared JD-year filter path across admin + mobile (chosen).
+
+**Rationale:** The runtime error came from schema drift: app code selected `jd_degree_date` while the linked remote DB was missing migration `20260228161000`. Applying migration first removes the root cause; implementing JD year filtering in shared logic keeps admin/mobile behavior consistent.
+
+**Consequences:** `supabase db push` for `20260228161000_candidate_jd_degree_date.sql` is now a required environment step. Staff candidate flows on admin and mobile now include JD-year filters built from `jd_degree_date`.
+
+### [2026-02-28] Appointment review scheduling posts chat update but does not fail closed
+
+**Decision:** When staff schedules a pending appointment via `staff_review_appointment`, post a candidate-channel chat message, but do not fail the appointment scheduling transaction if chat posting fails.
+
+**Options considered:**
+1. Fail closed on chat post errors -- guarantees chat side-effect, but blocks scheduling on external chat/transient issues.
+2. Skip chat posting on review path -- avoids coupling, but misses required user-facing text updates.
+3. Attempt chat post and fail open with structured logging on error (chosen).
+
+**Rationale:** Scheduling is the primary operation; chat updates are important but secondary. Failing open preserves core workflow reliability while still surfacing operational issues through logs.
+
+**Consequences:** `staff_review_appointment` now sends an in-app text update for scheduled decisions and logs `appointment_review_channel_message_failed` errors without returning non-2xx for notification-only failures.
+
+### [2026-02-28] Candidate-to-staff promotion via dedicated staff edge function
+
+**Decision:** Add a dedicated staff-only edge function `staff_update_user_role` for admin role promotion (`candidate -> staff`) instead of direct client table updates.
+
+**Options considered:**
+1. Direct client-side `users_profile.role` update under RLS -- works with staff policies but lacks centralized validation/audit semantics.
+2. Reuse existing delete/assignment functions for role mutation -- wrong abstraction and mixed responsibilities.
+3. Add dedicated audited function for role changes (chosen).
+
+**Rationale:** Role mutation is a privileged operation and should be validated, audited, and error-coded server-side.
+
+**Consequences:** Admin candidate manager now exposes a Promote to Staff action backed by `staff_update_user_role`; all role promotions from this workflow are audited via `audit_events`.

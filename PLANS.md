@@ -28,6 +28,9 @@
 - [x] Candidate dashboard authorization UX semantics (waiting decline deletes assignment; authorized decline labeled cancel)
 - [x] Code quality pass: duplicate consolidation, theme centralization, hook extraction, edge function refactoring (desloppify strict 85.7 → 86.2)
 - [x] Semantic firm-status badge palette across candidate/staff/admin listing surfaces
+- [x] Staff candidate JD-year filtering in admin + mobile candidate lists (`search AND (city OR practice OR JD year)`)
+- [x] Staff appointment review scheduling posts candidate-channel chat updates (fail-open on chat notification errors)
+- [x] Admin candidate manager role promotion flow (`candidate -> staff`) via audited `staff_update_user_role` edge function
 - [x] Staff mobile per-candidate banner contact override controls (save + reset to global default)
 - [x] Mobile icon/logo mark scaled +14% across app icon assets (`icon`, `adaptive-icon`, `splash-icon`, `favicon`)
 - [ ] Vendor credential wiring for end-to-end runtime (requires secrets)

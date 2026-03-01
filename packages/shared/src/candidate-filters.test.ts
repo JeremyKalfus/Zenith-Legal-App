@@ -51,6 +51,7 @@ describe('filterCandidatesBySearchCityPractice', () => {
       name: 'Alice Adams',
       email: 'alice@example.com',
       mobile: '+12025550101',
+      jdDegreeDate: '2022-05-15',
       preferredCities: ['NYC'] as const,
       practiceAreas: ['Litigation'] as const,
     },
@@ -59,6 +60,7 @@ describe('filterCandidatesBySearchCityPractice', () => {
       name: 'Bob Brown',
       email: 'bob@example.com',
       mobile: '+12025550102',
+      jdDegreeDate: '2020-05-15',
       preferredCities: ['Boston'] as const,
       practiceAreas: ['Tax & Benefits'] as const,
     },
@@ -67,6 +69,7 @@ describe('filterCandidatesBySearchCityPractice', () => {
       name: 'Carol Clark',
       email: 'carol@example.com',
       mobile: '+12025550103',
+      jdDegreeDate: null,
       preferredCities: [] as const,
       practiceAreas: [] as const,
     },
@@ -77,6 +80,7 @@ describe('filterCandidatesBySearchCityPractice', () => {
       query: 'alice',
       selectedCities: [],
       selectedPracticeAreas: [],
+      selectedJdYears: [],
     });
 
     expect(result.map((candidate) => candidate.id)).toEqual(['1']);
@@ -87,6 +91,7 @@ describe('filterCandidatesBySearchCityPractice', () => {
       query: '',
       selectedCities: ['NYC', 'Boston'],
       selectedPracticeAreas: [],
+      selectedJdYears: [],
     });
 
     expect(result.map((candidate) => candidate.id)).toEqual(['1', '2']);
@@ -97,6 +102,7 @@ describe('filterCandidatesBySearchCityPractice', () => {
       query: '',
       selectedCities: [],
       selectedPracticeAreas: ['Tax & Benefits', 'Litigation'],
+      selectedJdYears: [],
     });
 
     expect(result.map((candidate) => candidate.id)).toEqual(['1', '2']);
@@ -107,6 +113,7 @@ describe('filterCandidatesBySearchCityPractice', () => {
       query: '',
       selectedCities: ['Boston'],
       selectedPracticeAreas: ['Litigation'],
+      selectedJdYears: [],
     });
 
     expect(result.map((candidate) => candidate.id)).toEqual(['1', '2']);
@@ -117,6 +124,7 @@ describe('filterCandidatesBySearchCityPractice', () => {
       query: 'bob',
       selectedCities: ['NYC'],
       selectedPracticeAreas: ['Litigation'],
+      selectedJdYears: [],
     });
 
     expect(result.map((candidate) => candidate.id)).toEqual([]);
@@ -127,6 +135,40 @@ describe('filterCandidatesBySearchCityPractice', () => {
       query: '',
       selectedCities: ['DC'],
       selectedPracticeAreas: ['White Collar'],
+      selectedJdYears: [],
+    });
+
+    expect(result.map((candidate) => candidate.id)).toEqual([]);
+  });
+
+  it('filters by selected JD graduation years', () => {
+    const result = filterCandidatesBySearchCityPractice(candidates, {
+      query: '',
+      selectedCities: [],
+      selectedPracticeAreas: [],
+      selectedJdYears: ['2022'],
+    });
+
+    expect(result.map((candidate) => candidate.id)).toEqual(['1']);
+  });
+
+  it('uses JD year OR city OR practice when multiple chip groups are selected', () => {
+    const result = filterCandidatesBySearchCityPractice(candidates, {
+      query: '',
+      selectedCities: ['Boston'],
+      selectedPracticeAreas: [],
+      selectedJdYears: ['2022'],
+    });
+
+    expect(result.map((candidate) => candidate.id)).toEqual(['1', '2']);
+  });
+
+  it('enforces search AND (city OR practice OR JD year)', () => {
+    const result = filterCandidatesBySearchCityPractice(candidates, {
+      query: 'carol',
+      selectedCities: [],
+      selectedPracticeAreas: [],
+      selectedJdYears: ['2022'],
     });
 
     expect(result.map((candidate) => candidate.id)).toEqual([]);

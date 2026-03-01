@@ -3,6 +3,7 @@ import { errorResponse, jsonResponse } from '../_shared/http.ts';
 import { createServiceClient } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
 import { syncAppointmentForParticipants } from '../_shared/calendar-sync.ts';
+import { sendCandidateRecruiterChannelMessage } from '../_shared/stream-chat.ts';
 import {
   queueAppointmentReminderNotifications,
   queueAppointmentStatusNotifications,
@@ -13,6 +14,28 @@ const appointmentReviewSchema = z.object({
   appointment_id: z.string().uuid(),
   decision: z.enum(['accepted', 'declined']),
 });
+
+function formatAppointmentTimestampForMessage(appointment: {
+  start_at_utc: string;
+  timezone_label: string;
+}) {
+  const startAt = new Date(appointment.start_at_utc);
+  if (Number.isNaN(startAt.getTime())) {
+    return appointment.start_at_utc;
+  }
+
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: appointment.timezone_label,
+    }).format(startAt);
+  } catch {
+    return startAt.toISOString();
+  }
+}
 
 const staffReviewAppointmentHandler = createEdgeHandler(
   async ({ request, userId }) => {
@@ -116,6 +139,33 @@ const staffReviewAppointmentHandler = createEdgeHandler(
       appointment: updated,
       participantUserIds: [appointment.candidate_user_id, actorUserId],
     });
+
+    if (nextStatus === 'scheduled') {
+      const appointmentStartLabel = formatAppointmentTimestampForMessage(updated);
+      try {
+        await sendCandidateRecruiterChannelMessage({
+          serviceClient,
+          candidateUserId: appointment.candidate_user_id,
+          actorUserId,
+          text:
+            `Appointment scheduled: "${updated.title}" on ${appointmentStartLabel} ` +
+            `(${updated.timezone_label}).`,
+        });
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            event: 'appointment_review_channel_message_failed',
+            appointment_id: appointment.id,
+            candidate_user_id: appointment.candidate_user_id,
+            actor_user_id: actorUserId,
+            message_error:
+              error instanceof Error && error.message
+                ? error.message
+                : String(error),
+          }),
+        );
+      }
+    }
 
     await writeAuditEvent({
       client: serviceClient,

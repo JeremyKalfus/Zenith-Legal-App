@@ -64,6 +64,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 | `staff_update_assignment_status` | Staff JWT | Update assignment status |
 | `staff_unassign_firm_from_candidate` | Staff JWT | Remove firm assignment |
 | `staff_delete_user` | Staff JWT | Hard-delete candidate user accounts from admin workflow (candidate-only scope) |
+| `staff_update_user_role` | Staff JWT | Promote candidate accounts to staff from admin workflow (`candidate -> staff`) |
 | `bulk_paste_ingest_firms` | Staff JWT | Bulk firm data import |
 | `staff_handle_data_request` | Staff JWT | Process support/data requests |
 | `dispatch_notifications` | Internal | Dual-mode notification function: enqueue events into `notification_deliveries` or process due queued push deliveries (`send_after_utc <= now`) via Expo Push API (email provider integration pending). Supports `appointment.reminder` events for 15-minute pre-meeting pushes. Internal helpers: `fetchTokensByUser`, `processSingleDelivery`, `revokeStaleTokens`, `claimQueuedPushDelivery`, `markDeliveryStatus` |
@@ -73,7 +74,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 
 ## Database Schema
 
-21 migrations in `supabase/migrations/`. Key tables:
+22 migrations in `supabase/migrations/`. Key tables:
 
 - `users_profile` -- User identity and role (candidate/staff)
 - `users_profile` includes candidate profile metadata used across mobile/admin surfaces (`jd_degree_date`)
@@ -108,11 +109,11 @@ The shared package (`packages/shared/`) exports modules consumed by both admin a
 - **`domain.ts`** -- Zod schemas, enums, and TypeScript types for the domain model.
 - **`phone.ts`** -- Phone number formatting and validation utilities.
 - **`staff-messaging.ts`** -- Staff messaging helpers consolidated from duplicate implementations in admin and mobile: `StaffMessageInboxItem` type, `parseCandidateUserIdFromChannelId`, `mapChannelsToStaffInboxItems`, `formatRelativeTimestamp`.
-- **`candidate-filters.ts`** -- Candidate preference normalization and shared staff-candidate filtering logic (`search AND (city OR practice)`), including legacy `practice_area` fallback when `practice_areas` is empty.
+- **`candidate-filters.ts`** -- Candidate preference normalization and shared staff-candidate filtering logic (`search AND (city OR practice OR JD year)`), including legacy `practice_area` fallback when `practice_areas` is empty.
 
 The package uses `"main": "src/index.ts"` (no build step). Admin consumes it via `transpilePackages: ['@zenith/shared']` in `next.config.ts`. Mobile consumes it directly.
 
-Staff candidate list flows (mobile `staff-candidates-screen` and admin `candidate-firm-manager`) now hydrate profile rows from `users_profile` with `candidate_preferences` (`cities`, `practice_areas`, `practice_area`) and apply the shared filter helper for consistent behavior across both surfaces.
+Staff candidate list flows (mobile `staff-candidates-screen` and admin `candidate-firm-manager`) now hydrate profile rows from `users_profile` with `candidate_preferences` (`cities`, `practice_areas`, `practice_area`) and apply the shared filter helper for consistent behavior across both surfaces, including JD graduation year filtering via `users_profile.jd_degree_date`.
 The same staff candidate profile surfaces render candidate identity details and `users_profile.jd_degree_date` for recruiter/admin visibility.
 
 ## Mobile Theme System

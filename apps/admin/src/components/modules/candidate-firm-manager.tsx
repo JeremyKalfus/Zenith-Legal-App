@@ -5,6 +5,8 @@ import {
   CITY_OPTIONS,
   filterCandidatesBySearchCityPractice,
   FIRM_STATUSES,
+  getJdDegreeDateLabel,
+  getJdDegreeYear,
   normalizeCandidatePreferences,
   PRACTICE_AREAS,
   type CityOption,
@@ -20,9 +22,10 @@ import { getFirmStatusBadgeClasses } from '@/features/firm-status-badge';
 
 type CandidateListItem = {
   id: string;
-  name: string;
+  name: string | null;
   email: string;
-  mobile: string;
+  mobile: string | null;
+  jdDegreeDate: string | null;
   preferredCities: CityOption[];
   practiceAreas: PracticeArea[];
 };
@@ -65,6 +68,14 @@ function filterAssignableFirms(
   });
 }
 
+function getCandidateInitial(name: string | null | undefined): string {
+  const trimmed = name?.trim();
+  if (!trimmed) {
+    return 'C';
+  }
+  return trimmed.charAt(0).toUpperCase();
+}
+
 function useCandidateFirmManager() {
   const [candidates, setCandidates] = useState<CandidateListItem[]>([]);
   const [firms, setFirms] = useState<FirmListItem[]>([]);
@@ -76,9 +87,11 @@ function useCandidateFirmManager() {
   const [candidateFilters, setCandidateFilters] = useState<{
     selectedCities: CityOption[];
     selectedPracticeAreas: PracticeArea[];
+    selectedJdYears: string[];
   }>({
     selectedCities: [],
     selectedPracticeAreas: [],
+    selectedJdYears: [],
   });
   const [showAllCityFilters, setShowAllCityFilters] = useState(false);
   const [showAllPracticeFilters, setShowAllPracticeFilters] = useState(false);
@@ -89,6 +102,7 @@ function useCandidateFirmManager() {
   const [pendingStatuses, setPendingStatuses] = useState<Record<string, FirmStatus>>({});
   const selectedCities = candidateFilters.selectedCities;
   const selectedPracticeAreas = candidateFilters.selectedPracticeAreas;
+  const selectedJdYears = candidateFilters.selectedJdYears;
 
   const loadBaseData = useCallback(async () => {
     setIsLoadingCandidates(true);
@@ -97,7 +111,7 @@ function useCandidateFirmManager() {
     const [candidateResult, firmResult] = await Promise.all([
       supabaseClient
         .from('users_profile')
-        .select('id,name,email,mobile')
+        .select('id,name,email,mobile,jd_degree_date')
         .eq('role', 'candidate')
         .order('name', { ascending: true }),
       supabaseClient
@@ -112,9 +126,10 @@ function useCandidateFirmManager() {
     } else {
       const baseCandidateRows = (candidateResult.data ?? []) as {
         id: string;
-        name: string;
+        name: string | null;
         email: string;
-        mobile: string;
+        mobile: string | null;
+        jd_degree_date: string | null;
       }[];
 
       const candidateIds = baseCandidateRows.map((candidate) => candidate.id);
@@ -146,6 +161,7 @@ function useCandidateFirmManager() {
         };
         return {
           ...candidate,
+          jdDegreeDate: candidate.jd_degree_date ?? null,
           preferredCities: normalizedPreferences.preferredCities,
           practiceAreas: normalizedPreferences.practiceAreas,
         };
@@ -209,8 +225,21 @@ function useCandidateFirmManager() {
       query: candidateQuery,
       selectedCities,
       selectedPracticeAreas,
+      selectedJdYears,
     }),
-    [candidateQuery, candidates, selectedCities, selectedPracticeAreas],
+    [candidateQuery, candidates, selectedCities, selectedPracticeAreas, selectedJdYears],
+  );
+
+  const jdYearOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          candidates
+            .map((candidate) => getJdDegreeYear(candidate.jdDegreeDate))
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ).sort((left, right) => Number(right) - Number(left)),
+    [candidates],
   );
 
   const assignedFirmIds = useMemo(
@@ -356,6 +385,46 @@ function useCandidateFirmManager() {
     }
   }, [loadBaseData, selectedCandidate]);
 
+  const handlePromoteToStaff = useCallback(async () => {
+    if (!selectedCandidate) {
+      setStatusMessage('Select a candidate before promoting.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Promote ${selectedCandidate.name || 'this candidate'} (${selectedCandidate.email}) to staff?`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setBusyAction('promote-staff');
+    setStatusMessage(null);
+
+    try {
+      const { error } = await supabaseClient.functions.invoke('staff_update_user_role', {
+        body: {
+          user_id: selectedCandidate.id,
+          new_role: 'staff',
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setStatusMessage('Candidate promoted to staff.');
+      setAssignments([]);
+      setPendingStatuses({});
+      setSelectedCandidateId((current) => (current === selectedCandidate.id ? '' : current));
+      await loadBaseData();
+    } catch (error) {
+      setStatusMessage(await getFunctionErrorMessage(error));
+    } finally {
+      setBusyAction(null);
+    }
+  }, [loadBaseData, selectedCandidate]);
+
   const handlePendingStatusChange = useCallback((assignmentId: string, value: FirmStatus) => {
     setPendingStatuses((previous) => ({
       ...previous,
@@ -381,11 +450,22 @@ function useCandidateFirmManager() {
     }));
   }, []);
 
+  const toggleJdYearFilter = useCallback((year: string) => {
+    setCandidateFilters((current) => ({
+      ...current,
+      selectedJdYears: current.selectedJdYears.includes(year)
+        ? current.selectedJdYears.filter((value) => value !== year)
+        : [...current.selectedJdYears, year],
+    }));
+  }, []);
+
   return {
     candidateQuery,
     setCandidateQuery,
     selectedCities,
     selectedPracticeAreas,
+    selectedJdYears,
+    jdYearOptions,
     showAllCityFilters,
     setShowAllCityFilters,
     showAllPracticeFilters,
@@ -408,10 +488,12 @@ function useCandidateFirmManager() {
     handlePendingStatusChange,
     toggleCityFilter,
     togglePracticeFilter,
+    toggleJdYearFilter,
     handleAssignFirm,
     handleUpdateStatus,
     handleUnassign,
     handleDeleteCandidate,
+    handlePromoteToStaff,
     loadAssignments,
   };
 }
@@ -421,12 +503,15 @@ function CandidateListPanel({
   onCandidateQueryChange,
   selectedCities,
   selectedPracticeAreas,
+  selectedJdYears,
+  jdYearOptions,
   showAllCityFilters,
   onToggleShowAllCityFilters,
   showAllPracticeFilters,
   onToggleShowAllPracticeFilters,
   onToggleCity,
   onTogglePracticeArea,
+  onToggleJdYear,
   isLoading,
   candidates,
   selectedCandidateId,
@@ -436,12 +521,15 @@ function CandidateListPanel({
   onCandidateQueryChange: (value: string) => void;
   selectedCities: CityOption[];
   selectedPracticeAreas: PracticeArea[];
+  selectedJdYears: string[];
+  jdYearOptions: string[];
   showAllCityFilters: boolean;
   onToggleShowAllCityFilters: () => void;
   showAllPracticeFilters: boolean;
   onToggleShowAllPracticeFilters: () => void;
   onToggleCity: (city: CityOption) => void;
   onTogglePracticeArea: (practiceArea: PracticeArea) => void;
+  onToggleJdYear: (year: string) => void;
   isLoading: boolean;
   candidates: CandidateListItem[];
   selectedCandidateId: string;
@@ -515,6 +603,31 @@ function CandidateListPanel({
             {showAllPracticeFilters ? 'Show less' : 'See more'}
           </button>
         </div>
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Filter by JD year</p>
+          <div className="flex flex-wrap gap-2">
+            {jdYearOptions.length === 0 ? (
+              <p className="text-xs text-slate-500">No JD years available</p>
+            ) : (
+              jdYearOptions.map((year) => {
+                const selected = selectedJdYears.includes(year);
+                return (
+                  <button
+                    key={year}
+                    type="button"
+                    className={[
+                      'rounded-full px-3 py-1.5 text-xs font-medium',
+                      selected ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-900 hover:bg-slate-300',
+                    ].join(' ')}
+                    onClick={() => onToggleJdYear(year)}
+                  >
+                    {year}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
         <div className="max-h-[480px] overflow-auto rounded-md border border-slate-200">
           {isLoading ? (
             <p className="p-3 text-sm text-slate-500">Loading candidates...</p>
@@ -531,9 +644,19 @@ function CandidateListPanel({
                 ].join(' ')}
                 onClick={() => onSelectCandidate(candidate.id)}
               >
-                <p className="font-semibold text-slate-900">{candidate.name || 'Unnamed Candidate'}</p>
-                <p className="text-slate-600">{candidate.email}</p>
-                <p className="text-xs text-slate-500">{candidate.mobile}</p>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-sm font-semibold text-slate-700">
+                    {getCandidateInitial(candidate.name)}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-900">{candidate.name || 'Unnamed Candidate'}</p>
+                    <p className="truncate text-slate-600">{candidate.email}</p>
+                    <p className="text-xs text-slate-500">{candidate.mobile || 'No mobile on file'}</p>
+                    <p className="text-xs text-slate-500">
+                      JD degree date: {getJdDegreeDateLabel(candidate.jdDegreeDate)}
+                    </p>
+                  </div>
+                </div>
               </button>
             ))
           )}
@@ -630,12 +753,15 @@ export function CandidateFirmManager() {
         onCandidateQueryChange={ctx.setCandidateQuery}
         selectedCities={ctx.selectedCities}
         selectedPracticeAreas={ctx.selectedPracticeAreas}
+        selectedJdYears={ctx.selectedJdYears}
+        jdYearOptions={ctx.jdYearOptions}
         showAllCityFilters={ctx.showAllCityFilters}
         onToggleShowAllCityFilters={() => ctx.setShowAllCityFilters((value) => !value)}
         showAllPracticeFilters={ctx.showAllPracticeFilters}
         onToggleShowAllPracticeFilters={() => ctx.setShowAllPracticeFilters((value) => !value)}
         onToggleCity={ctx.toggleCityFilter}
         onTogglePracticeArea={ctx.togglePracticeFilter}
+        onToggleJdYear={ctx.toggleJdYearFilter}
         isLoading={ctx.isLoadingCandidates}
         candidates={ctx.filteredCandidates}
         selectedCandidateId={ctx.selectedCandidateId}
@@ -645,14 +771,34 @@ export function CandidateFirmManager() {
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle>{ctx.selectedCandidate?.name ?? 'Candidate details'}</CardTitle>
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-base font-semibold text-slate-700">
+                {getCandidateInitial(ctx.selectedCandidate?.name)}
+              </div>
+              <div>
+                <CardTitle>{ctx.selectedCandidate?.name ?? 'Candidate details'}</CardTitle>
+                {ctx.selectedCandidate ? (
+                  <p className="text-xs text-slate-500">
+                    JD degree date: {getJdDegreeDateLabel(ctx.selectedCandidate.jdDegreeDate)}
+                  </p>
+                ) : null}
+              </div>
               <CardDescription>
                 {ctx.selectedCandidate
-                  ? `${ctx.selectedCandidate.email} • ${ctx.selectedCandidate.mobile}`
+                  ? `${ctx.selectedCandidate.email} • ${ctx.selectedCandidate.mobile || 'No mobile on file'}`
                   : 'Select a candidate to manage assignments.'}
               </CardDescription>
             </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!ctx.selectedCandidate || ctx.busyAction !== null}
+              onClick={() => {
+                void ctx.handlePromoteToStaff();
+              }}
+            >
+              {ctx.busyAction === 'promote-staff' ? 'Promoting...' : 'Promote to Staff'}
+            </Button>
             <Button
               variant="destructive"
               size="sm"

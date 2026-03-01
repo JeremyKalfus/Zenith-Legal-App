@@ -28,7 +28,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ### Staff (recruiter)
 - Signs in via invite-only magic link.
 - Manages candidate-firm assignments: assigns firms to candidates, updates assignment statuses, unassigns firms.
-- Filters staff candidate lists by text search plus candidate city/practice chips on mobile and admin candidates pages.
+- Filters staff candidate lists by text search plus candidate city/practice/JD-year chips on mobile and admin candidates pages.
 - Reviews appointment requests (accept/decline).
 - Messages candidates via real-time chat.
 - Ingests firm data in bulk (paste-based).
@@ -110,6 +110,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Operations dashboard with candidate management.
 - Staff Messages page with inbox-first candidate DM channels (Stream Chat web thread view + reply).
 - Candidate management includes candidate account hard delete (candidate-only scope).
+- Candidate management includes role promotion from candidate/user accounts to staff accounts.
 - Candidate-firm assignment manager.
 - Bulk firm ingest via paste.
 

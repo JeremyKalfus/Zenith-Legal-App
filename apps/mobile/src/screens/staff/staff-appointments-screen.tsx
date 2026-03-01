@@ -11,6 +11,7 @@ import {
 import { useAppointmentComposer } from '../../lib/use-appointment-composer';
 import { useCalendarSyncEnabled } from '../../lib/use-calendar-sync-enabled';
 import { useAppointmentCalendarSync } from '../../lib/use-appointment-calendar-sync';
+import { getFunctionErrorMessage } from '../../lib/function-error';
 import { uiColors } from '../../theme/colors';
 import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 import { appointmentSharedStyles } from '../shared/appointment-shared-styles';
@@ -191,7 +192,7 @@ function useStaffAppointmentsScreen() {
         });
 
         if (error) {
-          setStatusMessage(error.message);
+          setStatusMessage(await getFunctionErrorMessage(error));
           return;
         }
 

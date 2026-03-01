@@ -10,6 +10,7 @@ import {
   PRACTICE_AREAS,
   getJdDegreeDateLabel,
   getJdDegreeDayOptions,
+  getJdDegreeYear,
   getJdDegreeYearOptions,
   parseJdDegreeDateParts,
 } from './domain';
@@ -172,6 +173,12 @@ describe('candidate intake schema', () => {
   it('formats JD degree date label from stored date value', () => {
     expect(getJdDegreeDateLabel('2026-05-15')).toBe('May 15, 2026');
     expect(getJdDegreeDateLabel(null)).toBe('Not provided');
+  });
+
+  it('extracts JD degree year from stored date value', () => {
+    expect(getJdDegreeYear('2026-05-15')).toBe('2026');
+    expect(getJdDegreeYear('invalid')).toBeUndefined();
+    expect(getJdDegreeYear(null)).toBeUndefined();
   });
 });
 

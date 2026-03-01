@@ -11,6 +11,7 @@ import { Textarea } from '../ui/textarea';
 import { supabaseClient } from '@/lib/supabase-client';
 import { bulkPasteSchema, parseFirmLines, type BulkPasteInput } from '@/schemas/ingest';
 import { getFirmStatusBadgeClasses } from '@/features/firm-status-badge';
+import { getFunctionErrorMessage } from '@/lib/function-error';
 
 type Candidate = { id: string; name: string; email: string };
 type Firm = { id: string; name: string };
@@ -274,7 +275,7 @@ function useOperationsDashboard() {
         { body: { appointment_id: appointmentId, decision } },
       );
       if (error) {
-        setStatusMessage(error.message);
+        setStatusMessage(await getFunctionErrorMessage(error));
       } else {
         setStatusMessage(decision === 'accepted' ? 'Appointment scheduled.' : 'Appointment declined.');
         loadData();

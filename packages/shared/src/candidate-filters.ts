@@ -1,5 +1,6 @@
 import {
   CITY_OPTIONS,
+  getJdDegreeYear,
   PRACTICE_AREAS,
   type CityOption,
   type PracticeArea,
@@ -20,12 +21,15 @@ export type CandidateFilterable = {
   mobile?: string | null;
   preferredCities?: readonly CityOption[] | null;
   practiceAreas?: readonly PracticeArea[] | null;
+  jdDegreeDate?: string | null;
+  jd_degree_date?: string | null;
 };
 
 export type CandidateFilterInput = {
   query: string;
   selectedCities: readonly CityOption[];
   selectedPracticeAreas: readonly PracticeArea[];
+  selectedJdYears?: readonly string[];
 };
 
 function isCityOption(value: unknown): value is CityOption {
@@ -77,9 +81,11 @@ export function filterCandidatesBySearchCityPractice<T extends CandidateFilterab
   const normalizedQuery = input.query.trim().toLowerCase();
   const selectedCitySet = new Set(input.selectedCities);
   const selectedPracticeSet = new Set(input.selectedPracticeAreas);
+  const selectedJdYearSet = new Set(input.selectedJdYears ?? []);
   const hasCityFilters = selectedCitySet.size > 0;
   const hasPracticeFilters = selectedPracticeSet.size > 0;
-  const hasAnyChipFilters = hasCityFilters || hasPracticeFilters;
+  const hasJdYearFilters = selectedJdYearSet.size > 0;
+  const hasAnyChipFilters = hasCityFilters || hasPracticeFilters || hasJdYearFilters;
 
   return candidates.filter((candidate) => {
     const searchMatch = normalizedQuery.length === 0 || [candidate.name, candidate.email, candidate.mobile]
@@ -98,7 +104,9 @@ export function filterCandidatesBySearchCityPractice<T extends CandidateFilterab
       .some((city) => selectedCitySet.has(city));
     const practiceMatch = hasPracticeFilters && (candidate.practiceAreas ?? [])
       .some((practiceArea) => selectedPracticeSet.has(practiceArea));
+    const jdYear = getJdDegreeYear(candidate.jdDegreeDate ?? candidate.jd_degree_date);
+    const jdYearMatch = hasJdYearFilters && Boolean(jdYear && selectedJdYearSet.has(jdYear));
 
-    return cityMatch || practiceMatch;
+    return cityMatch || practiceMatch || jdYearMatch;
   });
 }

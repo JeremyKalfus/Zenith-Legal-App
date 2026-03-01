@@ -13,7 +13,41 @@ const ERROR_CODE_MESSAGES: Record<string, string> = {
   appointment_conflict: 'Scheduling this appointment would create a scheduling conflict.',
   invalid_status_transition: 'This appointment cannot be reviewed in its current state.',
   status_update_failed: 'Unable to update the status. Please try again.',
+  role_already_set: 'This account already has that role.',
+  role_update_forbidden: 'Only candidate accounts can be promoted from this workflow.',
+  role_update_failed: 'Unable to update the account role. Please try again.',
 };
+
+function isResponseLike(
+  value: unknown,
+): value is { json: () => Promise<unknown>; text?: () => Promise<string>; clone?: () => Response } {
+  return (
+    value != null &&
+    typeof (value as { json?: unknown }).json === 'function'
+  );
+}
+
+async function parseResponseBody(
+  responseLike: { json: () => Promise<unknown>; text?: () => Promise<string>; clone?: () => Response },
+): Promise<FunctionErrorPayload | null> {
+  const cloneFn = typeof responseLike.clone === 'function' ? responseLike.clone.bind(responseLike) : null;
+  const forJson = cloneFn ? cloneFn() : responseLike;
+  const forText = cloneFn ? cloneFn() : responseLike;
+  try {
+    const raw = await forJson.json();
+    return raw as FunctionErrorPayload;
+  } catch {
+    try {
+      if (typeof forText.text === 'function') {
+        const text = await forText.text();
+        return JSON.parse(text) as FunctionErrorPayload;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
 
 export async function getFunctionErrorMessage(
   error: unknown,
@@ -21,22 +55,18 @@ export async function getFunctionErrorMessage(
 ): Promise<string> {
   const errorObject = error as {
     message?: string;
-    context?: { json?: () => Promise<unknown> };
+    context?: unknown;
+    response?: unknown;
   } | null;
 
-  if (errorObject?.context?.json) {
-    try {
-      const payload = (await errorObject.context.json()) as FunctionErrorPayload;
-
-      if (payload.code && payload.code in ERROR_CODE_MESSAGES) {
-        return ERROR_CODE_MESSAGES[payload.code];
-      }
-
-      if (typeof payload.error === 'string') {
-        return payload.error;
-      }
-    } catch {
-      // fall through
+  const responseLike = errorObject?.context ?? errorObject?.response;
+  if (isResponseLike(responseLike)) {
+    const payload = await parseResponseBody(responseLike);
+    if (payload?.code && payload.code in ERROR_CODE_MESSAGES) {
+      return ERROR_CODE_MESSAGES[payload.code];
+    }
+    if (typeof payload?.error === 'string') {
+      return payload.error;
     }
   }
 

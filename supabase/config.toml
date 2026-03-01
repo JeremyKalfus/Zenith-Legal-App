@@ -70,5 +70,8 @@ verify_jwt = false
 [functions.staff_delete_user]
 verify_jwt = false
 
+[functions.staff_update_user_role]
+verify_jwt = false
+
 [functions.delete_my_account]
 verify_jwt = false

@@ -131,6 +131,10 @@ export function parseJdDegreeDateParts(
   return { year, month, day };
 }
 
+export function getJdDegreeYear(value: string | null | undefined): string | undefined {
+  return parseJdDegreeDateParts(value)?.year;
+}
+
 export function buildJdDegreeDateFromParts(parts: JdDegreeDateParts): string | undefined {
   const year = parts.year.trim();
   const month = parts.month.trim();
