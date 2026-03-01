@@ -103,7 +103,7 @@ export async function listRecruiterUsers(): Promise<RecruiterUserOption[]> {
   const { data, error } = await supabase
     .from('users_profile')
     .select('id,name,email')
-    .eq('role', 'staff')
+    .neq('role', 'candidate')
     .order('name', { ascending: true });
 
   if (error) {
@@ -223,7 +223,7 @@ export async function listStaffCandidates(): Promise<StaffCandidateListItem[]> {
     const { data: recruiterData, error: recruiterError } = await supabase
       .from('users_profile')
       .select('id,name,email')
-      .eq('role', 'staff')
+      .neq('role', 'candidate')
       .in('id', Array.from(recruiterUserIds));
 
     if (recruiterError) {

@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -79,6 +80,10 @@ function ToggleRow({
 export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
   const [draftFilters, setDraftFilters] = useState<StaffCandidateFilters>(route.params.initialFilters);
   const [modalMode, setModalMode] = useState<ModalMode>(null);
+  const [jdYearInput, setJdYearInput] = useState('');
+  const [jdYearRangeStart, setJdYearRangeStart] = useState('');
+  const [jdYearRangeEnd, setJdYearRangeEnd] = useState('');
+  const [jdYearInputError, setJdYearInputError] = useState<string | null>(null);
 
   const recruiterLabelById = useMemo(
     () => new Map(route.params.options.recruiterOptions.map((option) => [option.id, option.label])),
@@ -104,6 +109,62 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
   );
   const preferredCitiesLabel = formatMultiValue(draftFilters.preferredCities);
   const jdYearsLabel = formatMultiValue(draftFilters.jdYears);
+
+  function appendJdYears(yearsToAdd: readonly string[]): void {
+    setDraftFilters((current) => {
+      const merged = new Set(current.jdYears);
+      for (const year of yearsToAdd) {
+        merged.add(year);
+      }
+      return {
+        ...current,
+        jdYears: Array.from(merged).sort((left, right) => Number(right) - Number(left)),
+      };
+    });
+  }
+
+  function handleAddJdYear(): void {
+    const trimmedYear = jdYearInput.trim();
+    if (!/^\d{4}$/.test(trimmedYear)) {
+      setJdYearInputError('Enter a 4-digit year.');
+      return;
+    }
+
+    appendJdYears([trimmedYear]);
+    setJdYearInput('');
+    setJdYearInputError(null);
+  }
+
+  function handleAddJdYearRange(): void {
+    const startYearText = jdYearRangeStart.trim();
+    const endYearText = jdYearRangeEnd.trim();
+    if (!/^\d{4}$/.test(startYearText) || !/^\d{4}$/.test(endYearText)) {
+      setJdYearInputError('Range must use two 4-digit years.');
+      return;
+    }
+
+    const startYear = Number(startYearText);
+    const endYear = Number(endYearText);
+    if (startYear > endYear) {
+      setJdYearInputError('Range start year must be before end year.');
+      return;
+    }
+
+    const rangeSize = endYear - startYear + 1;
+    if (rangeSize > 50) {
+      setJdYearInputError('Range is too large. Use 50 years or less.');
+      return;
+    }
+
+    const yearsToAdd: string[] = [];
+    for (let year = startYear; year <= endYear; year += 1) {
+      yearsToAdd.push(String(year));
+    }
+    appendJdYears(yearsToAdd);
+    setJdYearRangeStart('');
+    setJdYearRangeEnd('');
+    setJdYearInputError(null);
+  }
 
   return (
     <ScreenShell showBanner={false}>
@@ -151,7 +212,16 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
           </View>
         </Pressable>
 
-        <Pressable style={styles.filterField} onPress={() => setModalMode('jdYears')}>
+        <Pressable
+          style={styles.filterField}
+          onPress={() => {
+            setModalMode('jdYears');
+            setJdYearInput('');
+            setJdYearRangeStart('');
+            setJdYearRangeEnd('');
+            setJdYearInputError(null);
+          }}
+        >
           <Text style={styles.filterLabel}>JD years</Text>
           <View style={styles.filterValueRow}>
             <Text style={styles.filterValue}>{jdYearsLabel}</Text>
@@ -331,31 +401,86 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
 
               {modalMode === 'jdYears' ? (
                 <>
-                  <ToggleRow
-                    label="Any"
-                    selected={draftFilters.jdYears.length === 0}
+                  <View style={styles.jdYearInputRow}>
+                    <TextInput
+                      style={styles.jdYearInput}
+                      placeholder="Add year (e.g. 2024)"
+                      placeholderTextColor={uiColors.textPlaceholder}
+                      value={jdYearInput}
+                      keyboardType="number-pad"
+                      maxLength={4}
+                      onChangeText={(value) => {
+                        setJdYearInput(value.replace(/[^0-9]/g, ''));
+                        if (jdYearInputError) {
+                          setJdYearInputError(null);
+                        }
+                      }}
+                    />
+                    <Pressable style={styles.addYearButton} onPress={handleAddJdYear}>
+                      <Text style={styles.addYearButtonText}>Add year</Text>
+                    </Pressable>
+                  </View>
+                  <View style={styles.jdYearRangeRow}>
+                    <TextInput
+                      style={styles.jdYearRangeInput}
+                      placeholder="From"
+                      placeholderTextColor={uiColors.textPlaceholder}
+                      value={jdYearRangeStart}
+                      keyboardType="number-pad"
+                      maxLength={4}
+                      onChangeText={(value) => {
+                        setJdYearRangeStart(value.replace(/[^0-9]/g, ''));
+                        if (jdYearInputError) {
+                          setJdYearInputError(null);
+                        }
+                      }}
+                    />
+                    <TextInput
+                      style={styles.jdYearRangeInput}
+                      placeholder="To"
+                      placeholderTextColor={uiColors.textPlaceholder}
+                      value={jdYearRangeEnd}
+                      keyboardType="number-pad"
+                      maxLength={4}
+                      onChangeText={(value) => {
+                        setJdYearRangeEnd(value.replace(/[^0-9]/g, ''));
+                        if (jdYearInputError) {
+                          setJdYearInputError(null);
+                        }
+                      }}
+                    />
+                    <Pressable style={styles.addYearButton} onPress={handleAddJdYearRange}>
+                      <Text style={styles.addYearButtonText}>Add range</Text>
+                    </Pressable>
+                  </View>
+                  {jdYearInputError ? <Text style={styles.fieldErrorText}>{jdYearInputError}</Text> : null}
+                  {draftFilters.jdYears.length === 0 ? (
+                    <Text style={styles.emptySelectionText}>No year filters added.</Text>
+                  ) : (
+                    draftFilters.jdYears.map((year) => (
+                      <View key={year} style={styles.selectedYearRow}>
+                        <Text style={styles.selectedYearText}>{year}</Text>
+                        <Pressable
+                          onPress={() => {
+                            setDraftFilters((current) => ({
+                              ...current,
+                              jdYears: current.jdYears.filter((value) => value !== year),
+                            }));
+                          }}
+                        >
+                          <Text style={styles.removeYearText}>Remove</Text>
+                        </Pressable>
+                      </View>
+                    ))
+                  )}
+                  <Pressable
+                    style={styles.clearYearsButton}
                     onPress={() => {
                       setDraftFilters((current) => ({ ...current, jdYears: [] }));
                     }}
-                  />
-                  {route.params.options.jdYearOptions.map((year) => {
-                    const selected = draftFilters.jdYears.includes(year);
-                    return (
-                      <ToggleRow
-                        key={year}
-                        label={year}
-                        selected={selected}
-                        onPress={() => {
-                          setDraftFilters((current) => ({
-                            ...current,
-                            jdYears: selected
-                              ? current.jdYears.filter((value) => value !== year)
-                              : [...current.jdYears, year],
-                          }));
-                        }}
-                      />
-                    );
-                  })}
+                  >
+                    <Text style={styles.clearYearsButtonText}>Clear years</Text>
+                  </Pressable>
                 </>
               ) : null}
             </ScrollView>
@@ -391,6 +516,19 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
   },
+  addYearButton: {
+    alignItems: 'center',
+    backgroundColor: uiColors.primary,
+    borderRadius: 10,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: 14,
+  },
+  addYearButtonText: {
+    color: uiColors.primaryText,
+    fontSize: 16,
+    fontWeight: '700',
+  },
   checkmark: {
     color: uiColors.primary,
     fontSize: 16,
@@ -416,6 +554,31 @@ const styles = StyleSheet.create({
     color: uiColors.textSecondary,
     fontSize: 20,
     fontWeight: '700',
+  },
+  clearYearsButton: {
+    alignItems: 'center',
+    borderColor: uiColors.borderStrong,
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: 'center',
+    marginTop: 8,
+    minHeight: 44,
+  },
+  clearYearsButtonText: {
+    color: uiColors.textSecondary,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  emptySelectionText: {
+    color: uiColors.textMuted,
+    fontSize: 15,
+    marginTop: 8,
+  },
+  fieldErrorText: {
+    color: uiColors.error,
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 6,
   },
   filterField: {
     backgroundColor: uiColors.surface,
@@ -446,6 +609,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 14,
     marginTop: 8,
+  },
+  jdYearInput: {
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
+    borderRadius: 10,
+    borderWidth: 1,
+    color: uiColors.textPrimary,
+    flex: 1,
+    fontSize: 16,
+    minHeight: 48,
+    paddingHorizontal: 12,
+  },
+  jdYearInputRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 4,
+  },
+  jdYearRangeInput: {
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
+    borderRadius: 10,
+    borderWidth: 1,
+    color: uiColors.textPrimary,
+    flex: 1,
+    fontSize: 16,
+    minHeight: 44,
+    paddingHorizontal: 12,
+  },
+  jdYearRangeRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 4,
   },
   modalActions: {
     flexDirection: 'row',
@@ -528,6 +725,11 @@ const styles = StyleSheet.create({
     backgroundColor: uiColors.backgroundAlt,
     borderColor: uiColors.primary,
   },
+  removeYearText: {
+    color: uiColors.error,
+    fontSize: 14,
+    fontWeight: '700',
+  },
   panel: {
     backgroundColor: uiColors.backgroundAlt,
     borderColor: uiColors.borderStrong,
@@ -540,5 +742,19 @@ const styles = StyleSheet.create({
     color: uiColors.textSecondary,
     fontSize: 18,
     marginTop: -4,
+  },
+  selectedYearRow: {
+    alignItems: 'center',
+    borderBottomColor: uiColors.border,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 44,
+    paddingVertical: 4,
+  },
+  selectedYearText: {
+    color: uiColors.textPrimary,
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

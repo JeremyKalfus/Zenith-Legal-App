@@ -51,7 +51,11 @@ export function StaffCandidatesStackNavigator() {
       </Stack.Screen>
       <Stack.Screen
         name="StaffCandidateFilters"
-        options={{ title: 'Filter Search' }}
+        options={{
+          title: 'Filter Search',
+          headerBackTitleVisible: false,
+          headerBackButtonDisplayMode: 'minimal',
+        }}
         component={StaffCandidateFiltersScreen}
       />
     </Stack.Navigator>

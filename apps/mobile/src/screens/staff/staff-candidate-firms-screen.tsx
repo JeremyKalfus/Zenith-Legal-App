@@ -44,8 +44,6 @@ const STAFF_SETTABLE_FIRM_STATUSES = FIRM_STATUSES.filter(
 ) as FirmStatus[];
 const BANNER_OVERRIDES_UNAVAILABLE_MESSAGE =
   'Candidate-specific banner overrides are unavailable in this environment. Apply the latest Supabase migration and refresh schema cache.';
-const ASSIGNED_RECRUITER_UNAVAILABLE_MESSAGE =
-  'Assigned recruiter is unavailable in this environment. Apply the latest Supabase migration and refresh schema cache.';
 
 function isMissingBannerOverrideTableError(error: { message?: string; code?: string } | null | undefined): boolean {
   if (!error) {
@@ -92,8 +90,6 @@ export function StaffCandidateFirmsScreen({
   const [bannerNotice, setBannerNotice] = useState<string | null>(null);
   const [hasBannerOverride, setHasBannerOverride] = useState(false);
   const [assignedRecruiterOptions, setAssignedRecruiterOptions] = useState<RecruiterUserOption[]>([]);
-  const [assignedRecruiterAvailable, setAssignedRecruiterAvailable] = useState(true);
-  const [assignedRecruiterNotice, setAssignedRecruiterNotice] = useState<string | null>(null);
   const [savedAssignedRecruiterUserId, setSavedAssignedRecruiterUserId] = useState<string | null>(
     candidate.assignedRecruiterUserId ?? null,
   );
@@ -155,7 +151,7 @@ export function StaffCandidateFirmsScreen({
       const overridePhone = isOverrideTableMissing ? null : overrideResult.data?.phone?.trim();
       const overrideEmail = isOverrideTableMissing ? null : overrideResult.data?.email?.trim();
       const assignedRecruiterUserId = isAssignedRecruiterTableMissing
-        ? null
+        ? candidate.assignedRecruiterUserId ?? null
         : assignedRecruiterResult.data?.recruiter_user_id ?? null;
 
       setAssignments(assignmentRows);
@@ -165,10 +161,6 @@ export function StaffCandidateFirmsScreen({
       setDefaultBannerEmail(globalEmail);
       setBannerOverridesAvailable(!isOverrideTableMissing);
       setBannerNotice(isOverrideTableMissing ? BANNER_OVERRIDES_UNAVAILABLE_MESSAGE : null);
-      setAssignedRecruiterAvailable(!isAssignedRecruiterTableMissing);
-      setAssignedRecruiterNotice(
-        isAssignedRecruiterTableMissing ? ASSIGNED_RECRUITER_UNAVAILABLE_MESSAGE : null,
-      );
       setSavedAssignedRecruiterUserId(assignedRecruiterUserId);
       setSelectedAssignedRecruiterUserId(assignedRecruiterUserId ?? 'none');
       if (overridePhone && overrideEmail) {
@@ -187,7 +179,7 @@ export function StaffCandidateFirmsScreen({
       loadInFlightRef.current = false;
       setHasLoadedAssignments(true);
     }
-  }, [candidate.id]);
+  }, [candidate.assignedRecruiterUserId, candidate.id]);
 
   useEffect(() => {
     void loadData();
@@ -246,11 +238,6 @@ export function StaffCandidateFirmsScreen({
     savedAssignedRecruiterUserId;
 
   const handleSaveAssignedRecruiter = useCallback(async () => {
-    if (!assignedRecruiterAvailable) {
-      setMessage(ASSIGNED_RECRUITER_UNAVAILABLE_MESSAGE);
-      return;
-    }
-
     setBusyAction('recruiter:save');
     setMessage(null);
     try {
@@ -265,7 +252,6 @@ export function StaffCandidateFirmsScreen({
       setBusyAction(null);
     }
   }, [
-    assignedRecruiterAvailable,
     candidate.id,
     loadData,
     profile?.id,
@@ -446,10 +432,8 @@ export function StaffCandidateFirmsScreen({
         <Text style={styles.sectionTitle}>Assigned Recruiter</Text>
         <View style={styles.bannerCard}>
           <Text style={styles.bannerStatus}>Current: {savedAssignedRecruiterLabel}</Text>
-          {assignedRecruiterNotice ? <Text style={styles.bannerNotice}>{assignedRecruiterNotice}</Text> : null}
           <Pressable
             style={styles.selectorButton}
-            disabled={!assignedRecruiterAvailable}
             onPress={() => setShowAssignedRecruiterModal(true)}
           >
             <Text style={styles.selectorButtonLabel}>Assigned recruiter</Text>
@@ -464,7 +448,6 @@ export function StaffCandidateFirmsScreen({
               base: styles.primaryButtonSmall,
               disabled:
                 busyAction !== null ||
-                !assignedRecruiterAvailable ||
                 !hasAssignedRecruiterChanges,
               disabledStyle: styles.buttonDisabled,
               hoverStyle: sharedPressableFeedback.hover,
@@ -473,7 +456,6 @@ export function StaffCandidateFirmsScreen({
             })}
             disabled={
               busyAction !== null ||
-              !assignedRecruiterAvailable ||
               !hasAssignedRecruiterChanges
             }
             onPress={() => void handleSaveAssignedRecruiter()}

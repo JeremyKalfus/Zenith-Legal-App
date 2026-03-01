@@ -43,7 +43,7 @@ export type StaffCandidateFilterInput = {
   query: string;
   assignedRecruiter: 'any' | 'none' | string;
   currentStatus: 'any' | FirmStatus;
-  practice: 'any' | PracticeArea;
+  practices: readonly PracticeArea[];
   assignedFirmIds: readonly string[];
   preferredCities: readonly CityOption[];
   jdYears: readonly string[];
@@ -136,9 +136,11 @@ export function filterStaffCandidates<T extends StaffCandidateFilterable>(
   const selectedFirmIdSet = new Set(input.assignedFirmIds);
   const selectedCitySet = new Set(input.preferredCities);
   const selectedJdYearSet = new Set(input.jdYears);
+  const selectedPracticeSet = new Set(input.practices);
   const hasAssignedFirmFilter = selectedFirmIdSet.size > 0;
   const hasPreferredCityFilter = selectedCitySet.size > 0;
   const hasJdYearFilter = selectedJdYearSet.size > 0;
+  const hasPracticeFilter = selectedPracticeSet.size > 0;
 
   return candidates.filter((candidate) => {
     const searchMatch = normalizedQuery.length === 0 || [candidate.name, candidate.email, candidate.mobile]
@@ -165,9 +167,8 @@ export function filterStaffCandidates<T extends StaffCandidateFilterable>(
       return false;
     }
 
-    const practiceMatch = input.practice === 'any'
-      ? true
-      : (candidate.practiceAreas ?? []).includes(input.practice);
+    const practiceMatch = !hasPracticeFilter || (candidate.practiceAreas ?? [])
+      .some((practice) => selectedPracticeSet.has(practice));
     if (!practiceMatch) {
       return false;
     }
