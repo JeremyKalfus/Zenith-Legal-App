@@ -1,7 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Channel, Chat, MessageInput, MessageList, Thread, Window } from 'stream-chat-react';
+import {
+  Avatar as StreamAvatar,
+  Channel,
+  Chat,
+  MessageInput,
+  MessageList,
+  Thread,
+  Window,
+  type AvatarProps,
+} from 'stream-chat-react';
 import type { Channel as StreamChannel } from 'stream-chat';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -17,6 +26,7 @@ import type { StaffMessageInboxItem } from '@zenith/shared';
 import {
   ensureStreamChatStylesheet,
   formatRelativeTimestamp,
+  hasChatAvatarImage,
   mapChannelsToStaffInboxItems,
   STREAM_CHAT_CSS_URL,
 } from '@zenith/shared';
@@ -39,6 +49,14 @@ function useStreamChatCSS() {
   useEffect(() => {
     ensureStreamChatStylesheet(STREAM_CHAT_CSS_URL);
   }, []);
+}
+
+function Avatar(props: AvatarProps) {
+  if (!hasChatAvatarImage(props.image)) {
+    return null;
+  }
+
+  return <StreamAvatar {...props} />;
 }
 
 type ChatBootstrapResponse = {
@@ -350,7 +368,7 @@ export function StaffMessagesDashboard() {
             ) : (
               <div className="h-[560px] overflow-hidden rounded-md border border-slate-200 bg-white">
                 <Chat client={getChatClient()} theme="str-chat__theme-light">
-                  <Channel channel={selectedChannel}>
+                  <Channel channel={selectedChannel} Avatar={Avatar}>
                     <Window>
                       <MessageList />
                       <MessageInput focus />

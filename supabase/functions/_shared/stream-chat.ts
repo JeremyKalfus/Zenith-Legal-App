@@ -19,8 +19,8 @@ type StreamErrorLike = {
   statusCode?: unknown;
 };
 
-function getStaffStreamImage(email?: string | null): string | undefined {
-  return email?.trim().toLowerCase() === MASON_EMAIL ? STAFF_STREAM_IMAGE_URL : undefined;
+function getStaffStreamImage(email?: string | null): string {
+  return email?.trim().toLowerCase() === MASON_EMAIL ? (STAFF_STREAM_IMAGE_URL ?? '') : '';
 }
 
 function getStreamServerClient() {
@@ -113,6 +113,7 @@ export async function sendCandidateRecruiterChannelMessage(params: {
   memberProfiles.set(candidateProfile.id, {
     id: candidateProfile.id,
     name: candidateProfile.name ?? undefined,
+    image: '',
   });
 
   for (const profile of ((staffProfiles ?? []) as StaffProfile[])) {

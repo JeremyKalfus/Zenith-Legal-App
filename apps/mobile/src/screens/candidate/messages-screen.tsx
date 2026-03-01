@@ -5,8 +5,10 @@ import { uiColors } from '../../theme/colors';
 import {
   Channel,
   Chat,
+  MessageAvatar as StreamMessageAvatar,
   MessageInput,
   MessageList,
+  type MessageAvatarProps,
   OverlayProvider,
   useMessageComposer,
 } from 'stream-chat-expo';
@@ -14,6 +16,15 @@ import { getChatClient } from '../../lib/chat';
 import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
 import { useResolvedCandidateChatChannel } from '../../lib/use-resolved-candidate-chat-channel';
 import { chatThemeOverrides } from '../../lib/chat-theme-overrides';
+import { hasChatAvatarImage } from '@zenith/shared';
+
+function MessageAvatar(props: MessageAvatarProps) {
+  if (!hasChatAvatarImage(props.message?.user?.image)) {
+    return null;
+  }
+
+  return <StreamMessageAvatar {...props} />;
+}
 
 function ApplyInitialDraftMessage({
   message,
@@ -139,6 +150,7 @@ export function MessagesScreen({
               channel={channel}
               keyboardBehavior={Platform.OS === 'ios' ? 'padding' : 'height'}
               keyboardVerticalOffset={Platform.OS === 'ios' ? 120 : 0}
+              MessageAvatar={MessageAvatar}
             >
               <ApplyInitialDraftMessage
                 message={initialDraftMessage}

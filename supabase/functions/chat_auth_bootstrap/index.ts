@@ -6,18 +6,18 @@ import { createEdgeHandler } from '../_shared/edge-handler.ts';
 const MASON_EMAIL = 'mason@zenithlegal.com';
 const STAFF_STREAM_IMAGE_URL = Deno.env.get('STREAM_STAFF_IMAGE_URL') ?? undefined;
 
-function getStaffStreamImage(email?: string | null): string | undefined {
-  return email?.trim().toLowerCase() === MASON_EMAIL ? STAFF_STREAM_IMAGE_URL : undefined;
+function getStaffStreamImage(email?: string | null): string {
+  return email?.trim().toLowerCase() === MASON_EMAIL ? (STAFF_STREAM_IMAGE_URL ?? '') : '';
 }
 
 function getStreamUserImage(profile: {
   role: string;
   email?: string | null;
-}): string | undefined {
+}): string {
   if (profile.role === 'staff') {
     return getStaffStreamImage(profile.email);
   }
-  return undefined;
+  return '';
 }
 
 
@@ -89,6 +89,7 @@ Deno.serve(
       memberProfiles.set(candidateProfile.id, {
         id: candidateProfile.id,
         name: candidateProfile.name,
+        image: '',
       });
 
       for (const profile of staffProfiles ?? []) {

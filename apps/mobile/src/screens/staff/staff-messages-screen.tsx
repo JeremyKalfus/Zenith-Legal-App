@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { InteractionManager, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ScreenShell } from '../../components/screen-shell';
 import { StaffPageTitle } from '../../components/staff-page-title';
 import { useAuth } from '../../context/auth-context';
@@ -41,27 +41,12 @@ function formatUnreadCount(count: number): string {
   return count > 9 ? '9+' : String(count);
 }
 
-function getInitials(value: string): string {
-  const parts = value
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-
-  if (parts.length === 0) {
-    return 'ZL';
-  }
-
-  if (parts.length === 1) {
-    return parts[0].slice(0, 2).toUpperCase();
-  }
-
-  return `${parts[0][0] ?? ''}${parts[1][0] ?? ''}`.toUpperCase();
-}
-
 export function StaffMessagesScreen({
   onOpenConversation,
+  onStartConversation,
 }: {
   onOpenConversation: (conversation: StaffMessageInboxItem) => void;
+  onStartConversation: () => void;
 }) {
   const { session, profile } = useAuth();
   const [conversations, setConversations] = useState<StaffMessageInboxItem[]>([]);
@@ -169,13 +154,16 @@ export function StaffMessagesScreen({
   useFocusEffect(
     useCallback(() => {
       syncConversationsFromClient();
-      void loadInbox();
+      const interactionTask = InteractionManager.runAfterInteractions(() => {
+        void loadInbox();
+      });
 
       const intervalId = setInterval(() => {
         void loadInbox();
       }, 30000);
 
       return () => {
+        interactionTask.cancel();
         clearInterval(intervalId);
       };
     }, [loadInbox, syncConversationsFromClient]),
@@ -198,21 +186,23 @@ export function StaffMessagesScreen({
     [onOpenConversation],
   );
 
-  const subtitle = useMemo(
-    () =>
-      !hasLoadedInbox && conversations.length === 0
-        ? 'Inbox syncs automatically in the background.'
-        : conversations.length === 0
-        ? 'No candidate conversations yet.'
-        : `${conversations.length} active conversation${conversations.length === 1 ? '' : 's'}.`,
-    [conversations.length, hasLoadedInbox],
-  );
-
   return (
     <ScreenShell showBanner={false}>
       <StaffPageTitle title="Messages" />
       <Text style={styles.body}>Recruiter inbox</Text>
-      <Text style={styles.subtle}>{subtitle}</Text>
+      <View style={styles.subtitleRow}>
+        <View style={styles.subtle} />
+        <Pressable
+          accessibilityLabel="Start conversation"
+          onPress={onStartConversation}
+          style={({ pressed }) => [
+            styles.newConversationButton,
+            pressed ? styles.newConversationButtonPressed : null,
+          ]}
+        >
+          <Text style={styles.newConversationButtonText}>+</Text>
+        </Pressable>
+      </View>
 
       {message ? <Text style={styles.error}>{message}</Text> : null}
 
@@ -236,9 +226,6 @@ export function StaffMessagesScreen({
               ]}
               onPress={() => handleOpenConversation(conversation)}
             >
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{getInitials(displayName)}</Text>
-              </View>
               <View style={styles.conversationMain}>
                 <View style={styles.conversationTopRow}>
                   <Text
@@ -275,21 +262,6 @@ export function StaffMessagesScreen({
 }
 
 const styles = StyleSheet.create({
-  avatar: {
-    alignItems: 'center',
-    backgroundColor: uiColors.backgroundAlt,
-    borderRadius: 999,
-    borderColor: uiColors.borderStrong,
-    borderWidth: 1,
-    height: 52,
-    justifyContent: 'center',
-    width: 52,
-  },
-  avatarText: {
-    color: uiColors.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
-  },
   body: {
     color: uiColors.textSecondary,
   },
@@ -365,7 +337,36 @@ const styles = StyleSheet.create({
   },
   subtle: {
     color: uiColors.textMuted,
+    flex: 1,
     fontSize: 12,
+    paddingRight: 44,
+  },
+  subtitleRow: {
+    marginTop: 2,
+    position: 'relative',
+  },
+  newConversationButton: {
+    alignItems: 'center',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
+    borderRadius: 999,
+    borderWidth: 1,
+    bottom: 0,
+    height: 32,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 0,
+    width: 32,
+  },
+  newConversationButtonPressed: {
+    backgroundColor: uiColors.backgroundAlt,
+  },
+  newConversationButtonText: {
+    color: uiColors.textPrimary,
+    fontSize: 22,
+    fontWeight: '700',
+    lineHeight: 24,
+    marginTop: -2,
   },
   unreadBadgeInline: {
     alignItems: 'center',

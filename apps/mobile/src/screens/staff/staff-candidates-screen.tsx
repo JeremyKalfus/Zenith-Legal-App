@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { InteractionManager, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   CITY_OPTIONS,
   filterStaffCandidates,
@@ -116,12 +116,15 @@ export function StaffCandidatesScreen({
 
   useFocusEffect(
     useCallback(() => {
-      void loadCandidates();
+      const interactionTask = InteractionManager.runAfterInteractions(() => {
+        void loadCandidates();
+      });
       const intervalId = setInterval(() => {
         void loadCandidates();
       }, 30000);
 
       return () => {
+        interactionTask.cancel();
         clearInterval(intervalId);
       };
     }, [loadCandidates]),

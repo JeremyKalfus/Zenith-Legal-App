@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   Alert,
+  InteractionManager,
   Modal,
   Pressable,
   StyleSheet,
@@ -194,12 +195,15 @@ export function StaffCandidateFirmsScreen({
 
   useFocusEffect(
     useCallback(() => {
-      void loadData();
+      const interactionTask = InteractionManager.runAfterInteractions(() => {
+        void loadData();
+      });
       const intervalId = setInterval(() => {
         void loadData();
       }, 30000);
 
       return () => {
+        interactionTask.cancel();
         clearInterval(intervalId);
       };
     }, [loadData]),

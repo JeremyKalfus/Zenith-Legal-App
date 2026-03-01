@@ -42,8 +42,11 @@ export function CandidateTabs() {
 
   return (
     <Tab.Navigator
+      detachInactiveScreens={false}
       screenOptions={({ route }) => ({
         headerShown: false,
+        animation: 'none',
+        lazy: false,
         tabBarActiveTintColor: uiColors.primary,
         tabBarInactiveTintColor: '#64748B',
         tabBarHideOnKeyboard: true,

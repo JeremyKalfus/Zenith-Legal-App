@@ -2,9 +2,11 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { StaffMessageInboxItem } from '@zenith/shared';
 import { StaffMessageThreadScreen } from '../screens/staff/staff-message-thread-screen';
 import { StaffMessagesScreen } from '../screens/staff/staff-messages-screen';
+import { StaffNewConversationScreen } from '../screens/staff/staff-new-conversation-screen';
 
 type StaffMessagesStackParamList = {
   StaffMessagesInbox: undefined;
+  StaffStartConversation: undefined;
   StaffMessageThread: {
     conversation: StaffMessageInboxItem;
   };
@@ -21,6 +23,24 @@ export function StaffMessagesStackNavigator() {
             onOpenConversation={(conversation) => {
               navigation.navigate('StaffMessageThread', { conversation });
             }}
+            onStartConversation={() => {
+              navigation.navigate('StaffStartConversation');
+            }}
+          />
+        )}
+      </Stack.Screen>
+      <Stack.Screen
+        name="StaffStartConversation"
+        options={{
+          title: 'New Conversation',
+          headerBackButtonDisplayMode: 'minimal',
+        }}
+      >
+        {({ navigation }) => (
+          <StaffNewConversationScreen
+            onOpenConversation={(conversation) => {
+              navigation.replace('StaffMessageThread', { conversation });
+            }}
           />
         )}
       </Stack.Screen>
@@ -28,7 +48,6 @@ export function StaffMessagesStackNavigator() {
         name="StaffMessageThread"
         options={({ route }) => ({
           title: route.params.conversation.channelName,
-          headerBackTitleVisible: false,
           headerBackButtonDisplayMode: 'minimal',
           gestureEnabled: true,
           fullScreenGestureEnabled: false,

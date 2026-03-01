@@ -5,3 +5,4 @@ export * from './candidate-filters';
 export * from './stream-chat';
 export * from './stream-chat-client';
 export * from './appointment-sections';
+export * from './chat-avatar';

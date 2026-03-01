@@ -123,3 +123,13 @@ Append a new entry immediately after incidents and after post-fix verification i
 - **Fix applied:** Added a development-only bypass action locked to `jeremykalfus@gmail.com`, one-time per app launch, with local session/profile bootstrap and network hydration skips.
 - **Prevention rule:** Emergency bypasses must be dev-only, explicitly scoped to a known account, and easy to remove once auth stability returns.
 - **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after adding bypass flow.
+
+### 2026-03-01 — Stream Avatar Fields Must Be Explicitly Cleared
+
+- **Date:** 2026-03-01
+- **Context:** Turning off profile pictures for chat users while preserving Zenith Legal branding.
+- **Error:** Non-Zenith users could retain old Stream avatars because image fields were omitted (undefined) during upsert.
+- **Why it happened:** Stream user updates merged partial fields; omitting `image` did not reliably clear an existing value.
+- **Fix applied:** Updated chat bootstrap and shared Stream messaging upserts to send `image: ''` for non-Zenith users (candidate + non-brand staff), and gated UI avatar rendering on a real image URL.
+- **Prevention rule:** When deprecating/removing a remote profile field, write an explicit clearing value instead of omitting the field in upsert payloads.
+- **Follow-up checks:** `npm run lint`, `npm run typecheck`, `npm run test`, and `python3 -m desloppify scan --path .` completed after the change.

@@ -2,17 +2,31 @@ import { useEffect } from 'react';
 import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { uiColors } from '../../theme/colors';
 import {
+  Avatar as StreamAvatar,
   Chat,
   Channel,
-  Window,
-  MessageList,
   MessageInput,
+  MessageList,
   Thread,
+  Window,
+  type AvatarProps,
 } from 'stream-chat-react';
 import { getChatClient } from '../../lib/chat';
 import { ScreenShell } from '../../components/screen-shell';
-import { ensureStreamChatStylesheet, STREAM_CHAT_CSS_URL } from '@zenith/shared';
+import {
+  ensureStreamChatStylesheet,
+  hasChatAvatarImage,
+  STREAM_CHAT_CSS_URL,
+} from '@zenith/shared';
 import { useResolvedCandidateChatChannel } from '../../lib/use-resolved-candidate-chat-channel';
+
+function Avatar(props: AvatarProps) {
+  if (!hasChatAvatarImage(props.image)) {
+    return null;
+  }
+
+  return <StreamAvatar {...props} />;
+}
 
 function useStreamChatCSS() {
   useEffect(() => {
@@ -63,7 +77,7 @@ export function MessagesScreen({
     <ScreenShell showBanner={showRecruiterBanner}>
       <View style={styles.chatWrapper}>
         <Chat client={getChatClient()} theme="str-chat__theme-light">
-          <Channel channel={channel}>
+          <Channel channel={channel} Avatar={Avatar}>
             <Window>
               <MessageList />
               <MessageInput focus />

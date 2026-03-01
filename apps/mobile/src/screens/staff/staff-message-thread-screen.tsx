@@ -1,10 +1,27 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { Platform, SafeAreaView, StyleSheet, Text, View } from 'react-native';
-import { Channel, Chat, MessageInput, MessageList, OverlayProvider } from 'stream-chat-expo';
+import {
+  Channel,
+  Chat,
+  MessageAvatar as StreamMessageAvatar,
+  MessageInput,
+  MessageList,
+  OverlayProvider,
+  type MessageAvatarProps,
+} from 'stream-chat-expo';
 import { getChatClient } from '../../lib/chat';
 import { chatThemeOverrides } from '../../lib/chat-theme-overrides';
 import { uiColors } from '../../theme/colors';
+import { hasChatAvatarImage } from '@zenith/shared';
+
+function MessageAvatar(props: MessageAvatarProps) {
+  if (!hasChatAvatarImage(props.message?.user?.image)) {
+    return null;
+  }
+
+  return <StreamMessageAvatar {...props} />;
+}
 
 export function StaffMessageThreadScreen({
   channelId,
@@ -75,6 +92,7 @@ export function StaffMessageThreadScreen({
               keyboardBehavior={Platform.OS === 'ios' ? 'padding' : 'height'}
               keyboardVerticalOffset={Platform.OS === 'ios' ? 120 : 0}
               messageSwipeToReplyHitSlop={{ bottom: 0, left: 0, right: 0, top: 0 }}
+              MessageAvatar={MessageAvatar}
             >
               <MessageList
                 additionalFlatListProps={{

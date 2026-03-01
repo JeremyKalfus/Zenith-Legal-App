@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { InteractionManager, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { bucketStaffAppointments, type AppointmentStatus } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
 import { StaffPageTitle } from '../../components/staff-page-title';
@@ -169,8 +169,10 @@ function useStaffAppointmentsScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      void loadAppointments();
-      void loadCandidates();
+      const interactionTask = InteractionManager.runAfterInteractions(() => {
+        void loadAppointments();
+        void loadCandidates();
+      });
 
       const intervalId = setInterval(() => {
         void loadAppointments();
@@ -178,6 +180,7 @@ function useStaffAppointmentsScreen() {
       }, 30000);
 
       return () => {
+        interactionTask.cancel();
         clearInterval(intervalId);
       };
     }, [loadAppointments, loadCandidates]),
