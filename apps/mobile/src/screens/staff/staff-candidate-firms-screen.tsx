@@ -85,8 +85,8 @@ export function StaffCandidateFirmsScreen({
   const [firmQuery, setFirmQuery] = useState('');
   const [defaultBannerPhone, setDefaultBannerPhone] = useState(env.supportPhone);
   const [defaultBannerEmail, setDefaultBannerEmail] = useState(env.supportEmail);
-  const [bannerPhoneDraft, setBannerPhoneDraft] = useState(env.supportPhone);
-  const [bannerEmailDraft, setBannerEmailDraft] = useState(env.supportEmail);
+  const [bannerPhoneDraft, setBannerPhoneDraft] = useState('');
+  const [bannerEmailDraft, setBannerEmailDraft] = useState('');
   const [bannerOverridesAvailable, setBannerOverridesAvailable] = useState(true);
   const [bannerNotice, setBannerNotice] = useState<string | null>(null);
   const [hasBannerOverride, setHasBannerOverride] = useState(false);
@@ -175,8 +175,8 @@ export function StaffCandidateFirmsScreen({
         setBannerEmailDraft(overrideEmail);
         setHasBannerOverride(true);
       } else {
-        setBannerPhoneDraft(globalPhone);
-        setBannerEmailDraft(globalEmail);
+        setBannerPhoneDraft('');
+        setBannerEmailDraft('');
         setHasBannerOverride(false);
       }
       setMessage(null);
@@ -346,12 +346,8 @@ export function StaffCandidateFirmsScreen({
       return;
     }
 
-    const phone = bannerPhoneDraft.trim();
-    const email = bannerEmailDraft.trim().toLowerCase();
-    if (!phone || !email) {
-      setMessage('Phone and email are required.');
-      return;
-    }
+    const phone = bannerPhoneDraft.trim() || defaultBannerPhone;
+    const email = (bannerEmailDraft.trim() || defaultBannerEmail).toLowerCase();
 
     setBusyAction('banner:save');
     setMessage(null);
@@ -384,7 +380,16 @@ export function StaffCandidateFirmsScreen({
     } finally {
       setBusyAction(null);
     }
-  }, [bannerEmailDraft, bannerOverridesAvailable, bannerPhoneDraft, candidate.id, loadData, profile?.id]);
+  }, [
+    bannerEmailDraft,
+    bannerOverridesAvailable,
+    bannerPhoneDraft,
+    candidate.id,
+    defaultBannerEmail,
+    defaultBannerPhone,
+    loadData,
+    profile?.id,
+  ]);
 
   const handleResetBannerContact = useCallback(async () => {
     if (!bannerOverridesAvailable) {
@@ -477,18 +482,12 @@ export function StaffCandidateFirmsScreen({
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Candidate Banner Contact</Text>
+        <Text style={styles.sectionTitle}>Candidate Recruiter Contact</Text>
         <View style={styles.bannerCard}>
-          <Text style={styles.bannerStatus}>
-            {hasBannerOverride ? 'Override active for this candidate.' : 'Using global default contact.'}
-          </Text>
-          <Text style={styles.bannerDefaultText}>
-            Default: {defaultBannerPhone} • {defaultBannerEmail}
-          </Text>
           {bannerNotice ? <Text style={styles.bannerNotice}>{bannerNotice}</Text> : null}
           <TextInput
             style={styles.input}
-            placeholder="Banner phone"
+            placeholder="Phone"
             placeholderTextColor={uiColors.textPlaceholder}
             editable={bannerOverridesAvailable}
             value={bannerPhoneDraft}
@@ -496,7 +495,7 @@ export function StaffCandidateFirmsScreen({
           />
           <TextInput
             style={styles.input}
-            placeholder="Banner email"
+            placeholder="Email"
             placeholderTextColor={uiColors.textPlaceholder}
             keyboardType="email-address"
             autoCapitalize="none"
@@ -518,7 +517,7 @@ export function StaffCandidateFirmsScreen({
               onPress={() => void handleSaveBannerContact()}
             >
               <Text style={styles.primaryButtonSmallText}>
-                {busyAction === 'banner:save' ? 'Saving...' : 'Save override'}
+                {busyAction === 'banner:save' ? 'Saving...' : 'Save'}
               </Text>
             </Pressable>
             <Pressable
@@ -534,7 +533,7 @@ export function StaffCandidateFirmsScreen({
               onPress={() => void handleResetBannerContact()}
             >
               <Text style={styles.secondaryButtonSmallText}>
-                {busyAction === 'banner:reset' ? 'Resetting...' : 'Reset to default'}
+                {busyAction === 'banner:reset' ? 'Clearing...' : 'Clear'}
               </Text>
             </Pressable>
           </View>

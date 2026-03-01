@@ -1,6 +1,6 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { StackActions } from '@react-navigation/native';
+import { CommonActions } from '@react-navigation/native';
 import type { ComponentProps } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { StaffAppointmentsScreen } from '../screens/staff/staff-appointments-screen';
@@ -12,6 +12,21 @@ import { useStaffTabIndicators } from '../lib/use-staff-tab-indicators';
 
 const Tab = createBottomTabNavigator();
 type IoniconName = ComponentProps<typeof Ionicons>['name'];
+type MaybeNestedRouteState = {
+  key: string;
+  name?: string;
+  state?: {
+    key?: string;
+  };
+};
+type TabNavigationProxy = {
+  getState: () => { index: number; routes: unknown[] };
+  dispatch: (action: unknown) => void;
+};
+const STACK_TAB_ROOT_ROUTE_BY_TAB = {
+  Messages: 'StaffMessagesInbox',
+  Candidates: 'StaffCandidatesList',
+} as const;
 
 function getStaffTabIconName(routeName: string, focused: boolean): IoniconName {
   switch (routeName) {
@@ -26,6 +41,39 @@ function getStaffTabIconName(routeName: string, focused: boolean): IoniconName {
     default:
       return focused ? 'ellipse' : 'ellipse-outline';
   }
+}
+
+function resetNestedStackToRoot(navigation: { dispatch: (action: unknown) => void }, route: unknown): void {
+  const tabName = (route as MaybeNestedRouteState).name;
+  const rootRouteName = tabName
+    ? STACK_TAB_ROOT_ROUTE_BY_TAB[tabName as keyof typeof STACK_TAB_ROOT_ROUTE_BY_TAB]
+    : undefined;
+  const nestedNavigatorKey = (route as MaybeNestedRouteState).state?.key;
+  if (!nestedNavigatorKey || !rootRouteName) {
+    return;
+  }
+
+  navigation.dispatch({
+    ...CommonActions.reset({
+      index: 0,
+      routes: [{ name: rootRouteName }],
+    }),
+    target: nestedNavigatorKey,
+  });
+}
+
+function resetCurrentStackTabToRootOnTabPress(
+  navigation: TabNavigationProxy,
+  targetTabRouteKey: string,
+): void {
+  const state = navigation.getState();
+  const currentRoute = state.routes[state.index] as MaybeNestedRouteState | undefined;
+
+  if (!currentRoute || currentRoute.key === targetTabRouteKey) {
+    return;
+  }
+
+  resetNestedStackToRoot(navigation, currentRoute);
 }
 
 export function StaffTabs() {
@@ -61,32 +109,44 @@ export function StaffTabs() {
         name="Messages"
         component={StaffMessagesStackNavigator}
         listeners={({ navigation, route }) => ({
+          tabPress: () => {
+            resetCurrentStackTabToRootOnTabPress(navigation as TabNavigationProxy, route.key);
+          },
           blur: () => {
-            const nestedNavigatorKey = (route as { state?: { key?: string } }).state?.key;
-            if (!nestedNavigatorKey) {
-              return;
-            }
-
-            navigation.dispatch({ ...StackActions.popToTop(), target: nestedNavigatorKey });
+            resetNestedStackToRoot(navigation as { dispatch: (action: unknown) => void }, route);
           },
         })}
       />
-      <Tab.Screen name="Appointments" component={StaffAppointmentsScreen} />
+      <Tab.Screen
+        name="Appointments"
+        component={StaffAppointmentsScreen}
+        listeners={({ navigation, route }) => ({
+          tabPress: () => {
+            resetCurrentStackTabToRootOnTabPress(navigation as TabNavigationProxy, route.key);
+          },
+        })}
+      />
       <Tab.Screen
         name="Candidates"
         component={StaffCandidatesStackNavigator}
         listeners={({ navigation, route }) => ({
+          tabPress: () => {
+            resetCurrentStackTabToRootOnTabPress(navigation as TabNavigationProxy, route.key);
+          },
           blur: () => {
-            const nestedNavigatorKey = (route as { state?: { key?: string } }).state?.key;
-            if (!nestedNavigatorKey) {
-              return;
-            }
-
-            navigation.dispatch({ ...StackActions.popToTop(), target: nestedNavigatorKey });
+            resetNestedStackToRoot(navigation as { dispatch: (action: unknown) => void }, route);
           },
         })}
       />
-      <Tab.Screen name="Profile" component={StaffProfileScreen} />
+      <Tab.Screen
+        name="Profile"
+        component={StaffProfileScreen}
+        listeners={({ navigation, route }) => ({
+          tabPress: () => {
+            resetCurrentStackTabToRootOnTabPress(navigation as TabNavigationProxy, route.key);
+          },
+        })}
+      />
     </Tab.Navigator>
   );
 }
