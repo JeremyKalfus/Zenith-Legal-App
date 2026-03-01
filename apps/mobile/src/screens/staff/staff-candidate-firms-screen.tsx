@@ -1,4 +1,4 @@
-import { FIRM_STATUSES, type FirmStatus } from '@zenith/shared';
+import { FIRM_STATUSES, getJdDegreeDateLabel, type FirmStatus } from '@zenith/shared';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -302,9 +302,21 @@ export function StaffCandidateFirmsScreen({
 
   return (
     <ScreenShell showBanner={false}>
-      <Text style={styles.title}>{candidate.name || 'Candidate'}</Text>
-      <Text style={styles.subtitle}>{candidate.email}</Text>
-      <Text style={styles.subtitle}>{candidate.mobile}</Text>
+      <View style={styles.headerRow}>
+        <View style={styles.avatarPlaceholder}>
+          <Text style={styles.avatarPlaceholderText}>
+            {(candidate.name || 'C').trim().charAt(0).toUpperCase()}
+          </Text>
+        </View>
+        <View style={styles.headerMeta}>
+          <Text style={styles.title}>{candidate.name || 'Candidate'}</Text>
+          <Text style={styles.subtitle}>{candidate.email}</Text>
+          <Text style={styles.subtitle}>{candidate.mobile || 'No mobile on file'}</Text>
+          <Text style={styles.subtitle}>
+            JD degree date: {getJdDegreeDateLabel(candidate.jdDegreeDate)}
+          </Text>
+        </View>
+      </View>
 
       <Pressable style={styles.secondaryButton} onPress={() => void loadData()}>
         <Text style={styles.secondaryButtonText}>{isLoading ? 'Refreshing...' : 'Refresh'}</Text>
@@ -599,6 +611,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 10,
   },
+  avatarPlaceholder: {
+    alignItems: 'center',
+    backgroundColor: uiColors.divider,
+    borderColor: uiColors.border,
+    borderRadius: 28,
+    borderWidth: 1,
+    height: 56,
+    justifyContent: 'center',
+    width: 56,
+  },
+  avatarPlaceholderText: {
+    color: uiColors.textPrimary,
+    fontSize: 16,
+    fontWeight: '700',
+  },
   body: {
     color: uiColors.textSecondary,
   },
@@ -736,6 +763,16 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
     marginTop: 10,
+  },
+  headerMeta: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  headerRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
   },
   section: {
     gap: 10,

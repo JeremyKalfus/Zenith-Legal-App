@@ -10,6 +10,16 @@ function getStaffStreamImage(email?: string | null): string | undefined {
   return email?.trim().toLowerCase() === MASON_EMAIL ? STAFF_STREAM_IMAGE_URL : undefined;
 }
 
+function getStreamUserImage(profile: {
+  role: string;
+  email?: string | null;
+}): string | undefined {
+  if (profile.role === 'staff') {
+    return getStaffStreamImage(profile.email);
+  }
+  return undefined;
+}
+
 
 Deno.serve(
   createEdgeHandler(
@@ -39,7 +49,7 @@ Deno.serve(
       await streamServerClient.upsertUser({
         id: resolvedUserId,
         name: currentProfile.name,
-        image: currentProfile.role === 'staff' ? getStaffStreamImage(currentProfile.email) : undefined,
+        image: getStreamUserImage(currentProfile),
       });
 
       const token = streamServerClient.createToken(resolvedUserId);
@@ -53,7 +63,7 @@ Deno.serve(
         return jsonResponse({
           token,
           user_name: currentProfile.name,
-          user_image: currentProfile.role === 'staff' ? getStaffStreamImage(currentProfile.email) : undefined,
+          user_image: getStreamUserImage(currentProfile),
         });
       }
 
@@ -111,7 +121,7 @@ Deno.serve(
         token,
         channel_id: channelId,
         user_name: currentProfile.name,
-        user_image: currentProfile.role === 'staff' ? getStaffStreamImage(currentProfile.email) : undefined,
+        user_image: getStreamUserImage(currentProfile),
       });
     },
     { auth: 'user' },

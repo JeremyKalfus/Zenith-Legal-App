@@ -1,5 +1,15 @@
 import { useState } from 'react';
-import { Image, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Image,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
 import { PasswordInput } from '../../components/password-input';
 import { useAuth } from '../../context/auth-context';
 import { uiColors } from '../../theme/colors';
@@ -33,137 +43,146 @@ export function AuthMenuScreen({
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        <View style={styles.center}>
-        <Image
-          source={require('../../../assets/zenith-legal-logo.png')}
-          style={[styles.brandLogo, { height: logoSize, width: logoSize }]}
-          resizeMode="contain"
-        />
-        <Text style={styles.title}>Zenith Legal</Text>
-        <Text style={styles.subtitle}>A HIGHER LEVEL OF LEGAL SEARCH</Text>
-
-        <View style={styles.card}>
-          <View style={styles.tabRow}>
-            <Pressable
-              style={[
-                styles.tabButton,
-                tab === 'signup' ? styles.tabButtonActive : null,
-              ]}
-              onPress={() => {
-                setTab('signup');
-                setMessage('');
-                clearAuthNotice();
-              }}
-            >
-              <Text style={[styles.tabText, tab === 'signup' ? styles.tabTextActive : null]}>Sign Up</Text>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.tabButton,
-                tab === 'login' ? styles.tabButtonActive : null,
-              ]}
-              onPress={() => {
-                setTab('login');
-                setMessage('');
-                clearAuthNotice();
-              }}
-            >
-              <Text style={[styles.tabText, tab === 'login' ? styles.tabTextActive : null]}>Log In</Text>
-            </Pressable>
-          </View>
-
-          <TextInput
-            autoCapitalize="none"
-            keyboardType="email-address"
-            placeholder="you@example.com"
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-          />
-
-          {!isSignup ? (
-            <PasswordInput
-              placeholder="Password"
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
+      <GlobalRecruiterBanner />
+      <ScrollView
+        automaticallyAdjustKeyboardInsets
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+          <View style={styles.center}>
+            <Image
+              source={require('../../../assets/zenith-legal-logo.png')}
+              style={[styles.brandLogo, { height: logoSize, width: logoSize }]}
+              resizeMode="contain"
             />
-          ) : null}
+            <Text style={styles.title}>Zenith Legal</Text>
+            <Text style={styles.subtitle}>A HIGHER LEVEL OF LEGAL SEARCH</Text>
 
-          <Pressable
-            style={interactivePressableStyle({
-              base: styles.cta,
-              disabled: ctaDisabled,
-              disabledStyle: styles.ctaDisabled,
-              hoverStyle: sharedPressableFeedback.hover,
-              focusStyle: sharedPressableFeedback.focus,
-              pressedStyle: sharedPressableFeedback.pressed,
-            })}
-            disabled={ctaDisabled}
-            accessibilityState={{ disabled: ctaDisabled }}
-            onPress={async () => {
-              setBusy(true);
-              setMessage('');
-              clearAuthNotice();
-              try {
-                if (isSignup) {
-                  await checkCandidateSignupEmailAvailability(normalizedEmail);
-                  onContinueSignup?.(normalizedEmail);
-                } else {
-                  await signInWithEmailPassword(normalizedEmail, password);
-                  setMessage('Signing in...');
-                }
-              } catch (error) {
-                const nextMessage = (error as Error).message;
-                setMessage(nextMessage);
-                if (isSignup && nextMessage.toLowerCase().includes('already exists')) {
-                  setTab('login');
-                }
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <Text style={styles.ctaText}>
-              {busy
-                ? isSignup
-                  ? 'Checking email...'
-                  : 'Logging in...'
-                : isSignup
-                  ? 'Continue'
-                  : 'Log in'}
-            </Text>
-          </Pressable>
+            <View style={styles.card}>
+              <View style={styles.tabRow}>
+                <Pressable
+                  style={[
+                    styles.tabButton,
+                    tab === 'signup' ? styles.tabButtonActive : null,
+                  ]}
+                  onPress={() => {
+                    setTab('signup');
+                    setMessage('');
+                    clearAuthNotice();
+                  }}
+                >
+                  <Text style={[styles.tabText, tab === 'signup' ? styles.tabTextActive : null]}>
+                    Sign Up
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.tabButton,
+                    tab === 'login' ? styles.tabButtonActive : null,
+                  ]}
+                  onPress={() => {
+                    setTab('login');
+                    setMessage('');
+                    clearAuthNotice();
+                  }}
+                >
+                  <Text style={[styles.tabText, tab === 'login' ? styles.tabTextActive : null]}>
+                    Log In
+                  </Text>
+                </Pressable>
+              </View>
 
-          {!isSignup ? (
-            <Pressable
-              style={styles.forgotButton}
-              disabled={busy || !email.trim()}
-              accessibilityState={{ disabled: busy || !email.trim() }}
-              onPress={async () => {
-                setBusy(true);
-                setMessage('');
-                clearAuthNotice();
-                try {
-                  await requestPasswordReset(email);
-                  setMessage('Password reset email sent.');
-                } catch (error) {
-                  setMessage((error as Error).message);
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              <Text style={styles.forgotText}>Forgot password?</Text>
-            </Pressable>
-          ) : null}
+              <TextInput
+                autoCapitalize="none"
+                keyboardType="email-address"
+                placeholder="you@example.com"
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+              />
 
-          {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
-          {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
-          {message ? <Text style={styles.message}>{message}</Text> : null}
-        </View>
-        </View>
+              {!isSignup ? (
+                <PasswordInput
+                  placeholder="Password"
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                />
+              ) : null}
+
+              <Pressable
+                style={interactivePressableStyle({
+                  base: styles.cta,
+                  disabled: ctaDisabled,
+                  disabledStyle: styles.ctaDisabled,
+                  hoverStyle: sharedPressableFeedback.hover,
+                  focusStyle: sharedPressableFeedback.focus,
+                  pressedStyle: sharedPressableFeedback.pressed,
+                })}
+                disabled={ctaDisabled}
+                accessibilityState={{ disabled: ctaDisabled }}
+                onPress={async () => {
+                  setBusy(true);
+                  setMessage('');
+                  clearAuthNotice();
+                  try {
+                    if (isSignup) {
+                      await checkCandidateSignupEmailAvailability(normalizedEmail);
+                      onContinueSignup?.(normalizedEmail);
+                    } else {
+                      await signInWithEmailPassword(normalizedEmail, password);
+                      setMessage('Signing in...');
+                    }
+                  } catch (error) {
+                    const nextMessage = (error as Error).message;
+                    setMessage(nextMessage);
+                    if (isSignup && nextMessage.toLowerCase().includes('already exists')) {
+                      setTab('login');
+                    }
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                <Text style={styles.ctaText}>
+                  {busy
+                    ? isSignup
+                      ? 'Checking email...'
+                      : 'Logging in...'
+                    : isSignup
+                      ? 'Continue'
+                      : 'Log in'}
+                </Text>
+              </Pressable>
+
+              {!isSignup ? (
+                <Pressable
+                  style={styles.forgotButton}
+                  disabled={busy || !email.trim()}
+                  accessibilityState={{ disabled: busy || !email.trim() }}
+                  onPress={async () => {
+                    setBusy(true);
+                    setMessage('');
+                    clearAuthNotice();
+                    try {
+                      await requestPasswordReset(email);
+                      setMessage('Password reset email sent.');
+                    } catch (error) {
+                      setMessage((error as Error).message);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  <Text style={styles.forgotText}>Forgot password?</Text>
+                </Pressable>
+              ) : null}
+
+              {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
+              {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
+              {message ? <Text style={styles.message}>{message}</Text> : null}
+            </View>
+          </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -187,7 +206,7 @@ const styles = StyleSheet.create({
   center: {
     alignItems: 'center',
     justifyContent: 'flex-start',
-    marginTop: -70,
+    marginTop: -50,
     maxWidth: 560,
     minHeight: 760,
     paddingHorizontal: 16,

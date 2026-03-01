@@ -1,25 +1,18 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
-  buildJdDegreeDateFromParts,
   CITY_OPTIONS,
   candidateIntakeSchema,
   candidateRegistrationSchema,
   getJdDegreeDateLabel,
-  getJdDegreeDayOptions,
-  getJdDegreeMonthOptions,
-  getJdDegreeYearOptions,
   normalizePhoneNumber,
-  parseJdDegreeDateParts,
   sanitizePhoneInput,
-  type JdDegreeDateParts,
   PRACTICE_AREAS,
 } from '@zenith/shared';
 import { z } from 'zod';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import * as ImagePicker from 'expo-image-picker';
-import { Picker } from '@react-native-picker/picker';
-import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { PasswordInput } from '../../components/password-input';
@@ -31,9 +24,33 @@ import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/
 type CandidateRegistrationFormValues = z.input<typeof candidateRegistrationSchema>;
 type IntakeMode = 'registration' | 'finishProfile' | 'signupCompletion';
 const COLLAPSED_BUBBLE_ROWS_HEIGHT = 34;
-const JD_DEGREE_MONTH_OPTIONS = getJdDegreeMonthOptions();
-const JD_DEGREE_YEAR_OPTIONS = getJdDegreeYearOptions();
-const EMPTY_JD_DEGREE_DATE_PARTS: JdDegreeDateParts = { year: '', month: '', day: '' };
+
+function toJdDegreeLocalDate(value: string | null | undefined): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date;
+}
+
+function toJdDegreeIsoDate(value: Date): string {
+  const year = String(value.getFullYear());
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 function MultiSelectOption({
   label,
@@ -76,12 +93,9 @@ export function IntakeScreen({
     profile,
     registerCandidateWithPassword,
     updateCandidateProfileIntake,
-    updateCandidateProfilePicture,
   } = useAuth();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const [profilePictureUri, setProfilePictureUri] = useState<string | null>(null);
-  const [profilePictureMimeType, setProfilePictureMimeType] = useState<string | null>(null);
   const [showJdDatePicker, setShowJdDatePicker] = useState(false);
   const [showAllCities, setShowAllCities] = useState(false);
   const [showAllPracticeAreas, setShowAllPracticeAreas] = useState(false);
@@ -103,7 +117,6 @@ export function IntakeScreen({
       otherCityText: '',
       practiceAreas: [],
       otherPracticeText: '',
-      profilePictureUrl: '',
       jdDegreeDate: '',
       acceptedPrivacyPolicy: isFinishProfile,
       acceptedCommunicationConsent: true,
@@ -119,26 +132,21 @@ export function IntakeScreen({
   const selectedJdDegreeDateLabel = selectedJdDegreeDate
     ? getJdDegreeDateLabel(selectedJdDegreeDate)
     : 'Select JD degree date';
-  const [jdDegreeDateParts, setJdDegreeDateParts] = useState<JdDegreeDateParts>(
-    () => parseJdDegreeDateParts(selectedJdDegreeDate) ?? EMPTY_JD_DEGREE_DATE_PARTS,
-  );
-  const jdDegreeDayOptions = getJdDegreeDayOptions({
-    year: jdDegreeDateParts.year,
-    month: jdDegreeDateParts.month,
-  });
-  const applyJdDegreeDateParts = (nextParts: JdDegreeDateParts) => {
-    const validDayOptions = getJdDegreeDayOptions({
-      year: nextParts.year,
-      month: nextParts.month,
-    });
-    const normalizedParts = {
-      ...nextParts,
-      day: validDayOptions.includes(nextParts.day) ? nextParts.day : '',
-    };
-    setJdDegreeDateParts(normalizedParts);
-    setValue('jdDegreeDate', buildJdDegreeDateFromParts(normalizedParts) ?? '', {
+  const selectedJdDegreeDateValue = toJdDegreeLocalDate(selectedJdDegreeDate) ?? new Date();
+  const handleJdDateChange = (event: DateTimePickerEvent, nextDate?: Date) => {
+    if (event.type !== 'set' || !nextDate) {
+      if (Platform.OS !== 'ios') {
+        setShowJdDatePicker(false);
+      }
+      return;
+    }
+
+    setValue('jdDegreeDate', toJdDegreeIsoDate(nextDate), {
       shouldValidate: true,
     });
+    if (Platform.OS !== 'ios') {
+      setShowJdDatePicker(false);
+    }
   };
   const nextPracticeAreas = (
     currentValues: CandidateRegistrationFormValues['practiceAreas'],
@@ -165,17 +173,11 @@ export function IntakeScreen({
     setValue('otherCityText', profile.otherCityText ?? '', { shouldValidate: true });
     setValue('practiceAreas', profile.practiceAreas ?? [], { shouldValidate: true });
     setValue('otherPracticeText', profile.otherPracticeText ?? '', { shouldValidate: true });
-    setValue('profilePictureUrl', profile.profile_picture_url ?? '', { shouldValidate: true });
     setValue('jdDegreeDate', profile.jd_degree_date ?? '', { shouldValidate: true });
     setValue('acceptedPrivacyPolicy', true, { shouldValidate: true });
     setValue('acceptedCommunicationConsent', true, { shouldValidate: true });
     setValue('password', 'profile-complete', { shouldValidate: true });
     setValue('confirmPassword', 'profile-complete', { shouldValidate: true });
-    setProfilePictureUri(profile.profile_picture_url ?? null);
-    setProfilePictureMimeType(null);
-    setJdDegreeDateParts(
-      parseJdDegreeDateParts(profile.jd_degree_date ?? '') ?? EMPTY_JD_DEGREE_DATE_PARTS,
-    );
   }, [isFinishProfile, profile, setValue]);
 
   useEffect(() => {
@@ -203,6 +205,20 @@ export function IntakeScreen({
           automaticallyAdjustKeyboardInsets
         >
           <View style={styles.container}>
+          {isSignupCompletion ? (
+            <Pressable
+              style={styles.backButton}
+              onPress={() => {
+                if (navigation.canGoBack()) {
+                  navigation.goBack();
+                  return;
+                }
+                navigation.navigate('AuthMenu' as never);
+              }}
+            >
+              <Text style={styles.backButtonText}>Back</Text>
+            </Pressable>
+          ) : null}
           <Text style={styles.h1}>
             {usesFinishProfileCopy ? 'Finish your profile' : 'Welcome to Zenith Legal'}
           </Text>
@@ -227,67 +243,6 @@ export function IntakeScreen({
             )}
           />
           {errors.name ? <Text style={styles.error}>{errors.name.message}</Text> : null}
-
-          <Text style={styles.label}>
-            {usesFinishProfileCopy ? 'Profile photo (optional)' : 'Profile picture'}
-          </Text>
-          {profilePictureUri ? (
-            <Image source={{ uri: profilePictureUri }} style={styles.profileImage} />
-          ) : (
-            <View style={styles.profileImagePlaceholder}>
-              <Text style={styles.profileImagePlaceholderText}>No profile picture selected</Text>
-            </View>
-          )}
-          <View style={styles.rowActions}>
-            <Pressable
-              style={styles.secondaryInlineButton}
-              disabled={busy}
-              onPress={() => {
-                void (async () => {
-                  try {
-                    const result = await ImagePicker.launchImageLibraryAsync({
-                      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                      allowsEditing: true,
-                      aspect: [1, 1],
-                      quality: 0.8,
-                    });
-                    if (result.canceled) {
-                      return;
-                    }
-                    const asset = result.assets[0];
-                    if (!asset?.uri) {
-                      return;
-                    }
-                    setProfilePictureUri(asset.uri);
-                    setProfilePictureMimeType(asset.mimeType ?? null);
-                  } catch (error) {
-                    setMessage((error as Error).message);
-                  }
-                })();
-              }}
-            >
-              <Text style={styles.secondaryInlineButtonText}>
-                {profilePictureUri ? 'Change profile picture' : 'Add profile picture'}
-              </Text>
-            </Pressable>
-            <Pressable
-              style={styles.secondaryInlineButton}
-              disabled={busy || !profilePictureUri}
-              onPress={() => {
-                setProfilePictureUri(null);
-                setProfilePictureMimeType(null);
-              }}
-            >
-              <Text
-                style={[
-                  styles.secondaryInlineButtonText,
-                  !profilePictureUri ? styles.secondaryInlineButtonTextDisabled : null,
-                ]}
-              >
-                Remove profile picture
-              </Text>
-            </Pressable>
-          </View>
 
           <Controller
             control={control}
@@ -413,6 +368,42 @@ export function IntakeScreen({
             <Text style={styles.error}>{errors.otherCityText.message}</Text>
           ) : null}
 
+          <Text style={styles.label}>JD degree date (optional)</Text>
+          <Pressable style={styles.input} onPress={() => setShowJdDatePicker((value) => !value)}>
+            <Text style={selectedJdDegreeDate ? styles.valueText : styles.valueTextPlaceholder}>
+              {selectedJdDegreeDateLabel}
+            </Text>
+          </Pressable>
+          {showJdDatePicker ? (
+            <View style={styles.pickerShell}>
+              <DateTimePicker
+                value={selectedJdDegreeDateValue}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                maximumDate={new Date()}
+                onChange={handleJdDateChange}
+              />
+              <View style={styles.pickerActionRow}>
+                <Pressable
+                  style={styles.pickerAction}
+                  onPress={() =>
+                    setValue('jdDegreeDate', '', {
+                      shouldValidate: true,
+                    })
+                  }
+                >
+                  <Text style={styles.pickerActionText}>Clear</Text>
+                </Pressable>
+                <Pressable style={styles.pickerAction} onPress={() => setShowJdDatePicker(false)}>
+                  <Text style={styles.pickerActionText}>Done</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+          {errors.jdDegreeDate ? (
+            <Text style={styles.error}>{errors.jdDegreeDate.message}</Text>
+          ) : null}
+
           <Text style={styles.label}>Practice Area (choose 0-3)</Text>
           <Controller
             control={control}
@@ -458,79 +449,6 @@ export function IntakeScreen({
           ) : null}
           {errors.otherPracticeText ? (
             <Text style={styles.error}>{errors.otherPracticeText.message}</Text>
-          ) : null}
-
-          <Text style={styles.label}>JD degree date (optional)</Text>
-          <Pressable style={styles.input} onPress={() => setShowJdDatePicker((value) => !value)}>
-            <Text style={styles.valueText}>{selectedJdDegreeDateLabel}</Text>
-          </Pressable>
-          {showJdDatePicker ? (
-            <View style={styles.pickerShell}>
-              <View style={styles.pickerRow}>
-                <View style={styles.pickerColumn}>
-                  <Picker
-                    selectedValue={jdDegreeDateParts.month}
-                    onValueChange={(value) => {
-                      applyJdDegreeDateParts({
-                        ...jdDegreeDateParts,
-                        month: String(value),
-                      });
-                    }}
-                  >
-                    <Picker.Item label="Month" value="" />
-                    {JD_DEGREE_MONTH_OPTIONS.map((option) => (
-                      <Picker.Item key={option.value} label={option.label} value={option.value} />
-                    ))}
-                  </Picker>
-                </View>
-                <View style={styles.pickerColumn}>
-                  <Picker
-                    selectedValue={jdDegreeDateParts.day}
-                    onValueChange={(value) => {
-                      applyJdDegreeDateParts({
-                        ...jdDegreeDateParts,
-                        day: String(value),
-                      });
-                    }}
-                  >
-                    <Picker.Item label="Day" value="" />
-                    {jdDegreeDayOptions.map((day) => (
-                      <Picker.Item key={day} label={String(Number(day))} value={day} />
-                    ))}
-                  </Picker>
-                </View>
-                <View style={[styles.pickerColumn, styles.pickerColumnLast]}>
-                  <Picker
-                    selectedValue={jdDegreeDateParts.year}
-                    onValueChange={(value) => {
-                      applyJdDegreeDateParts({
-                        ...jdDegreeDateParts,
-                        year: String(value),
-                      });
-                    }}
-                  >
-                    <Picker.Item label="Year" value="" />
-                    {JD_DEGREE_YEAR_OPTIONS.map((year) => (
-                      <Picker.Item key={year} label={year} value={year} />
-                    ))}
-                  </Picker>
-                </View>
-              </View>
-              <View style={styles.pickerActionRow}>
-                <Pressable
-                  style={styles.pickerAction}
-                  onPress={() => applyJdDegreeDateParts({ year: '', month: '', day: '' })}
-                >
-                  <Text style={styles.pickerActionText}>Clear</Text>
-                </Pressable>
-                <Pressable style={styles.pickerAction} onPress={() => setShowJdDatePicker(false)}>
-                  <Text style={styles.pickerActionText}>Done</Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : null}
-          {errors.jdDegreeDate ? (
-            <Text style={styles.error}>{errors.jdDegreeDate.message}</Text>
           ) : null}
 
           {!isFinishProfile ? (
@@ -586,23 +504,10 @@ export function IntakeScreen({
                 if (isFinishProfile) {
                   const parsed = candidateIntakeSchema.parse(values);
                   await updateCandidateProfileIntake(parsed);
-
-                  if (profilePictureUri !== (profile?.profile_picture_url ?? null)) {
-                    await updateCandidateProfilePicture({
-                      sourceUri: profilePictureUri,
-                      mimeTypeHint: profilePictureMimeType,
-                    });
-                  }
                   setMessage('Profile saved.');
                 } else {
                   const parsed = candidateRegistrationSchema.parse(values);
                   await registerCandidateWithPassword(parsed);
-                  if (profilePictureUri) {
-                    await updateCandidateProfilePicture({
-                      sourceUri: profilePictureUri,
-                      mimeTypeHint: profilePictureMimeType,
-                    });
-                  }
                   setMessage('Account created. Signing you in...');
                 }
               } catch (error) {
@@ -649,6 +554,16 @@ const styles = StyleSheet.create({
   body: {
     color: uiColors.textSecondary,
     marginBottom: 12,
+  },
+  backButton: {
+    alignSelf: 'flex-start',
+    marginBottom: 2,
+  },
+  backButtonText: {
+    color: uiColors.textSecondary,
+    fontSize: 13,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   checkbox: {
     color: uiColors.textPrimary,
@@ -713,12 +628,12 @@ const styles = StyleSheet.create({
   },
   expandButton: {
     alignSelf: 'flex-start',
-    marginTop: -4,
+    marginTop: -8,
   },
   expandButtonText: {
-    color: uiColors.primary,
+    color: uiColors.textSecondary,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   h1: {
     color: uiColors.textPrimary,
@@ -770,31 +685,6 @@ const styles = StyleSheet.create({
     color: uiColors.background,
     fontSize: 12,
   },
-  profileImage: {
-    alignSelf: 'flex-start',
-    borderColor: uiColors.border,
-    borderRadius: 52,
-    borderWidth: 1,
-    height: 104,
-    width: 104,
-  },
-  profileImagePlaceholder: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: uiColors.divider,
-    borderColor: uiColors.border,
-    borderRadius: 52,
-    borderWidth: 1,
-    height: 104,
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    width: 104,
-  },
-  profileImagePlaceholderText: {
-    color: uiColors.textMuted,
-    fontSize: 11,
-    textAlign: 'center',
-  },
   pickerAction: {
     alignItems: 'center',
     paddingHorizontal: 12,
@@ -810,15 +700,6 @@ const styles = StyleSheet.create({
     color: uiColors.primary,
     fontWeight: '600',
   },
-  pickerColumn: {
-    flex: 1,
-  },
-  pickerColumnLast: {
-    flex: 1.1,
-  },
-  pickerRow: {
-    flexDirection: 'row',
-  },
   pickerShell: {
     backgroundColor: uiColors.surface,
     borderColor: uiColors.borderStrong,
@@ -826,29 +707,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     overflow: 'hidden',
   },
-  rowActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  secondaryInlineButton: {
-    backgroundColor: uiColors.divider,
-    borderColor: uiColors.borderStrong,
-    borderRadius: 8,
-    borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  secondaryInlineButtonText: {
-    color: uiColors.textPrimary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  secondaryInlineButtonTextDisabled: {
-    color: uiColors.textMuted,
-  },
   valueText: {
     color: uiColors.textPrimary,
+  },
+  valueTextPlaceholder: {
+    color: uiColors.textSecondary,
   },
   wrap: {
     flexDirection: 'row',

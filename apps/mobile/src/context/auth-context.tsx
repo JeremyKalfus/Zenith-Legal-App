@@ -21,7 +21,6 @@ import {
 import { env, getSupabaseClientConfigError } from '../config/env';
 import type { CandidateProfile, IntakeDraft } from '../types/domain';
 import { registerPushToken } from '../lib/notifications';
-import { removeProfilePictureByUrl, uploadProfilePictureForUser } from '../lib/profile-picture';
 
 type AuthMethods = {
   emailOtpEnabled: boolean;
@@ -308,10 +307,6 @@ type AuthContextValue = {
   verifySmsOtp: (phone: string, token: string) => Promise<void>;
   persistDraftAfterVerification: () => Promise<void>;
   updateCandidateProfileIntake: (input: CandidateIntake) => Promise<void>;
-  updateCandidateProfilePicture: (input: {
-    sourceUri: string | null;
-    mimeTypeHint?: string | null;
-  }) => Promise<string | null>;
   deleteAccount: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
@@ -349,9 +344,7 @@ function sleep(ms: number): Promise<void> {
 function isMissingUsersProfileColumnError(message: string): boolean {
   const lowered = message.toLowerCase();
   return (
-    (lowered.includes('users_profile.profile_picture_url') && lowered.includes('does not exist')) ||
     (lowered.includes('users_profile.jd_degree_date') && lowered.includes('does not exist')) ||
-    lowered.includes('column "profile_picture_url" does not exist') ||
     lowered.includes('column "jd_degree_date" does not exist')
   );
 }
@@ -376,7 +369,7 @@ async function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, label:
 async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
   try {
     const fullProfileSelect =
-      'id, role, name, email, mobile, profile_picture_url, jd_degree_date, onboarding_complete';
+      'id, role, name, email, mobile, jd_degree_date, onboarding_complete';
     const legacyProfileSelect = 'id, role, name, email, mobile, onboarding_complete';
 
     let profileIncludesOptionalColumns = true;
@@ -456,7 +449,6 @@ async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
       email: string;
       mobile: string | null;
       onboarding_complete?: boolean | null;
-      profile_picture_url?: string | null;
       jd_degree_date?: string | null;
     };
     const preferences = (preferencesResult.data as CandidatePreferencesRow | null) ?? null;
@@ -470,7 +462,6 @@ async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
         name: profileRow.name,
         email: profileRow.email,
         mobile: profileRow.mobile,
-        profile_picture_url: profileIncludesOptionalColumns ? (profileRow.profile_picture_url ?? null) : null,
         jd_degree_date: profileIncludesOptionalColumns ? (profileRow.jd_degree_date ?? null) : null,
         onboarding_complete: profileRow.onboarding_complete ?? true,
         preferredCities: Array.isArray(preferences?.cities) ? preferences.cities : [],
@@ -1075,71 +1066,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const transitionSeq = authTransitionSeqRef.current + 1;
         authTransitionSeqRef.current = transitionSeq;
         await hydrateProfileForSession(session, transitionSeq);
-      },
-      updateCandidateProfilePicture: async ({
-        sourceUri,
-        mimeTypeHint,
-      }: {
-        sourceUri: string | null;
-        mimeTypeHint?: string | null;
-      }) => {
-        const activeSession = await ensureValidSession();
-        const userId = activeSession.user.id;
-
-        const { data: currentProfileRow, error: currentProfileError } = await supabase
-          .from('users_profile')
-          .select('profile_picture_url')
-          .eq('id', userId)
-          .maybeSingle();
-
-        if (currentProfileError) {
-          throw new Error(currentProfileError.message);
-        }
-
-        const existingProfilePictureUrl =
-          ((currentProfileRow as { profile_picture_url?: string | null } | null)?.profile_picture_url ??
-            profile?.profile_picture_url) ??
-          null;
-
-        let nextProfilePictureUrl: string | null = null;
-        if (sourceUri) {
-          nextProfilePictureUrl = await uploadProfilePictureForUser({
-            userId,
-            sourceUri,
-            mimeTypeHint,
-          });
-        }
-
-        const { error: updateError } = await supabase
-          .from('users_profile')
-          .update({ profile_picture_url: nextProfilePictureUrl })
-          .eq('id', userId);
-
-        if (updateError) {
-          if (nextProfilePictureUrl) {
-            await removeProfilePictureByUrl(nextProfilePictureUrl).catch(() => undefined);
-          }
-          throw new Error(updateError.message);
-        }
-
-        if (
-          existingProfilePictureUrl &&
-          existingProfilePictureUrl !== nextProfilePictureUrl
-        ) {
-          await removeProfilePictureByUrl(existingProfilePictureUrl).catch(() => undefined);
-        }
-
-        setProfile((previous) => {
-          if (!previous || previous.id !== userId) {
-            return previous;
-          }
-          return {
-            ...previous,
-            profile_picture_url: nextProfilePictureUrl,
-          };
-        });
-
-        return nextProfilePictureUrl;
       },
       deleteAccount: async () => {
         if (!session?.user.id) {

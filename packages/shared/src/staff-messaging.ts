@@ -2,6 +2,7 @@ export type StaffMessageInboxItem = {
   candidateUserId: string;
   channelId: string;
   channelName: string;
+  candidateDisplayName?: string | null;
   lastMessagePreview: string;
   lastMessageAt: string;
   unreadCount: number;

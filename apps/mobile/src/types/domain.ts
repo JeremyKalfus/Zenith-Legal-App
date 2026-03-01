@@ -6,6 +6,7 @@ export type CandidateProfile = {
   name: string | null;
   email: string;
   mobile: string | null;
+  jd_degree_date: string | null;
   onboarding_complete: boolean;
   preferredCities: CityOption[];
   otherCityText: string | null;
