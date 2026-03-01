@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import type { ReactNode } from 'react';
 import { StaffDashboardGuard } from '@/components/modules/staff-dashboard-guard';
 
@@ -31,16 +32,28 @@ export function StaffDashboardShell({
             <h1 className="text-3xl font-bold text-slate-900">{title}</h1>
             <p className="text-slate-600">{description}</p>
           </div>
-          <div className="flex gap-2">
-            {actions.map((action) => (
-              <Link
-                key={action.href}
-                href={action.href}
-                className="inline-flex h-10 items-center rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                {action.label}
-              </Link>
-            ))}
+          <div className="flex flex-col items-end gap-3">
+            <Link href="/dashboard" className="inline-flex" aria-label="Zenith Legal dashboard">
+              <Image
+                src="/zenith-legal-logo.png"
+                alt="Zenith Legal"
+                width={120}
+                height={48}
+                className="h-12 w-auto"
+                priority
+              />
+            </Link>
+            <div className="flex gap-2">
+              {actions.map((action) => (
+                <Link
+                  key={action.href}
+                  href={action.href}
+                  className="inline-flex h-10 items-center rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  {action.label}
+                </Link>
+              ))}
+            </div>
           </div>
         </div>
 

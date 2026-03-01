@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  Dimensions,
   Image,
+  Keyboard,
+  KeyboardEvent,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -35,19 +38,123 @@ export function AuthMenuScreen({
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const scrollViewRef = useRef<ScrollView | null>(null);
+  const ctaAnchorRef = useRef<View | null>(null);
+  const forgotAnchorRef = useRef<View | null>(null);
+  const scrollYRef = useRef(0);
+  const keyboardTopRef = useRef<number>(Number.POSITIVE_INFINITY);
+  const keyboardVisibleRef = useRef(false);
+  const pendingAnchorScrollRef = useRef(false);
 
   const isSignup = tab === 'signup';
   const logoSize = 211;
   const normalizedEmail = email.trim().toLowerCase();
   const ctaDisabled = isSignup ? busy || !normalizedEmail : busy || !normalizedEmail || !password;
 
+  const scrollForFocusedField = useCallback(() => {
+    const anchor = tab === 'signup' ? ctaAnchorRef.current : forgotAnchorRef.current ?? ctaAnchorRef.current;
+    const keyboardTop = keyboardTopRef.current;
+    if (!anchor || !Number.isFinite(keyboardTop)) {
+      return false;
+    }
+
+    const keyboardGap = 14;
+    anchor.measureInWindow((_x, y, _width, height) => {
+      const anchorBottom = y + height;
+      const delta = anchorBottom - (keyboardTop - keyboardGap);
+      if (Math.abs(delta) < 2) {
+        return;
+      }
+      scrollViewRef.current?.scrollTo({
+        y: Math.max(0, scrollYRef.current + delta),
+        animated: true,
+      });
+    });
+    return true;
+  }, [tab]);
+
+  const handleFieldFocus = useCallback(() => {
+    if (keyboardVisibleRef.current) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          scrollForFocusedField();
+        });
+      });
+      return;
+    }
+    pendingAnchorScrollRef.current = true;
+    setTimeout(() => {
+      scrollForFocusedField();
+    }, 240);
+  }, [scrollForFocusedField]);
+
+  useEffect(() => {
+    if (keyboardVisibleRef.current) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!scrollForFocusedField()) {
+            setTimeout(() => {
+              scrollForFocusedField();
+            }, 120);
+          }
+        });
+      });
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    });
+  }, [scrollForFocusedField, tab]);
+
+  useEffect(() => {
+    const showEvent = 'keyboardDidShow';
+    const hideEvent = 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (event: KeyboardEvent) => {
+      const nextHeight = event.endCoordinates.height;
+      const fallbackKeyboardTop = Dimensions.get('window').height - nextHeight;
+      const nextKeyboardTop = event.endCoordinates.screenY || fallbackKeyboardTop;
+      keyboardVisibleRef.current = true;
+      keyboardTopRef.current = nextKeyboardTop;
+      setKeyboardHeight(nextHeight);
+      pendingAnchorScrollRef.current = false;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!scrollForFocusedField()) {
+            setTimeout(() => {
+              scrollForFocusedField();
+            }, 120);
+          }
+        });
+      });
+    });
+
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      keyboardVisibleRef.current = false;
+      keyboardTopRef.current = Number.POSITIVE_INFINITY;
+      setKeyboardHeight(0);
+      pendingAnchorScrollRef.current = false;
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [scrollForFocusedField]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <GlobalRecruiterBanner />
       <ScrollView
-        automaticallyAdjustKeyboardInsets
-        contentContainerStyle={styles.scrollContent}
+        ref={scrollViewRef}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 24 + keyboardHeight + 220 }]}
         keyboardShouldPersistTaps="handled"
+        onScroll={(event) => {
+          scrollYRef.current = event.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
       >
           <View style={styles.center}>
             <Image
@@ -92,90 +199,100 @@ export function AuthMenuScreen({
                 </Pressable>
               </View>
 
-              <TextInput
-                autoCapitalize="none"
-                keyboardType="email-address"
-                placeholder="you@example.com"
-                style={styles.input}
-                value={email}
-                onChangeText={setEmail}
-              />
+              <View>
+                <TextInput
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  placeholder="you@example.com"
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  onFocus={handleFieldFocus}
+                />
+              </View>
 
               {!isSignup ? (
-                <PasswordInput
-                  placeholder="Password"
-                  style={styles.input}
-                  value={password}
-                  onChangeText={setPassword}
-                />
+                <View>
+                  <PasswordInput
+                    placeholder="Password"
+                    style={styles.input}
+                    value={password}
+                    onChangeText={setPassword}
+                    onFocus={handleFieldFocus}
+                  />
+                </View>
               ) : null}
 
-              <Pressable
-                style={interactivePressableStyle({
-                  base: styles.cta,
-                  disabled: ctaDisabled,
-                  disabledStyle: styles.ctaDisabled,
-                  hoverStyle: sharedPressableFeedback.hover,
-                  focusStyle: sharedPressableFeedback.focus,
-                  pressedStyle: sharedPressableFeedback.pressed,
-                })}
-                disabled={ctaDisabled}
-                accessibilityState={{ disabled: ctaDisabled }}
-                onPress={async () => {
-                  setBusy(true);
-                  setMessage('');
-                  clearAuthNotice();
-                  try {
-                    if (isSignup) {
-                      await checkCandidateSignupEmailAvailability(normalizedEmail);
-                      onContinueSignup?.(normalizedEmail);
-                    } else {
-                      await signInWithEmailPassword(normalizedEmail, password);
-                      setMessage('Signing in...');
-                    }
-                  } catch (error) {
-                    const nextMessage = (error as Error).message;
-                    setMessage(nextMessage);
-                    if (isSignup && nextMessage.toLowerCase().includes('already exists')) {
-                      setTab('login');
-                    }
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-              >
-                <Text style={styles.ctaText}>
-                  {busy
-                    ? isSignup
-                      ? 'Checking email...'
-                      : 'Logging in...'
-                    : isSignup
-                      ? 'Continue'
-                      : 'Log in'}
-                </Text>
-              </Pressable>
-
-              {!isSignup ? (
+              <View ref={ctaAnchorRef}>
                 <Pressable
-                  style={styles.forgotButton}
-                  disabled={busy || !email.trim()}
-                  accessibilityState={{ disabled: busy || !email.trim() }}
+                  style={interactivePressableStyle({
+                    base: styles.cta,
+                    disabled: ctaDisabled,
+                    disabledStyle: styles.ctaDisabled,
+                    hoverStyle: sharedPressableFeedback.hover,
+                    focusStyle: sharedPressableFeedback.focus,
+                    pressedStyle: sharedPressableFeedback.pressed,
+                  })}
+                  disabled={ctaDisabled}
+                  accessibilityState={{ disabled: ctaDisabled }}
                   onPress={async () => {
                     setBusy(true);
                     setMessage('');
                     clearAuthNotice();
                     try {
-                      await requestPasswordReset(email);
-                      setMessage('Password reset email sent.');
+                      if (isSignup) {
+                        await checkCandidateSignupEmailAvailability(normalizedEmail);
+                        onContinueSignup?.(normalizedEmail);
+                      } else {
+                        await signInWithEmailPassword(normalizedEmail, password);
+                        setMessage('Signing in...');
+                      }
                     } catch (error) {
-                      setMessage((error as Error).message);
+                      const nextMessage = (error as Error).message;
+                      setMessage(nextMessage);
+                      if (isSignup && nextMessage.toLowerCase().includes('already exists')) {
+                        setTab('login');
+                      }
                     } finally {
                       setBusy(false);
                     }
                   }}
                 >
-                  <Text style={styles.forgotText}>Forgot password?</Text>
+                  <Text style={styles.ctaText}>
+                    {busy
+                      ? isSignup
+                        ? 'Checking email...'
+                        : 'Logging in...'
+                      : isSignup
+                        ? 'Continue'
+                        : 'Log in'}
+                  </Text>
                 </Pressable>
+              </View>
+
+              {!isSignup ? (
+                <View ref={forgotAnchorRef}>
+                  <Pressable
+                    style={styles.forgotButton}
+                    disabled={busy || !email.trim()}
+                    accessibilityState={{ disabled: busy || !email.trim() }}
+                    onPress={async () => {
+                      setBusy(true);
+                      setMessage('');
+                      clearAuthNotice();
+                      try {
+                        await requestPasswordReset(email);
+                        setMessage('Password reset email sent.');
+                      } catch (error) {
+                        setMessage((error as Error).message);
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                  >
+                    <Text style={styles.forgotText}>Forgot password?</Text>
+                  </Pressable>
+                </View>
               ) : null}
 
               {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
@@ -194,13 +311,8 @@ const styles = StyleSheet.create({
     marginTop: 100,
   },
   card: {
-    backgroundColor: uiColors.surface,
-    borderColor: uiColors.borderStrong,
-    borderRadius: 18,
-    borderWidth: 1,
     gap: 10,
     marginTop: 22,
-    padding: 14,
     width: '100%',
   },
   center: {

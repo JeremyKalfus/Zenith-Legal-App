@@ -21,6 +21,20 @@ import {
   STREAM_CHAT_CSS_URL,
 } from '@zenith/shared';
 
+const LIVE_CHAT_EVENT_TYPES = new Set([
+  'message.new',
+  'message.updated',
+  'message.deleted',
+  'notification.message_new',
+  'notification.mark_read',
+  'notification.mark_unread',
+  'notification.added_to_channel',
+  'channel.updated',
+  'channel.deleted',
+  'channel.hidden',
+  'channel.visible',
+]);
+
 function useStreamChatCSS() {
   useEffect(() => {
     ensureStreamChatStylesheet(STREAM_CHAT_CSS_URL);
@@ -32,14 +46,6 @@ type ChatBootstrapResponse = {
   user_name: string;
   user_image?: string;
 };
-
-function getInitial(name: string | null | undefined): string {
-  const trimmed = name?.trim();
-  if (!trimmed) {
-    return 'C';
-  }
-  return trimmed.charAt(0).toUpperCase();
-}
 
 async function queryStaffInboxItems(sessionUserId: string): Promise<StaffMessageInboxItem[]> {
   const streamClient = getChatClient();
@@ -90,6 +96,7 @@ function useStaffMessagesDashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const connectedRef = useRef(false);
+  const eventSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
 
   const loadInbox = useCallback(async (isManualRefresh = false) => {
     if (!isStreamChatConfigured()) {
@@ -147,8 +154,20 @@ function useStaffMessagesDashboard() {
         if (current && inboxItems.some((item) => item.channelId === current)) {
           return current;
         }
-        return inboxItems[0]?.channelId ?? null;
+        return null;
       });
+
+      if (!eventSubscriptionRef.current) {
+        const client = getChatClient();
+        eventSubscriptionRef.current = client.on((event) => {
+          if (!LIVE_CHAT_EVENT_TYPES.has(event.type)) {
+            return;
+          }
+
+          const channels = Object.values(client.activeChannels ?? {});
+          setConversations(mapChannelsToStaffInboxItems(channels as unknown[]));
+        });
+      }
       setErrorMessage(null);
     } catch (error) {
       setErrorMessage(await getFunctionErrorMessage(error, 'Unable to load messages. Please try again.'));
@@ -161,6 +180,13 @@ function useStaffMessagesDashboard() {
   useEffect(() => {
     void loadInbox();
   }, [loadInbox]);
+
+  useEffect(() => {
+    return () => {
+      eventSubscriptionRef.current?.unsubscribe();
+      eventSubscriptionRef.current = null;
+    };
+  }, []);
 
   const selectedConversation = useMemo(
     () => conversations.find((item) => item.channelId === selectedChannelId) ?? null,
@@ -186,6 +212,15 @@ function useStaffMessagesDashboard() {
 
   const handleSelectChannel = useCallback((channelId: string) => {
     setSelectedChannelId(channelId);
+    setConversations((current) =>
+      current.map((conversation) =>
+        conversation.channelId === channelId ? { ...conversation, unreadCount: 0 } : conversation,
+      ),
+    );
+
+    const client = getChatClient();
+    const channel = client.channel('messaging', channelId);
+    void channel.watch().then(() => channel.markRead()).catch(() => undefined);
   }, []);
 
   return {
@@ -272,10 +307,7 @@ export function StaffMessagesDashboard() {
                     onClick={() => handleSelectChannel(conversation.channelId)}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-xs font-semibold text-slate-700">
-                          {getInitial(conversation.candidateDisplayName || conversation.channelName)}
-                        </div>
+                      <div className="min-w-0">
                         <p className="line-clamp-1 text-sm font-semibold text-slate-900">
                           {conversation.candidateDisplayName || conversation.channelName}
                         </p>

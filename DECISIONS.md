@@ -433,3 +433,65 @@
 **Rationale:** Role mutation is a privileged operation and should be validated, audited, and error-coded server-side.
 
 **Consequences:** Admin candidate manager now exposes a Promote to Staff action backed by `staff_update_user_role`; all role promotions from this workflow are audited via `audit_events`.
+
+### [2026-03-01] Sectioned appointment lifecycle with hard-delete request cleanup + cancellable upcoming schedule
+
+**Decision:** Standardize appointment UIs around section buckets and route destructive actions through a dedicated lifecycle endpoint:
+- Candidate sections: `Overdue Confirmed`, `Outgoing Requests`, `Upcoming Appointments`
+- Staff/admin sections: `Overdue Confirmed`, `Incoming Requests`, `Upcoming Appointments`
+- `ignore_overdue` and `cancel_outgoing_request` hard-delete appointment rows
+- `cancel_upcoming` sets status to `cancelled` (not delete)
+
+**Options considered:**
+1. Keep one mixed appointment list and rely on status badges -- lower implementation cost, but does not satisfy workflow clarity and action semantics.
+2. Soft-hide outgoing/overdue rows with extra status/flag columns -- preserves rows, but adds filtering complexity and “ghost” lifecycle semantics.
+3. Add explicit lifecycle actions with mixed delete/cancel strategy (chosen) -- highest UX clarity with minimal schema changes and explicit side-effects.
+
+**Rationale:** Product requires explicit sections and action-specific behavior: some records should disappear permanently from both sides (outgoing cancel/overdue ignore), while upcoming cancellation must remain auditable and messageable.
+
+**Consequences:** Added `manage_appointment_lifecycle` edge function, shared appointment section bucketing helpers in `@zenith/shared`, and sectioned render paths in candidate mobile, staff mobile, and admin web. Cancellation and staff modification flows now emit candidate-channel chat updates with appointment summaries; cancellation also queues `appointment.cancelled` notifications.
+
+### [2026-03-01] Adopt start-only appointment input format with hard-delete cancellation semantics
+
+**Decision:** Use a start-only appointment input model (Date + Time + modality + optional video/location + optional note) across candidate mobile, staff mobile, and admin web. Keep `end_at_utc` internally with a fixed 30-minute duration and hard-delete upcoming cancellations.
+
+**Options considered:**
+1. Keep title/description + explicit start/end editor -- compatible with legacy payloads, but conflicts with required simplified UX.
+2. Start-only input with computed internal end-time and hard-delete cancellation (chosen) -- aligns UX while preserving overlap checks/calendar sync compatibility.
+3. Add full start/end editors to all surfaces and only relabel fields -- least backend change, but does not satisfy requested format and card presentation.
+
+**Rationale:** Product requires a simplified appointment model with consistent section behavior and deterministic sync across candidate/admin surfaces, including immediate removal on ignore/decline/cancel actions.
+
+**Consequences:** Appointment cards now render candidate/date/time overview with 2-line note preview + inline expand/collapse. `manage_appointment_lifecycle` now treats overdue and upcoming actions as hard deletes and uses start-time boundaries for overdue/upcoming checks. Chat payloads were standardized to field-based templates (`Candidate/Date/Time/Meeting type/Video|Location/Note`) for schedule, decline, cancel, and modify events.
+
+### [2026-03-01] Recruiter-owned candidate assignment + dedicated recruiter mobile filter screen
+
+**Decision:** Add recruiter ownership assignments via `candidate_recruiter_assignments` and replace recruiter mobile candidate chip filters with a dedicated `Filter Search` screen (separate route) that applies structured filters back on the list.
+
+**Options considered:**
+1. Keep existing inline chips and add recruiter/status filters as more chips -- fastest change, but poor scalability and weak parity with requested UX.
+2. Open an inline modal on the same list screen -- workable, but less clear navigation and weaker “apply then return” flow.
+3. Add separate filter screen + persisted recruiter assignment table (chosen) -- most explicit UX and durable data model for recruiter ownership.
+
+**Rationale:** Product requirement explicitly calls for a `Filter Search` button flow with `Clear`/`Apply` and separate navigation semantics, plus an assignable recruiter field with `None` support. A dedicated table keeps recruiter ownership explicit and auditable.
+
+**Consequences:** Recruiter mobile candidates now use `search AND` structured filters (assigned recruiter/current status/practice + OR sets for firms/cities/JD years), candidate detail supports saveable Assigned Recruiter selection (`None` or specific recruiter), and recruiter root tabs render a shared top-right Zenith logo title component.
+
+### [2026-03-01] Appointment chat intro text is action-specific (submit vs accept vs direct schedule)
+
+**Decision:** Keep a shared appointment-field formatter, but enforce distinct intro text per lifecycle action rather than reusing `Appointment scheduled.` across all paths.
+
+**Options considered:**
+1. Use one generic intro for all schedule-related actions -- simpler copy maintenance, but ambiguous user meaning.
+2. Action-specific intros with shared field formatter (chosen) -- clearer lifecycle communication while preserving one formatting contract.
+3. Full per-surface custom messages -- most flexibility, but highest drift risk across mobile/admin.
+
+**Rationale:** Users and staff need explicit distinction between request submission, request acceptance, and direct scheduling. Reusing a generic intro made pending-request and accepted-request events look identical.
+
+**Consequences:** Message intros are now:
+- Candidate submit request: `Appointment request sent and waiting for admin approval.`
+- Admin accepts incoming request: `Appointment request accepted and scheduled.`
+- Admin direct schedule create: `Appointment scheduled.`
+- Admin/candidate upcoming cancel: `Scheduled appointment canceled.`
+- Admin incoming decline: `Appointment request declined.`
+- Admin modify upcoming: `Scheduled appointment modified.`

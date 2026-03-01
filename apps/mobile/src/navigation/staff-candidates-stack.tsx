@@ -2,11 +2,22 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StaffCandidatesScreen } from '../screens/staff/staff-candidates-screen';
 import { StaffCandidateFirmsScreen } from '../screens/staff/staff-candidate-firms-screen';
 import type { StaffCandidateListItem } from '../features/staff-candidate-management';
+import {
+  StaffCandidateFiltersScreen,
+  type StaffCandidateFilters,
+  type StaffCandidateFilterOptions,
+} from '../screens/staff/staff-candidate-filters-screen';
 
-type StaffCandidatesStackParamList = {
-  StaffCandidatesList: undefined;
+export type StaffCandidatesStackParamList = {
+  StaffCandidatesList: {
+    appliedFilters?: StaffCandidateFilters;
+  } | undefined;
   StaffCandidateFirms: {
     candidate: StaffCandidateListItem;
+  };
+  StaffCandidateFilters: {
+    initialFilters: StaffCandidateFilters;
+    options: StaffCandidateFilterOptions;
   };
 };
 
@@ -16,10 +27,14 @@ export function StaffCandidatesStackNavigator() {
   return (
     <Stack.Navigator>
       <Stack.Screen name="StaffCandidatesList" options={{ title: 'Candidates' }}>
-        {({ navigation }) => (
+        {({ navigation, route }) => (
           <StaffCandidatesScreen
+            incomingAppliedFilters={route.params?.appliedFilters}
             onOpenCandidate={(candidate) => {
               navigation.navigate('StaffCandidateFirms', { candidate });
+            }}
+            onOpenFilterSearch={(params) => {
+              navigation.navigate('StaffCandidateFilters', params);
             }}
           />
         )}
@@ -32,6 +47,11 @@ export function StaffCandidatesStackNavigator() {
       >
         {({ route }) => <StaffCandidateFirmsScreen candidate={route.params.candidate} />}
       </Stack.Screen>
+      <Stack.Screen
+        name="StaffCandidateFilters"
+        options={{ title: 'Filter Search' }}
+        component={StaffCandidateFiltersScreen}
+      />
     </Stack.Navigator>
   );
 }

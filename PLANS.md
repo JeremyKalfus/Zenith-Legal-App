@@ -23,7 +23,9 @@
 - [x] Staff-created appointment scheduling for candidate accounts (mobile + admin)
 - [x] Appointment reminder queue timing support (`notification_deliveries.send_after_utc`, 15-minute push reminders)
 - [x] Calendar sync baseline (Google API sync + Apple ICS link sync records per appointment/provider/user)
-- [x] Appointment retention UX rule (scheduled/declined hidden from candidate/staff views 24h after end)
+- [x] Sectioned appointment lifecycle UX across candidate mobile + staff mobile + admin web (`overdue`, `incoming/outgoing`, `upcoming` with ignore/cancel/modify actions and sync)
+- [x] Appointment format overhaul across candidate/staff/admin (Date+Time start-only input, note-first cards with inline expansion, standardized field-based chat templates, and hard-delete upcoming cancellations)
+- [x] Appointment chat intro alignment across all triggers (candidate submit pending, admin accept incoming, admin direct schedule, admin/candidate cancel, admin decline, admin modify)
 - [x] Admin web staff messaging inbox + candidate deletion workflow (candidate-only hard delete)
 - [x] Candidate dashboard authorization UX semantics (waiting decline deletes assignment; authorized decline labeled cancel)
 - [x] Code quality pass: duplicate consolidation, theme centralization, hook extraction, edge function refactoring (desloppify strict 85.7 → 86.2)
@@ -32,6 +34,7 @@
 - [x] Staff appointment review scheduling posts candidate-channel chat updates (fail-open on chat notification errors)
 - [x] Admin candidate manager role promotion flow (`candidate -> staff`) via audited `staff_update_user_role` edge function
 - [x] Staff mobile per-candidate banner contact override controls (save + reset to global default)
+- [x] Recruiter mobile candidate ownership + Filter Search flow (`candidate_recruiter_assignments`, Assigned Recruiter editor, separate filter screen with Clear/Apply)
 - [x] Mobile icon/logo mark scaled +14% across app icon assets (`icon`, `adaptive-icon`, `splash-icon`, `favicon`)
 - [ ] Vendor credential wiring for end-to-end runtime (requires secrets)
 - [x] Device-level mobile release signing baseline (Apple App ID/App Store Connect app created; Expo EAS project linked; Android keystore + iOS dist cert/provisioning profile created)

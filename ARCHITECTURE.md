@@ -55,11 +55,12 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 | `mobile_sign_in_with_identifier_password` | Public | Password sign-in |
 | `create_or_update_candidate_profile` | User JWT | Intake profile upsert |
 | `delete_my_account` | User JWT | Candidate self-service account deletion (hard delete auth user + cascaded app data; non-cascading refs nulled first) |
-| `schedule_or_update_appointment` | User JWT | Appointment create/update for candidates and staff; normalizes accepted->scheduled status semantics, enqueues immediate notifications, 15-minute reminders, calendar sync, and posts candidate-channel chat updates on create |
+| `schedule_or_update_appointment` | User JWT | Appointment create/update for candidates and staff; accepts Date/Time + note style payloads (with internal 30-minute end-time normalization), enqueues notifications/reminders/calendar sync, posts `Appointment request sent and waiting for admin approval...` on candidate pending submit, posts `Appointment scheduled...` on staff direct scheduled creates, and posts `Scheduled appointment modified...` on staff updates |
+| `manage_appointment_lifecycle` | User JWT | Appointment lifecycle action endpoint: `ignore_overdue` (hard delete scheduled-overdue), `cancel_outgoing_request` (hard delete candidate-created pending request), and `cancel_upcoming` (chat + notification + calendar unsync side-effects, then hard delete) |
 | `authorize_firm_submission` | User JWT | Candidate authorizes/declines firm |
 | `chat_auth_bootstrap` | User JWT | Provisions Stream Chat token; candidates (and staff targeting a candidate) also get/create deterministic `candidate-<user_id>` channel. Staff can omit `user_id` to bootstrap inbox listing without creating/selecting a channel. Returns 404 if `users_profile` row missing (no fallback creation) |
 | `connect_calendar_provider` | User JWT | Connect Google/Apple calendar credentials/tokens for per-user appointment sync |
-| `staff_review_appointment` | Staff JWT | Review appointment requests (pending -> scheduled/declined with overlap detection), enqueue notifications/reminders, and trigger calendar sync |
+| `staff_review_appointment` | Staff JWT | Review appointment requests (pending -> scheduled/declined with overlap detection), enqueue notifications/reminders, trigger calendar sync, and post action-specific chat intros (`Appointment request accepted and scheduled...` / `Appointment request declined...`) |
 | `assign_firm_to_candidate` | Staff JWT | Assign firm to candidate and post candidate-channel chat updates |
 | `staff_update_assignment_status` | Staff JWT | Update assignment status |
 | `staff_unassign_firm_from_candidate` | Staff JWT | Remove firm assignment |
@@ -74,7 +75,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 
 ## Database Schema
 
-22 migrations in `supabase/migrations/`. Key tables:
+23 migrations in `supabase/migrations/`. Key tables:
 
 - `users_profile` -- User identity and role (candidate/staff)
 - `users_profile` includes candidate profile metadata used across mobile/admin surfaces (`jd_degree_date`)
@@ -90,6 +91,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 - `support_data_requests` -- Candidate support requests
 - `recruiter_contact_config` -- Configurable recruiter phone/email for mobile banner
 - `candidate_recruiter_contact_overrides` -- Per-candidate recruiter banner phone/email overrides managed by staff
+- `candidate_recruiter_assignments` -- Per-candidate recruiter ownership assignment (`candidate_user_id -> recruiter_user_id`, nullable for unassigned)
 
 All tables enforce Row Level Security. Staff-only mutations are routed through edge functions that call `assertStaff()`.
 
@@ -109,12 +111,13 @@ The shared package (`packages/shared/`) exports modules consumed by both admin a
 - **`domain.ts`** -- Zod schemas, enums, and TypeScript types for the domain model.
 - **`phone.ts`** -- Phone number formatting and validation utilities.
 - **`staff-messaging.ts`** -- Staff messaging helpers consolidated from duplicate implementations in admin and mobile: `StaffMessageInboxItem` type, `parseCandidateUserIdFromChannelId`, `mapChannelsToStaffInboxItems`, `formatRelativeTimestamp`.
-- **`candidate-filters.ts`** -- Candidate preference normalization and shared staff-candidate filtering logic (`search AND (city OR practice OR JD year)`), including legacy `practice_area` fallback when `practice_areas` is empty.
+- **`candidate-filters.ts`** -- Candidate preference normalization and shared filtering helpers: legacy city/practice/JD chip filtering (`search AND (city OR practice OR JD year)`) plus recruiter-mobile structured filtering (`search AND` assigned recruiter/current status/single-practice with OR-matched assigned firms/preferred cities/JD years).
 
 The package uses `"main": "src/index.ts"` (no build step). Admin consumes it via `transpilePackages: ['@zenith/shared']` in `next.config.ts`. Mobile consumes it directly.
 
 Staff candidate list flows (mobile `staff-candidates-screen` and admin `candidate-firm-manager`) now hydrate profile rows from `users_profile` with `candidate_preferences` (`cities`, `practice_areas`, `practice_area`) and apply the shared filter helper for consistent behavior across both surfaces, including JD graduation year filtering via `users_profile.jd_degree_date`.
 The same staff candidate profile surfaces render candidate identity details and `users_profile.jd_degree_date` for recruiter/admin visibility.
+Recruiter mobile candidate flows also hydrate assignment aggregates (`candidate_firm_assignments`) and recruiter ownership (`candidate_recruiter_assignments`) to support current-status filtering, assigned-firm filtering, and recruiter assignment/set-to-none actions.
 
 ## Mobile Theme System
 
@@ -128,6 +131,13 @@ Firm status badges in mobile listings use semantic `uiColors` status tokens for 
 - Candidate overrides are loaded only when the authenticated profile role is `candidate`.
 - Staff can set/reset candidate-specific overrides from `staff-candidate-firms-screen`; candidate banners render those values everywhere candidate context is available.
 
+## Recruiter Candidate Filter Search (Mobile)
+
+- `staff-candidates-screen` keeps free-text search and launches a dedicated `staff-candidate-filters-screen` for structured filters.
+- Filter state supports `assigned recruiter` (`any|none|staff-user-id`), `current status`, `practice`, `assigned firms[]`, `preferred cities[]`, and `jd years[]`.
+- `Clear` resets all filters to `Any`; `Apply` navigates back to the candidate list with params and applies filters immediately.
+- Filter evaluation is centralized in `@zenith/shared` (`filterStaffCandidates`) for deterministic UI behavior.
+
 ## Component Pattern: Custom Hook Extraction
 
 Large React components in both admin and mobile follow a hook-extraction pattern: state management, side effects, refs, and handler functions are extracted into a co-located `useXxxScreen` or `useXxxDashboard` hook. The component itself is pure JSX that receives values and callbacks from the hook. This keeps render logic separate from business logic and reduces per-file line counts.
@@ -139,6 +149,8 @@ Refactored components using this pattern:
 - `apps/mobile/src/screens/candidate/profile-screen.tsx` → `useProfileScreen`
 - `apps/mobile/src/screens/candidate/appointments-screen.tsx` → `useAppointmentsScreen`
 - `apps/mobile/src/screens/staff/staff-appointments-screen.tsx` → `useStaffAppointmentsScreen`
+- Appointments surfaces render section buckets derived from shared helper logic (`packages/shared/src/appointment-sections.ts`) with overdue/upcoming boundaries based on `start_at_utc`.
+- Appointment cards across candidate/staff/admin use candidate/date/time overview plus clamped note preview and inline expansion.
 
 ## Auth Flows
 

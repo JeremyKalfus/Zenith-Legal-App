@@ -73,3 +73,53 @@ Append a new entry immediately after incidents and after post-fix verification i
 - **Fix applied:** Standardized admin error parser with response clone/body parsing and updated admin/mobile appointment-review invoke handlers to use `getFunctionErrorMessage`.
 - **Prevention rule:** Any user-facing edge-function invoke path must use `getFunctionErrorMessage` and avoid displaying raw `FunctionsHttpError.message`.
 - **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after parser + handler updates.
+
+### 2026-02-28 — Unhandled Recruiter Contact Fetch Rejection Surfaced Network Toast
+
+- **Date:** 2026-02-28
+- **Context:** Auth/login screen showed `TypeError: Network request failed` while mounting recruiter contact banner data.
+- **Error:** `RecruiterContactProvider.refresh()` executed Supabase reads without `try/catch`, allowing network failures to escape as unhandled promise rejections.
+- **Why it happened:** Banner contact fetch assumed successful connectivity and did not guard transient fetch failures or invalid Supabase config state.
+- **Fix applied:** Wrapped `refresh()` Supabase calls in `try/catch`, added early config guard via `getSupabaseClientConfigError()`, and fallback to default recruiter contact on failure.
+- **Prevention rule:** Provider-level startup/background fetches must always catch and degrade gracefully; never allow data-refresh promises in `useEffect` to reject uncaught.
+- **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after the fix.
+
+### 2026-02-28 — Mobile Password Sign-In Needed RN-Safe Fallback Path
+
+- **Date:** 2026-02-28
+- **Context:** Candidate login surfaced `Cannot reach Supabase right now...` because `supabase.auth.signInWithPassword` threw a native fetch network failure on device.
+- **Error:** Password sign-in relied on a single client path and failed hard when the RN transport path raised `Network request failed`.
+- **Why it happened:** Auth flow had no fallback for client-specific transport failures, even though direct Supabase Auth REST endpoint remained available.
+- **Fix applied:** Added a network-error fallback that retries sign-in via `/auth/v1/token?grant_type=password` and then sets session via `supabase.auth.setSession`.
+- **Prevention rule:** Critical auth entry points must include a fallback transport path for recoverable client SDK request failures.
+- **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after adding fallback sign-in logic.
+
+### 2026-02-28 — Native SDK Password Path Still Emitted Unhandled Fetch Error
+
+- **Date:** 2026-02-28
+- **Context:** Login UI showed handled error text, but device still displayed RN red toast `TypeError: Network request failed`.
+- **Error:** Native path still attempted `supabase.auth.signInWithPassword` first, and an internal SDK fetch rejection surfaced as unhandled despite outer try/catch.
+- **Why it happened:** Fallback-only strategy kept the unstable primary call on native platforms.
+- **Fix applied:** Changed native (`iOS`/`Android`) password login to use direct Auth REST sign-in as the primary path; kept SDK path for web with fallback.
+- **Prevention rule:** If a client SDK call is known to emit internal unhandled transport errors on a platform, remove it from the primary runtime path on that platform.
+- **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after platform routing update.
+
+### 2026-02-28 — `setSession` Validation Fetch Could Block Native Login
+
+- **Date:** 2026-02-28
+- **Context:** Native login still failed with network errors after successful credential-path hardening.
+- **Error:** `supabase.auth.setSession` can perform an immediate `/auth/v1/user` validation call; when that network step fails, session bootstrap aborts.
+- **Why it happened:** Session establishment depended on network validation even when valid access/refresh tokens were already returned.
+- **Fix applied:** Added a guarded local-session fallback: on network-only `setSession` failure, decode JWT payload, persist session via auth internals, and emit `SIGNED_IN`.
+- **Prevention rule:** For critical login flows, treat post-token validation fetches as best-effort and keep a controlled local bootstrap fallback.
+- **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after fallback session persistence update.
+
+### 2026-02-28 — Dev-Only One-Time Bypass Needed During Auth Outage
+
+- **Date:** 2026-02-28
+- **Context:** User needed immediate in-app access while mobile auth/network path remained unstable.
+- **Error:** Standard login path could not be relied on for immediate access to the target account.
+- **Why it happened:** Upstream network/auth availability prevented normal sign-in completion.
+- **Fix applied:** Added a development-only bypass action locked to `jeremykalfus@gmail.com`, one-time per app launch, with local session/profile bootstrap and network hydration skips.
+- **Prevention rule:** Emergency bypasses must be dev-only, explicitly scoped to a known account, and easy to remove once auth stability returns.
+- **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after adding bypass flow.

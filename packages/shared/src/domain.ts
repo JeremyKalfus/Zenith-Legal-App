@@ -303,23 +303,21 @@ export type AppointmentModality = z.infer<typeof appointmentModalitySchema>;
 
 export const appointmentSchema = z
   .object({
-    title: trimmedString.min(1, 'Title is required').max(120),
-    description: trimmedString.max(2000).optional(),
+    candidateUserId: z.string().uuid().optional(),
+    date: trimmedString.regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+    time: trimmedString.regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Time must be HH:MM'),
     modality: appointmentModalitySchema,
     locationText: trimmedString.max(255).optional(),
     videoUrl: trimmedString.url('Must be a valid URL').max(500).optional(),
-    startAtUtc: z.string().datetime(),
-    endAtUtc: z.string().datetime(),
+    note: trimmedString.max(2000).optional(),
     timezoneLabel: trimmedString.min(1).max(64),
   })
   .superRefine((data, ctx) => {
-    const start = Date.parse(data.startAtUtc);
-    const end = Date.parse(data.endAtUtc);
-    if (Number.isNaN(start) || Number.isNaN(end) || end <= start) {
+    if (data.modality === 'virtual' && data.videoUrl && !data.videoUrl.trim()) {
       ctx.addIssue({
-        path: ['endAtUtc'],
+        path: ['videoUrl'],
         code: z.ZodIssueCode.custom,
-        message: 'End time must be after start time',
+        message: 'Video URL must be a valid URL',
       });
     }
   });
@@ -332,6 +330,13 @@ export const appointmentReviewSchema = z.object({
 });
 
 export type AppointmentReview = z.infer<typeof appointmentReviewSchema>;
+
+export const appointmentLifecycleActionSchema = z.object({
+  appointment_id: z.string().uuid(),
+  action: z.enum(['ignore_overdue', 'cancel_outgoing_request', 'cancel_upcoming']),
+});
+
+export type AppointmentLifecycleAction = z.infer<typeof appointmentLifecycleActionSchema>;
 
 export const notificationEventSchema = z.enum([
   'message.new',

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ScreenShell } from '../../components/screen-shell';
+import { StaffPageTitle } from '../../components/staff-page-title';
 import { useAuth } from '../../context/auth-context';
 import type { StaffMessageInboxItem } from '@zenith/shared';
 import { formatRelativeTimestamp, mapChannelsToStaffInboxItems } from '@zenith/shared';
@@ -19,6 +21,24 @@ function deriveConversationName(conversation: StaffMessageInboxItem): string {
     .replace(/\s*(?:·|-)\s*Zenith Legal\s*$/i, '')
     .trim();
   return cleaned || conversation.channelName;
+}
+
+const LIVE_CHAT_EVENT_TYPES = new Set([
+  'message.new',
+  'message.updated',
+  'message.deleted',
+  'notification.message_new',
+  'notification.mark_read',
+  'notification.mark_unread',
+  'notification.added_to_channel',
+  'channel.updated',
+  'channel.deleted',
+  'channel.hidden',
+  'channel.visible',
+]);
+
+function formatUnreadCount(count: number): string {
+  return count > 9 ? '9+' : String(count);
 }
 
 function getInitials(value: string): string {
@@ -48,18 +68,34 @@ export function StaffMessagesScreen({
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const connectedRef = useRef(false);
+  const eventSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
+  const hasHydratedInboxRef = useRef(false);
+  const lastSilentRefreshAtRef = useRef(0);
+
+  const syncConversationsFromClient = useCallback(() => {
+    const client = getChatClient();
+    const channels = Object.values(client.activeChannels ?? {});
+    setConversations(mapChannelsToStaffInboxItems(channels as unknown[]));
+  }, []);
 
   const loadInbox = useCallback(
-    async (isManualRefresh = false) => {
+    async ({
+      isManualRefresh = false,
+      isSilent = false,
+    }: {
+      isManualRefresh?: boolean;
+      isSilent?: boolean;
+    } = {}) => {
       if (!session?.user || !profile) {
         setIsLoading(false);
         return;
       }
 
+      const shouldShowLoading = !isManualRefresh && (!isSilent || !hasHydratedInboxRef.current);
+
       if (isManualRefresh) {
         setIsRefreshing(true);
-      } else {
+      } else if (shouldShowLoading) {
         setIsLoading(true);
       }
 
@@ -81,7 +117,8 @@ export function StaffMessagesScreen({
           user_image?: string;
         };
 
-        if (!connectedRef.current) {
+        const client = getChatClient();
+        if (client.userID !== session.user.id) {
           await ensureChatUserConnected(
             {
               id: session.user.id,
@@ -90,10 +127,7 @@ export function StaffMessagesScreen({
             },
             response.token,
           );
-          connectedRef.current = true;
         }
-
-        const client = getChatClient();
 
         const channels = await client.queryChannels(
           {
@@ -109,22 +143,70 @@ export function StaffMessagesScreen({
         );
 
         setConversations(mapChannelsToStaffInboxItems(channels as unknown[]));
+        hasHydratedInboxRef.current = true;
+
+        if (!eventSubscriptionRef.current) {
+          eventSubscriptionRef.current = client.on((event) => {
+            if (!LIVE_CHAT_EVENT_TYPES.has(event.type)) {
+              return;
+            }
+            syncConversationsFromClient();
+          });
+        }
         setMessage(null);
       } catch (error) {
         setMessage(
           await getFunctionErrorMessage(error, 'Unable to load messages. Please try again.'),
         );
       } finally {
-        setIsLoading(false);
+        if (shouldShowLoading) {
+          setIsLoading(false);
+        }
         setIsRefreshing(false);
       }
     },
-    [profile, session?.user],
+    [profile, session?.user, syncConversationsFromClient],
   );
 
   useEffect(() => {
     void loadInbox();
   }, [loadInbox]);
+
+  useEffect(() => {
+    return () => {
+      eventSubscriptionRef.current?.unsubscribe();
+      eventSubscriptionRef.current = null;
+    };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      syncConversationsFromClient();
+      const now = Date.now();
+      if (now - lastSilentRefreshAtRef.current > 20000) {
+        lastSilentRefreshAtRef.current = now;
+        void loadInbox({ isSilent: true });
+      }
+      return undefined;
+    }, [loadInbox, syncConversationsFromClient]),
+  );
+
+  const handleOpenConversation = useCallback(
+    (conversation: StaffMessageInboxItem) => {
+      setConversations((current) =>
+        current.map((row) =>
+          row.channelId === conversation.channelId ? { ...row, unreadCount: 0 } : row,
+        ),
+      );
+
+      const client = getChatClient();
+      const channel = client.channel('messaging', conversation.channelId);
+      void channel.markRead().catch(() => undefined);
+
+      onOpenConversation({ ...conversation, unreadCount: 0 });
+    },
+    [onOpenConversation],
+  );
 
   const subtitle = useMemo(
     () =>
@@ -136,13 +218,13 @@ export function StaffMessagesScreen({
 
   return (
     <ScreenShell showBanner={false}>
-      <Text style={styles.title}>Messages</Text>
+      <StaffPageTitle title="Messages" />
       <Text style={styles.body}>Recruiter inbox</Text>
       <Text style={styles.subtle}>{subtitle}</Text>
 
       <Pressable
         style={({ pressed }) => [styles.refreshButton, pressed && styles.refreshButtonPressed]}
-        onPress={() => void loadInbox(true)}
+        onPress={() => void loadInbox({ isManualRefresh: true })}
       >
         <Text style={styles.refreshButtonText}>
           {isRefreshing ? 'Refreshing...' : 'Refresh inbox'}
@@ -161,6 +243,7 @@ export function StaffMessagesScreen({
             const displayName = deriveConversationName(conversation);
             const timestamp = formatRelativeTimestamp(conversation.lastMessageAt);
             const isLast = index === conversations.length - 1;
+            const isUnread = conversation.unreadCount > 0;
 
             return (
             <Pressable
@@ -170,29 +253,37 @@ export function StaffMessagesScreen({
                 !isLast ? styles.conversationRowBorder : null,
                 pressed ? styles.conversationRowPressed : null,
               ]}
-              onPress={() => onOpenConversation(conversation)}
+              onPress={() => handleOpenConversation(conversation)}
             >
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>{getInitials(displayName)}</Text>
               </View>
               <View style={styles.conversationMain}>
                 <View style={styles.conversationTopRow}>
-                  <Text numberOfLines={1} style={styles.conversationName}>
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.conversationName, isUnread ? styles.conversationNameUnread : null]}
+                  >
                     {displayName}
                   </Text>
-                  <Text style={styles.conversationTimestamp}>
-                    {timestamp}
-                  </Text>
+                  <View style={styles.conversationMetaRow}>
+                    {isUnread ? (
+                      <View style={styles.unreadBadgeInline}>
+                        <Text style={styles.unreadBadgeText}>{formatUnreadCount(conversation.unreadCount)}</Text>
+                      </View>
+                    ) : null}
+                    <Text style={[styles.conversationTimestamp, isUnread ? styles.conversationTimestampUnread : null]}>
+                      {timestamp}
+                    </Text>
+                  </View>
                 </View>
-                <Text numberOfLines={1} style={styles.conversationPreview}>
+                <Text
+                  numberOfLines={1}
+                  style={[styles.conversationPreview, isUnread ? styles.conversationPreviewUnread : null]}
+                >
                   {conversation.lastMessagePreview}
                 </Text>
               </View>
-              {conversation.unreadCount > 0 ? (
-                <View style={styles.unreadBadge}>
-                  <Text style={styles.unreadBadgeText}>{conversation.unreadCount}</Text>
-                </View>
-              ) : null}
             </Pressable>
             );
           })
@@ -229,12 +320,24 @@ const styles = StyleSheet.create({
     color: uiColors.textPrimary,
     flex: 1,
     fontSize: 18,
+    fontWeight: '600',
+  },
+  conversationNameUnread: {
     fontWeight: '700',
+  },
+  conversationMetaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
   conversationPreview: {
     color: uiColors.textSecondary,
     fontSize: 16,
     marginTop: 3,
+  },
+  conversationPreviewUnread: {
+    color: uiColors.textPrimary,
+    fontWeight: '700',
   },
   conversationRow: {
     alignItems: 'center',
@@ -253,7 +356,10 @@ const styles = StyleSheet.create({
   conversationTimestamp: {
     color: uiColors.textMuted,
     fontSize: 14,
-    marginLeft: 8,
+  },
+  conversationTimestampUnread: {
+    color: uiColors.textStrong,
+    fontWeight: '600',
   },
   conversationTopRow: {
     alignItems: 'center',
@@ -293,19 +399,14 @@ const styles = StyleSheet.create({
     color: uiColors.textMuted,
     fontSize: 12,
   },
-  title: {
-    color: uiColors.textPrimary,
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  unreadBadge: {
+  unreadBadgeInline: {
     alignItems: 'center',
     backgroundColor: uiColors.textPrimary,
     borderRadius: 999,
     justifyContent: 'center',
-    minWidth: 24,
+    minWidth: 22,
     paddingHorizontal: 7,
-    paddingVertical: 3,
+    paddingVertical: 2,
   },
   unreadBadgeText: {
     color: uiColors.primaryText,

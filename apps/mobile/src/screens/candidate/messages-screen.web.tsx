@@ -23,9 +23,15 @@ function useStreamChatCSS() {
 export function MessagesScreen({
   showRecruiterBanner = true,
   candidateUserId,
+  initialDraftMessage: _initialDraftMessage,
+  initialDraftMessageId: _initialDraftMessageId,
+  onConsumeInitialDraftMessage: _onConsumeInitialDraftMessage,
 }: {
   showRecruiterBanner?: boolean;
   candidateUserId?: string;
+  initialDraftMessage?: string | null;
+  initialDraftMessageId?: number;
+  onConsumeInitialDraftMessage?: (messageId: number) => void;
 }) {
   useStreamChatCSS();
   const { channel, errorMessage, isLoading } = useResolvedCandidateChatChannel(candidateUserId);

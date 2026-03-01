@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import type { AppointmentStatus } from '@zenith/shared';
+import { bucketStaffAppointments, type AppointmentStatus } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
+import { StaffPageTitle } from '../../components/staff-page-title';
 import { useAuth } from '../../context/auth-context';
 import { ensureValidSession, supabase } from '../../lib/supabase';
 import {
   mapToDeviceCalendarAppointment,
-  shouldHideExpiredAppointment,
 } from '../../lib/appointments-shared';
 import { useAppointmentComposer } from '../../lib/use-appointment-composer';
 import { useCalendarSyncEnabled } from '../../lib/use-calendar-sync-enabled';
@@ -27,9 +27,11 @@ type StaffAppointment = {
   video_url: string | null;
   start_at_utc: string;
   end_at_utc: string;
-  status: AppointmentStatus | 'accepted';
+  status: AppointmentStatus;
   timezone_label: string;
   candidate_name: string;
+  candidate_user_id: string;
+  created_by_user_id: string;
 };
 
 type CandidateOption = {
@@ -37,17 +39,7 @@ type CandidateOption = {
   name: string;
 };
 
-function getStatusLabel(status: AppointmentStatus | 'accepted'): string {
-  return status === 'accepted' ? 'scheduled' : status;
-}
-
-const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-  pending: { bg: '#FEF3C7', text: '#92400E' },
-  accepted: { bg: '#D1FAE5', text: '#065F46' },
-  scheduled: { bg: '#D1FAE5', text: '#065F46' },
-  declined: { bg: '#FEE2E2', text: '#991B1B' },
-  cancelled: { bg: '#F1F5F9', text: '#64748B' },
-};
+type AppointmentAction = 'ignore_overdue' | 'cancel_outgoing_request' | 'cancel_upcoming';
 
 function useStaffAppointmentsScreen() {
   const { session } = useAuth();
@@ -57,35 +49,33 @@ function useStaffAppointmentsScreen() {
   const [selectedCandidateId, setSelectedCandidateId] = useState('');
   const [candidateSearchText, setCandidateSearchText] = useState('');
 
-  const [createTitle, setCreateTitle] = useState('');
-  const [createDescription, setCreateDescription] = useState('');
+  const [createNote, setCreateNote] = useState('');
   const {
-    createDurationMinutes,
-    createEndAtLocal,
     createStartAtLocal,
-    handleStartPickerChange,
+    handleDatePickerChange,
+    handleTimePickerChange,
     resetComposer,
-    selectedDurationLabel,
-    setCreateDurationMinutes,
-    setShowDurationPicker,
-    setShowStartPicker,
-    showDurationPicker,
-    showStartPicker,
+    setCreateStartAtLocal,
+    setShowDatePicker,
+    setShowTimePicker,
+    showDatePicker,
+    showTimePicker,
   } = useAppointmentComposer();
   const [showForm, setShowForm] = useState(false);
   const [createModality, setCreateModality] = useState<'virtual' | 'in_person'>('virtual');
   const [createLocation, setCreateLocation] = useState('');
   const [createVideoUrl, setCreateVideoUrl] = useState('');
+  const [editingAppointmentId, setEditingAppointmentId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   const [statusMessage, setStatusMessage] = useState('');
-  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [actingAppointmentId, setActingAppointmentId] = useState<string | null>(null);
 
   const loadAppointments = useCallback(async () => {
     const { data, error } = await supabase
       .from('appointments')
       .select(
-        'id,title,description,modality,location_text,video_url,start_at_utc,end_at_utc,status,timezone_label,candidate:users_profile!appointments_candidate_user_id_fkey(name)',
+        'id,title,description,modality,location_text,video_url,start_at_utc,end_at_utc,status,timezone_label,candidate_user_id,created_by_user_id,candidate:users_profile!appointments_candidate_user_id_fkey(name)',
       )
       .order('start_at_utc', { ascending: true });
 
@@ -107,13 +97,15 @@ function useStaffAppointmentsScreen() {
         video_url: row.video_url as string | null,
         start_at_utc: row.start_at_utc as string,
         end_at_utc: row.end_at_utc as string,
-        status: row.status as AppointmentStatus | 'accepted',
+        status: row.status as AppointmentStatus,
         timezone_label: (row.timezone_label as string | null) ?? 'America/New_York',
         candidate_name: name,
+        candidate_user_id: row.candidate_user_id as string,
+        created_by_user_id: row.created_by_user_id as string,
       };
     });
 
-    setAppointments(mapped.filter((appointment) => !shouldHideExpiredAppointment(appointment)));
+    setAppointments(mapped);
     setStatusMessage('');
   }, []);
 
@@ -137,6 +129,21 @@ function useStaffAppointmentsScreen() {
   useEffect(() => {
     void loadAppointments();
     void loadCandidates();
+
+    const channel = supabase
+      .channel('staff-appointments-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'appointments' },
+        () => {
+          void loadAppointments();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, [loadAppointments, loadCandidates]);
 
   const toDeviceCalendarAppointment = useCallback(
@@ -144,6 +151,7 @@ function useStaffAppointmentsScreen() {
       mapToDeviceCalendarAppointment(appointment, appointment.candidate_name),
     [],
   );
+
   useAppointmentCalendarSync({
     appointments,
     calendarSyncEnabled,
@@ -169,26 +177,39 @@ function useStaffAppointmentsScreen() {
   const selectedCandidateName =
     candidates.find((candidate) => candidate.id === selectedCandidateId)?.name ?? '';
 
+  const sections = useMemo(() => bucketStaffAppointments(appointments), [appointments]);
+
+  const resetFormState = useCallback(() => {
+    setCreateNote('');
+    setCreateModality('virtual');
+    setCreateLocation('');
+    setCreateVideoUrl('');
+    setEditingAppointmentId(null);
+    resetComposer();
+  }, [resetComposer]);
+
   const toggleForm = useCallback(() => {
     setShowForm((value) => {
       const next = !value;
       if (!next) {
-        resetComposer();
+        resetFormState();
       }
       return next;
     });
-  }, [resetComposer]);
+  }, [resetFormState]);
 
-  const handleReview = useCallback(
-    async (appointmentId: string, decision: 'accepted' | 'declined') => {
-      setReviewingId(appointmentId);
-      setStatusMessage('');
-
+  const runLifecycleAction = useCallback(
+    async (appointmentId: string, action: AppointmentAction, successMessage: string) => {
       try {
+        setActingAppointmentId(appointmentId);
+        setStatusMessage('');
         await ensureValidSession();
 
-        const { error } = await supabase.functions.invoke('staff_review_appointment', {
-          body: { appointment_id: appointmentId, decision },
+        const { error } = await supabase.functions.invoke('manage_appointment_lifecycle', {
+          body: {
+            appointment_id: appointmentId,
+            action,
+          },
         });
 
         if (error) {
@@ -196,25 +217,20 @@ function useStaffAppointmentsScreen() {
           return;
         }
 
-        setStatusMessage(decision === 'accepted' ? 'Appointment scheduled.' : 'Appointment declined.');
+        setStatusMessage(successMessage);
         await loadAppointments();
       } catch (err) {
         setStatusMessage((err as Error).message);
       } finally {
-        setReviewingId(null);
+        setActingAppointmentId(null);
       }
     },
     [loadAppointments],
   );
 
-  const handleCreateAppointment = useCallback(async () => {
+  const handleSubmitAppointment = useCallback(async () => {
     if (!selectedCandidateId) {
       setStatusMessage('Select a candidate before scheduling.');
-      return;
-    }
-
-    if (!createTitle.trim()) {
-      setStatusMessage('Appointment title is required.');
       return;
     }
 
@@ -225,31 +241,26 @@ function useStaffAppointmentsScreen() {
       await ensureValidSession();
       const { error } = await supabase.functions.invoke('schedule_or_update_appointment', {
         body: {
+          id: editingAppointmentId ?? undefined,
           candidateUserId: selectedCandidateId,
-          title: createTitle.trim(),
-          description: createDescription.trim() || undefined,
           modality: createModality,
           locationText: createModality === 'in_person' ? createLocation.trim() || undefined : undefined,
           videoUrl: createModality === 'virtual' ? createVideoUrl.trim() || undefined : undefined,
+          note: createNote.trim() || undefined,
           startAtUtc: createStartAtLocal.toISOString(),
-          endAtUtc: createEndAtLocal.toISOString(),
           timezoneLabel: Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York',
           status: 'scheduled',
         },
       });
 
       if (error) {
-        setStatusMessage(error.message);
+        setStatusMessage(await getFunctionErrorMessage(error));
         return;
       }
 
-      setStatusMessage('Appointment scheduled.');
+      setStatusMessage(editingAppointmentId ? 'Appointment updated.' : 'Appointment scheduled.');
       setShowForm(false);
-      setCreateTitle('');
-      setCreateDescription('');
-      resetComposer();
-      setCreateLocation('');
-      setCreateVideoUrl('');
+      resetFormState();
       await loadAppointments();
     } catch (err) {
       setStatusMessage((err as Error).message);
@@ -257,39 +268,44 @@ function useStaffAppointmentsScreen() {
       setCreating(false);
     }
   }, [
-    createDescription,
-    createEndAtLocal,
     createLocation,
     createModality,
+    createNote,
     createStartAtLocal,
-    createTitle,
     createVideoUrl,
+    editingAppointmentId,
     loadAppointments,
-    resetComposer,
+    resetFormState,
     selectedCandidateId,
   ]);
 
-  const pending = appointments.filter((appointment) => appointment.status === 'pending');
-  const others = appointments.filter((appointment) => appointment.status !== 'pending');
+  const startEditAppointment = useCallback((appointment: StaffAppointment) => {
+    setEditingAppointmentId(appointment.id);
+    setShowForm(true);
+    setSelectedCandidateId(appointment.candidate_user_id);
+    setCreateNote(appointment.description ?? '');
+    setCreateModality(appointment.modality);
+    setCreateLocation(appointment.location_text ?? '');
+    setCreateVideoUrl(appointment.video_url ?? '');
+    setCreateStartAtLocal(new Date(appointment.start_at_utc));
+  }, [setCreateStartAtLocal]);
 
   return {
-    pending,
-    others,
+    sections,
     showForm,
+    setShowForm,
     toggleForm,
     statusMessage,
-    reviewingId,
-    handleReview,
+    actingAppointmentId,
+    runLifecycleAction,
     filteredCandidates,
     selectedCandidateId,
     setSelectedCandidateId,
     candidateSearchText,
     setCandidateSearchText,
     selectedCandidateName,
-    createTitle,
-    setCreateTitle,
-    createDescription,
-    setCreateDescription,
+    createNote,
+    setCreateNote,
     createModality,
     setCreateModality,
     createLocation,
@@ -297,39 +313,36 @@ function useStaffAppointmentsScreen() {
     createVideoUrl,
     setCreateVideoUrl,
     createStartAtLocal,
-    createEndAtLocal,
-    createDurationMinutes,
-    setCreateDurationMinutes,
-    showDurationPicker,
-    setShowDurationPicker,
-    selectedDurationLabel,
-    showStartPicker,
-    setShowStartPicker,
-    handleStartPickerChange,
+    showDatePicker,
+    setShowDatePicker,
+    showTimePicker,
+    setShowTimePicker,
+    handleDatePickerChange,
+    handleTimePickerChange,
     creating,
-    handleCreateAppointment,
+    editingAppointmentId,
+    handleSubmitAppointment,
+    startEditAppointment,
+    resetFormState,
   };
 }
 
 export function StaffAppointmentsScreen() {
   const {
-    pending,
-    others,
+    sections,
     showForm,
     toggleForm,
     statusMessage,
-    reviewingId,
-    handleReview,
+    actingAppointmentId,
+    runLifecycleAction,
     filteredCandidates,
     selectedCandidateId,
     setSelectedCandidateId,
     candidateSearchText,
     setCandidateSearchText,
     selectedCandidateName,
-    createTitle,
-    setCreateTitle,
-    createDescription,
-    setCreateDescription,
+    createNote,
+    setCreateNote,
     createModality,
     setCreateModality,
     createLocation,
@@ -337,23 +350,26 @@ export function StaffAppointmentsScreen() {
     createVideoUrl,
     setCreateVideoUrl,
     createStartAtLocal,
-    createEndAtLocal,
-    createDurationMinutes,
-    setCreateDurationMinutes,
-    showDurationPicker,
-    setShowDurationPicker,
-    selectedDurationLabel,
-    showStartPicker,
-    setShowStartPicker,
-    handleStartPickerChange,
+    showDatePicker,
+    setShowDatePicker,
+    showTimePicker,
+    setShowTimePicker,
+    handleDatePickerChange,
+    handleTimePickerChange,
     creating,
-    handleCreateAppointment,
+    editingAppointmentId,
+    handleSubmitAppointment,
+    startEditAppointment,
   } = useStaffAppointmentsScreen();
+
+  const hasSections =
+    sections.overdueConfirmed.length > 0 ||
+    sections.upcomingAppointments.length > 0;
 
   return (
     <ScreenShell showBanner={false}>
-      <Text style={styles.title}>Appointment Review</Text>
-      <Text style={styles.body}>Review and approve candidate appointment requests.</Text>
+      <StaffPageTitle title="Appointment Review" />
+      <Text style={styles.body}>Review and manage candidate appointments and schedules.</Text>
 
       <Pressable
         style={interactivePressableStyle({
@@ -365,7 +381,11 @@ export function StaffAppointmentsScreen() {
         onPress={toggleForm}
       >
         <Text style={styles.primaryCtaText}>
-          {showForm ? 'Close form' : 'Schedule for candidate'}
+          {showForm
+            ? 'Close form'
+            : editingAppointmentId
+              ? 'Modify appointment'
+              : 'Schedule for candidate'}
         </Text>
       </Pressable>
 
@@ -399,153 +419,169 @@ export function StaffAppointmentsScreen() {
           </View>
           {selectedCandidateName ? <Text style={styles.helperText}>Selected: {selectedCandidateName}</Text> : null}
 
-        <TextInput style={styles.input} placeholder="Title" value={createTitle} onChangeText={setCreateTitle} />
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder="Description (optional)"
-          value={createDescription}
-          onChangeText={setCreateDescription}
-          multiline
-        />
+          <View style={styles.row}>
+            <Pressable
+              style={[styles.tag, createModality === 'virtual' ? styles.tagSelected : null]}
+              onPress={() => setCreateModality('virtual')}
+            >
+              <Text>Virtual</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.tag, createModality === 'in_person' ? styles.tagSelected : null]}
+              onPress={() => setCreateModality('in_person')}
+            >
+              <Text>In-person</Text>
+            </Pressable>
+          </View>
 
-        <View style={styles.row}>
+          <AppointmentTimingControls
+            createStartAtLocal={createStartAtLocal}
+            handleDatePickerChange={handleDatePickerChange}
+            handleTimePickerChange={handleTimePickerChange}
+            setShowDatePicker={setShowDatePicker}
+            setShowTimePicker={setShowTimePicker}
+            showDatePicker={showDatePicker}
+            showTimePicker={showTimePicker}
+            styles={styles}
+          />
+
+          {createModality === 'in_person' ? (
+            <TextInput
+              style={styles.input}
+              placeholder="Location (optional)"
+              value={createLocation}
+              onChangeText={setCreateLocation}
+            />
+          ) : null}
+
+          {createModality === 'virtual' ? (
+            <TextInput
+              style={styles.input}
+              placeholder="Video URL (optional)"
+              value={createVideoUrl}
+              onChangeText={setCreateVideoUrl}
+              autoCapitalize="none"
+            />
+          ) : null}
+
+          <TextInput
+            style={[styles.input, styles.textArea]}
+            placeholder="Note (optional)"
+            value={createNote}
+            onChangeText={setCreateNote}
+            multiline
+          />
+
           <Pressable
-            style={[styles.tag, createModality === 'virtual' ? styles.tagSelected : null]}
-            onPress={() => setCreateModality('virtual')}
+            style={interactivePressableStyle({
+              base: styles.primaryCta,
+              disabled: creating,
+              disabledStyle: styles.primaryCtaDisabled,
+              hoverStyle: sharedPressableFeedback.hover,
+              focusStyle: sharedPressableFeedback.focus,
+              pressedStyle: sharedPressableFeedback.pressed,
+            })}
+            onPress={() => void handleSubmitAppointment()}
+            disabled={creating}
           >
-            <Text>Virtual</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.tag, createModality === 'in_person' ? styles.tagSelected : null]}
-            onPress={() => setCreateModality('in_person')}
-          >
-            <Text>In-person</Text>
+            <Text style={styles.primaryCtaText}>
+              {creating ? 'Saving...' : editingAppointmentId ? 'Save changes' : 'Schedule appointment'}
+            </Text>
           </Pressable>
         </View>
-
-        <AppointmentTimingControls
-          createDurationMinutes={createDurationMinutes}
-          createEndAtLocal={createEndAtLocal}
-          createStartAtLocal={createStartAtLocal}
-          handleStartPickerChange={handleStartPickerChange}
-          selectedDurationLabel={selectedDurationLabel}
-          setCreateDurationMinutes={setCreateDurationMinutes}
-          setShowDurationPicker={setShowDurationPicker}
-          setShowStartPicker={setShowStartPicker}
-          showDurationPicker={showDurationPicker}
-          showStartPicker={showStartPicker}
-          styles={styles}
-        />
-
-        {createModality === 'in_person' ? (
-          <TextInput
-            style={styles.input}
-            placeholder="Location (optional)"
-            value={createLocation}
-            onChangeText={setCreateLocation}
-          />
-        ) : null}
-
-        {createModality === 'virtual' ? (
-          <TextInput
-            style={styles.input}
-            placeholder="Video URL (optional)"
-            value={createVideoUrl}
-            onChangeText={setCreateVideoUrl}
-            autoCapitalize="none"
-          />
-        ) : null}
-
-        <Pressable
-          style={interactivePressableStyle({
-            base: styles.primaryCta,
-            disabled: creating,
-            disabledStyle: styles.primaryCtaDisabled,
-            hoverStyle: sharedPressableFeedback.hover,
-            focusStyle: sharedPressableFeedback.focus,
-            pressedStyle: sharedPressableFeedback.pressed,
-          })}
-          onPress={() => void handleCreateAppointment()}
-          disabled={creating}
-        >
-          <Text style={styles.primaryCtaText}>{creating ? 'Scheduling...' : 'Schedule appointment'}</Text>
-        </Pressable>
-      </View>
       ) : null}
 
       {statusMessage ? <Text style={styles.statusMessage}>{statusMessage}</Text> : null}
 
-      {pending.length > 0 ? (
+      {sections.overdueConfirmed.length > 0 ? (
         <>
-          <Text style={styles.sectionHeader}>Pending Approval ({pending.length})</Text>
-          {pending.map((appointment) => (
-            <View key={appointment.id} style={styles.card}>
+          <Text style={styles.sectionHeader}>Overdue ({sections.overdueConfirmed.length})</Text>
+          {sections.overdueConfirmed.map((appointment) => (
+            <View key={appointment.id} style={[styles.card, styles.overdueCard]}>
               <View style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>{appointment.title}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: STATUS_COLORS.pending.bg }]}>
-                  <Text style={[styles.statusText, { color: STATUS_COLORS.pending.text }]}>Pending</Text>
+                <Text style={styles.cardTitle}>{appointment.candidate_name}</Text>
+                <View style={[styles.statusBadge, styles.overdueBadge]}>
+                  <Text style={[styles.statusText, styles.overdueStatusText]}>Overdue</Text>
                 </View>
               </View>
-              <Text style={styles.cardSubtitle}>{appointment.candidate_name}</Text>
               <AppointmentCardDetails
                 description={appointment.description}
-                endAtUtc={appointment.end_at_utc}
                 locationText={appointment.location_text}
                 modality={appointment.modality}
                 startAtUtc={appointment.start_at_utc}
                 styles={styles}
+                timezoneLabel={appointment.timezone_label}
+                videoUrl={appointment.video_url}
               />
+              <Pressable
+                style={interactivePressableStyle({
+                  base: styles.secondaryAction,
+                  disabled: actingAppointmentId === appointment.id,
+                  disabledStyle: styles.primaryCtaDisabled,
+                  hoverStyle: sharedPressableFeedback.hover,
+                  focusStyle: sharedPressableFeedback.focus,
+                  pressedStyle: sharedPressableFeedback.pressed,
+                })}
+                onPress={() =>
+                  void runLifecycleAction(appointment.id, 'ignore_overdue', 'Overdue appointment ignored.')
+                }
+                disabled={actingAppointmentId === appointment.id}
+              >
+                <Text style={styles.secondaryActionText}>
+                  {actingAppointmentId === appointment.id ? 'Ignoring...' : 'Ignore'}
+                </Text>
+              </Pressable>
+            </View>
+          ))}
+        </>
+      ) : null}
 
+      {sections.upcomingAppointments.length > 0 ? (
+        <>
+          <Text style={styles.sectionHeader}>Upcoming Appointments ({sections.upcomingAppointments.length})</Text>
+          {sections.upcomingAppointments.map((appointment) => (
+            <View key={appointment.id} style={styles.card}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>{appointment.candidate_name}</Text>
+                <View style={[styles.statusBadge, styles.upcomingBadge]}>
+                  <Text style={[styles.statusText, styles.upcomingBadgeText]}>Scheduled</Text>
+                </View>
+              </View>
+              <AppointmentCardDetails
+                description={appointment.description}
+                locationText={appointment.location_text}
+                modality={appointment.modality}
+                startAtUtc={appointment.start_at_utc}
+                styles={styles}
+                timezoneLabel={appointment.timezone_label}
+                videoUrl={appointment.video_url}
+              />
               <View style={styles.actionRow}>
                 <Pressable
-                  style={[styles.actionButton, styles.acceptButton]}
-                  onPress={() => handleReview(appointment.id, 'accepted')}
-                  disabled={reviewingId === appointment.id}
+                  style={[styles.actionButton, styles.modifyButton]}
+                  onPress={() => startEditAppointment(appointment)}
+                  disabled={actingAppointmentId === appointment.id}
                 >
-                  <Text style={styles.acceptButtonText}>{reviewingId === appointment.id ? 'Saving...' : 'Schedule'}</Text>
+                  <Text style={styles.modifyButtonText}>Modify</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.actionButton, styles.declineButton]}
-                  onPress={() => handleReview(appointment.id, 'declined')}
-                  disabled={reviewingId === appointment.id}
+                  onPress={() =>
+                    void runLifecycleAction(appointment.id, 'cancel_upcoming', 'Upcoming appointment canceled.')
+                  }
+                  disabled={actingAppointmentId === appointment.id}
                 >
-                  <Text style={styles.declineButtonText}>Decline</Text>
+                  <Text style={styles.declineButtonText}>
+                    {actingAppointmentId === appointment.id ? 'Canceling...' : 'Cancel'}
+                  </Text>
                 </Pressable>
               </View>
             </View>
           ))}
         </>
-      ) : (
-        <Text style={styles.emptyState}>No pending appointment requests.</Text>
-      )}
-
-      {others.length > 0 ? (
-        <>
-          <Text style={styles.sectionHeader}>All Appointments ({others.length})</Text>
-          {others.map((appointment) => {
-            const colors = STATUS_COLORS[appointment.status] ?? STATUS_COLORS.scheduled;
-            return (
-              <View key={appointment.id} style={styles.card}>
-                <View style={styles.cardHeader}>
-                  <Text style={styles.cardTitle}>{appointment.title}</Text>
-                  <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
-                    <Text style={[styles.statusText, { color: colors.text }]}>{getStatusLabel(appointment.status)}</Text>
-                  </View>
-                </View>
-                <Text style={styles.cardSubtitle}>{appointment.candidate_name}</Text>
-                <AppointmentCardDetails
-                  description={appointment.description}
-                  endAtUtc={appointment.end_at_utc}
-                  locationText={appointment.location_text}
-                  modality={appointment.modality}
-                  startAtUtc={appointment.start_at_utc}
-                  styles={styles}
-                />
-              </View>
-            );
-          })}
-        </>
       ) : null}
+
+      {!hasSections ? <Text style={styles.emptyState}>No appointments in these sections.</Text> : null}
     </ScreenShell>
   );
 }
@@ -602,13 +638,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
     padding: 10,
   },
+  overdueCard: {
+    borderColor: uiColors.errorBright,
+    borderWidth: 1,
+  },
+  overdueBadge: {
+    backgroundColor: '#FEE2E2',
+  },
+  overdueStatusText: {
+    color: '#991B1B',
+  },
+  upcomingBadge: {
+    backgroundColor: uiColors.surface,
+  },
+  upcomingBadgeText: {
+    color: uiColors.textSecondary,
+  },
   cardTitle: {
     ...appointmentSharedStyles.cardTitle,
-  },
-  cardSubtitle: {
-    color: uiColors.textStrong,
-    fontSize: 13,
-    fontWeight: '500',
   },
   statusText: {
     ...appointmentSharedStyles.statusText,
@@ -632,6 +679,15 @@ const styles = StyleSheet.create({
     color: uiColors.primaryText,
     fontWeight: '700',
   },
+  modifyButton: {
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
+    borderWidth: 1,
+  },
+  modifyButtonText: {
+    color: uiColors.textPrimary,
+    fontWeight: '700',
+  },
   declineButton: {
     backgroundColor: uiColors.surface,
     borderColor: uiColors.errorBright,
@@ -640,5 +696,18 @@ const styles = StyleSheet.create({
   declineButtonText: {
     color: uiColors.errorBright,
     fontWeight: '700',
+  },
+  secondaryAction: {
+    alignItems: 'center',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingVertical: 10,
+  },
+  secondaryActionText: {
+    color: uiColors.textPrimary,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

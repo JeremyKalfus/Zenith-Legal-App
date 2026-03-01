@@ -9,33 +9,48 @@ import {
   queueAppointmentStatusNotifications,
 } from '../_shared/appointment-notifications.ts';
 import { createEdgeHandler } from '../_shared/edge-handler.ts';
+import { buildAppointmentMessage } from '../_shared/appointment-message.ts';
 
-const appointmentSchema = z
-  .object({
-    title: z.string().trim().min(1).max(120),
-    description: z.string().trim().max(2000).optional(),
-    modality: z.enum(['virtual', 'in_person']),
-    locationText: z.string().trim().max(255).optional(),
-    videoUrl: z.string().trim().url().max(500).optional(),
-    startAtUtc: z.string().datetime(),
-    endAtUtc: z.string().datetime(),
-    timezoneLabel: z.string().trim().min(1).max(64),
-  })
-  .superRefine((value, ctx) => {
-    if (Date.parse(value.endAtUtc) <= Date.parse(value.startAtUtc)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'endAtUtc must be after startAtUtc',
-        path: ['endAtUtc'],
-      });
-    }
-  });
+const THIRTY_MINUTES_MS = 30 * 60 * 1000;
 
-const schema = appointmentSchema.extend({
+const schema = z.object({
   id: z.string().uuid().optional(),
   candidateUserId: z.string().uuid().optional(),
   status: z.enum(['pending', 'scheduled', 'accepted', 'declined', 'cancelled']).optional(),
+  modality: z.enum(['virtual', 'in_person']),
+  locationText: z.string().trim().max(255).optional(),
+  videoUrl: z.string().trim().url().max(500).optional(),
+  timezoneLabel: z.string().trim().min(1).max(64),
+  date: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  time: z.string().trim().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+  note: z.string().trim().max(2000).optional(),
+  startAtUtc: z.string().datetime().optional(),
+  endAtUtc: z.string().datetime().optional(),
+  title: z.string().trim().max(120).optional(),
+  description: z.string().trim().max(2000).optional(),
+}).superRefine((value, ctx) => {
+  if (!value.startAtUtc && (!value.date || !value.time)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['date'],
+      message: 'Provide date/time or startAtUtc.',
+    });
+  }
 });
+
+type AppointmentRecord = {
+  id: string;
+  title: string;
+  description: string | null;
+  modality: 'virtual' | 'in_person';
+  location_text: string | null;
+  video_url: string | null;
+  start_at_utc: string;
+  end_at_utc: string;
+  timezone_label: string;
+  status: string;
+  candidate_user_id: string;
+};
 
 function normalizeStatus(status: z.infer<typeof schema>['status'] | undefined) {
   if (status === 'accepted') {
@@ -45,57 +60,103 @@ function normalizeStatus(status: z.infer<typeof schema>['status'] | undefined) {
   return status;
 }
 
-function formatAppointmentTimestampForMessage(appointment: {
-  start_at_utc: string;
-  timezone_label: string;
-}) {
-  const startAt = new Date(appointment.start_at_utc);
-  if (Number.isNaN(startAt.getTime())) {
-    return appointment.start_at_utc;
-  }
-
-  try {
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      timeZone: appointment.timezone_label,
-    }).format(startAt);
-  } catch {
-    return startAt.toISOString();
-  }
+function toOptionalString(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
-function getAppointmentStatusLabel(status: string) {
-  if (status === 'scheduled' || status === 'accepted') {
-    return 'Scheduled';
+function resolveStartAtUtc(payload: z.infer<typeof schema>): string {
+  if (payload.startAtUtc) {
+    return payload.startAtUtc;
   }
-  if (status === 'declined') {
-    return 'Declined';
+
+  const parsed = new Date(`${payload.date}T${payload.time}:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error('Invalid appointment date/time');
   }
-  if (status === 'cancelled') {
-    return 'Cancelled';
+
+  return parsed.toISOString();
+}
+
+function resolveEndAtUtc(payload: z.infer<typeof schema>, startAtUtc: string): string {
+  if (payload.endAtUtc) {
+    return payload.endAtUtc;
   }
-  return 'Pending review';
+
+  const startMs = Date.parse(startAtUtc);
+  if (!Number.isFinite(startMs)) {
+    throw new Error('Invalid appointment start time');
+  }
+
+  return new Date(startMs + THIRTY_MINUTES_MS).toISOString();
+}
+
+function buildInternalTitle(candidateName: string, explicitTitle?: string): string {
+  const fallback = `Appointment with ${candidateName}`;
+  const normalized = explicitTitle?.trim();
+  return normalized && normalized.length > 0 ? normalized : fallback;
 }
 
 const scheduleOrUpdateAppointmentHandler = createEdgeHandler(
-    async (context) => {
-      const { request, authHeader, userId } = context;
-      const resolvedUserId = userId as string;
-      const client = createAuthedClient(authHeader);
-      const serviceClient = createServiceClient();
-      const payload = schema.parse(await request.json());
-      const normalizedStatus = normalizeStatus(payload.status);
+  async (context) => {
+    const { request, authHeader, userId } = context;
+    const resolvedUserId = userId as string;
+    const client = createAuthedClient(authHeader);
+    const serviceClient = createServiceClient();
 
-    const candidateUserId = payload.candidateUserId ?? resolvedUserId;
-    const isOnBehalfScheduling = candidateUserId !== resolvedUserId;
-    let actorIsStaff = false;
+    const parsedPayload = schema.safeParse(await request.json());
+    if (!parsedPayload.success) {
+      return errorResponse('Invalid appointment payload', 422, 'invalid_payload');
+    }
 
-    if (isOnBehalfScheduling || (normalizedStatus && normalizedStatus !== 'pending')) {
-      await assertStaff(authHeader);
-      actorIsStaff = true;
+    const payload = parsedPayload.data;
+    const normalizedStatus = normalizeStatus(payload.status);
+    await assertStaff(authHeader);
+    const actorIsStaff = true;
+
+    let previousAppointment: AppointmentRecord | null = null;
+    if (payload.id) {
+      const { data: previous, error: previousError } = await client
+        .from('appointments')
+        .select('*')
+        .eq('id', payload.id)
+        .single();
+
+      if (previousError || !previous) {
+        return errorResponse(previousError?.message ?? 'Appointment not found', 404, 'appointment_not_found');
+      }
+
+      previousAppointment = previous as AppointmentRecord;
+    }
+
+    const candidateUserId = payload.candidateUserId ?? previousAppointment?.candidate_user_id;
+    if (!candidateUserId) {
+      return errorResponse('Candidate is required for appointment scheduling', 422, 'invalid_payload');
+    }
+
+    const { data: candidateProfile, error: candidateError } = await serviceClient
+      .from('users_profile')
+      .select('id,name,role')
+      .eq('id', candidateUserId)
+      .maybeSingle();
+
+    if (candidateError || !candidateProfile || candidateProfile.role !== 'candidate') {
+      return errorResponse('Candidate profile not found', 404, 'candidate_not_found');
+    }
+
+    const candidateName = candidateProfile.name?.trim() || 'Candidate';
+
+    let startAtUtc: string;
+    let endAtUtc: string;
+    try {
+      startAtUtc = resolveStartAtUtc(payload);
+      endAtUtc = resolveEndAtUtc(payload, startAtUtc);
+    } catch (error) {
+      return errorResponse((error as Error).message, 422, 'invalid_payload');
+    }
+
+    if (Date.parse(endAtUtc) <= Date.parse(startAtUtc)) {
+      return errorResponse('End time must be after start time', 422, 'invalid_payload');
     }
 
     const { data: conflicts, error: conflictError } = await client
@@ -104,8 +165,8 @@ const scheduleOrUpdateAppointmentHandler = createEdgeHandler(
       .eq('candidate_user_id', candidateUserId)
       .eq('status', 'scheduled')
       .neq('id', payload.id ?? '00000000-0000-0000-0000-000000000000')
-      .lt('start_at_utc', payload.endAtUtc)
-      .gt('end_at_utc', payload.startAtUtc)
+      .lt('start_at_utc', endAtUtc)
+      .gt('end_at_utc', startAtUtc)
       .limit(1);
 
     if (conflictError) {
@@ -113,45 +174,41 @@ const scheduleOrUpdateAppointmentHandler = createEdgeHandler(
     }
 
     if (conflicts && conflicts.length > 0) {
-      return errorResponse('Appointment conflict detected', 409);
+      return errorResponse('Appointment conflict detected', 409, 'appointment_conflict');
     }
 
     const dbPayload = {
       candidate_user_id: candidateUserId,
       created_by_user_id: resolvedUserId,
-      title: payload.title,
-      description: payload.description ?? null,
+      title: buildInternalTitle(candidateName, payload.title),
+      description: toOptionalString(payload.note) ?? toOptionalString(payload.description) ?? null,
       modality: payload.modality,
-      location_text: payload.locationText ?? null,
-      video_url: payload.videoUrl ?? null,
-      start_at_utc: payload.startAtUtc,
-      end_at_utc: payload.endAtUtc,
+      location_text: payload.modality === 'in_person' ? toOptionalString(payload.locationText) ?? null : null,
+      video_url: payload.modality === 'virtual' ? toOptionalString(payload.videoUrl) ?? null : null,
+      start_at_utc: startAtUtc,
+      end_at_utc: endAtUtc,
       timezone_label: payload.timezoneLabel,
-      status: normalizedStatus ?? 'pending',
+      status: normalizedStatus ?? 'scheduled',
     };
 
-    let appointmentResult;
-
-    if (payload.id) {
-      appointmentResult = await client
+    const appointmentResult = payload.id
+      ? await client
         .from('appointments')
         .update(dbPayload)
         .eq('id', payload.id)
         .select('*')
-        .single();
-    } else {
-      appointmentResult = await client
+        .single()
+      : await client
         .from('appointments')
         .insert(dbPayload)
         .select('*')
         .single();
-    }
 
     if (appointmentResult.error || !appointmentResult.data) {
       return errorResponse(appointmentResult.error?.message ?? 'Unable to save appointment', 400);
     }
 
-    const appointment = appointmentResult.data;
+    const appointment = appointmentResult.data as AppointmentRecord;
 
     await client.from('appointment_participants').upsert(
       [
@@ -175,57 +232,86 @@ const scheduleOrUpdateAppointmentHandler = createEdgeHandler(
       participantUserIds: [candidateUserId, resolvedUserId],
     });
 
-      await queueAppointmentStatusNotifications({
+    await queueAppointmentStatusNotifications({
+      serviceClient,
+      candidateUserId,
+      appointmentId: appointment.id,
+      eventType: payload.id ? 'appointment.updated' : 'appointment.created',
+      status: appointment.status,
+    });
+
+    if (appointment.status === 'scheduled') {
+      const reminderTargets = new Set<string>([candidateUserId]);
+      if (actorIsStaff && resolvedUserId !== candidateUserId) {
+        reminderTargets.add(resolvedUserId);
+      }
+
+      await queueAppointmentReminderNotifications({
         serviceClient,
-        candidateUserId,
         appointmentId: appointment.id,
-        eventType: payload.id ? 'appointment.updated' : 'appointment.created',
-        status: appointment.status,
+        startAtUtc: appointment.start_at_utc,
+        participantUserIds: reminderTargets,
       });
+    }
 
-      if (appointment.status === 'scheduled') {
-        const reminderTargets = new Set<string>([candidateUserId]);
-        if (actorIsStaff && resolvedUserId !== candidateUserId) {
-          reminderTargets.add(resolvedUserId);
-        }
-
-        await queueAppointmentReminderNotifications({
+    if (!payload.id && appointment.status === 'scheduled' && actorIsStaff) {
+      try {
+        await sendCandidateRecruiterChannelMessage({
           serviceClient,
-          appointmentId: appointment.id,
-          startAtUtc: appointment.start_at_utc,
-          participantUserIds: reminderTargets,
+          candidateUserId,
+          actorUserId: resolvedUserId,
+          text: buildAppointmentMessage('Appointment scheduled.', {
+            candidateName,
+            appointment,
+          }),
         });
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            event: 'appointment_channel_message_failed',
+            appointment_id: appointment.id,
+            candidate_user_id: candidateUserId,
+            actor_user_id: resolvedUserId,
+            actor_is_staff: actorIsStaff,
+            message_error: error instanceof Error && error.message
+              ? error.message
+              : String(error),
+          }),
+        );
+        throw new Error('Unable to post appointment update message. Please retry.');
       }
+    }
 
-      if (!payload.id) {
-        const appointmentStartLabel = formatAppointmentTimestampForMessage(appointment);
-        const statusLabel = getAppointmentStatusLabel(appointment.status);
-        try {
-          await sendCandidateRecruiterChannelMessage({
-            serviceClient,
-            candidateUserId,
-            actorUserId: resolvedUserId,
-            text:
-              `Appointment created: "${appointment.title}" on ${appointmentStartLabel} ` +
-              `(${appointment.timezone_label}). Status: ${statusLabel}.`,
-          });
-        } catch (error) {
-          console.error(
-            JSON.stringify({
-              event: 'appointment_channel_message_failed',
-              appointment_id: appointment.id,
-              candidate_user_id: candidateUserId,
-              actor_user_id: resolvedUserId,
-              actor_is_staff: actorIsStaff,
-              message_error:
-                error instanceof Error && error.message
-                  ? error.message
-                  : String(error),
-            }),
-          );
-          throw new Error('Unable to post appointment update message. Please retry.');
-        }
+    if (
+      payload.id &&
+      actorIsStaff &&
+      previousAppointment?.status === 'scheduled' &&
+      appointment.status === 'scheduled'
+    ) {
+      try {
+        await sendCandidateRecruiterChannelMessage({
+          serviceClient,
+          candidateUserId,
+          actorUserId: resolvedUserId,
+          text: buildAppointmentMessage('Scheduled appointment modified.', {
+            candidateName,
+            appointment,
+          }),
+        });
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            event: 'appointment_update_channel_message_failed',
+            appointment_id: appointment.id,
+            candidate_user_id: candidateUserId,
+            actor_user_id: resolvedUserId,
+            message_error: error instanceof Error && error.message
+              ? error.message
+              : String(error),
+          }),
+        );
       }
+    }
 
     await writeAuditEvent({
       client: serviceClient,
@@ -233,12 +319,13 @@ const scheduleOrUpdateAppointmentHandler = createEdgeHandler(
       action: payload.id ? 'update_appointment' : 'create_appointment',
       entityType: 'appointments',
       entityId: appointment.id,
-      afterJson: appointment,
+      beforeJson: previousAppointment as unknown as Record<string, unknown> | null,
+      afterJson: appointment as unknown as Record<string, unknown>,
     });
 
-      return jsonResponse({ success: true, appointment });
-    },
-    { auth: 'user' },
-  );
+    return jsonResponse({ success: true, appointment });
+  },
+  { auth: 'user' },
+);
 
 Deno.serve(scheduleOrUpdateAppointmentHandler);

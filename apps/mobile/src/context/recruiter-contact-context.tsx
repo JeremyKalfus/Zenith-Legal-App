@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { env } from '../config/env';
+import { env, getSupabaseClientConfigError } from '../config/env';
 import { supabase } from '../lib/supabase';
 import type { RecruiterContact } from '../types/domain';
 import { useAuth } from './auth-context';
@@ -28,43 +28,52 @@ export function RecruiterContactProvider({
   const [contact, setContact] = useState<RecruiterContact>(defaultContact);
 
   const refresh = useCallback(async () => {
+    if (getSupabaseClientConfigError()) {
+      setContact(defaultContact);
+      return;
+    }
+
     const candidateUserId =
       profile?.role === 'candidate' ? profile.id : null;
 
-    const { data: globalData } = await supabase
-      .from('recruiter_contact_config')
-      .select('phone,email')
-      .eq('is_active', true)
-      .maybeSingle();
-
-    const globalContact =
-      globalData?.phone && globalData?.email
-        ? { phone: globalData.phone, email: globalData.email }
-        : null;
-
-    let candidateOverride: RecruiterContact | null = null;
-    if (candidateUserId) {
-      const { data: overrideData } = await supabase
-        .from('candidate_recruiter_contact_overrides')
+    try {
+      const { data: globalData } = await supabase
+        .from('recruiter_contact_config')
         .select('phone,email')
-        .eq('candidate_user_id', candidateUserId)
+        .eq('is_active', true)
         .maybeSingle();
 
-      if (overrideData?.phone && overrideData?.email) {
-        candidateOverride = {
-          phone: overrideData.phone,
-          email: overrideData.email,
-        };
-      }
-    }
+      const globalContact =
+        globalData?.phone && globalData?.email
+          ? { phone: globalData.phone, email: globalData.email }
+          : null;
 
-    setContact(
-      resolveRecruiterContact({
-        defaultContact,
-        globalContact,
-        candidateOverride,
-      }),
-    );
+      let candidateOverride: RecruiterContact | null = null;
+      if (candidateUserId) {
+        const { data: overrideData } = await supabase
+          .from('candidate_recruiter_contact_overrides')
+          .select('phone,email')
+          .eq('candidate_user_id', candidateUserId)
+          .maybeSingle();
+
+        if (overrideData?.phone && overrideData?.email) {
+          candidateOverride = {
+            phone: overrideData.phone,
+            email: overrideData.email,
+          };
+        }
+      }
+
+      setContact(
+        resolveRecruiterContact({
+          defaultContact,
+          globalContact,
+          candidateOverride,
+        }),
+      );
+    } catch {
+      setContact(defaultContact);
+    }
   }, [profile?.id, profile?.role]);
 
   useEffect(() => {

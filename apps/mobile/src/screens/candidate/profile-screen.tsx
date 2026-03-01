@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { useCallback, useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { CalendarSyncCard } from '../../components/calendar-sync-card';
 import { CandidatePageTitle } from '../../components/candidate-page-title';
 import { PasswordInput } from '../../components/password-input';
@@ -90,9 +90,12 @@ function useProfileScreen() {
 
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const [emailDraft, setEmailDraft] = useState('');
+  const [currentEmailDraft, setCurrentEmailDraft] = useState('');
+  const [newEmailDraft, setNewEmailDraft] = useState('');
+  const [confirmNewEmailDraft, setConfirmNewEmailDraft] = useState('');
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailMessage, setEmailMessage] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [passwordBusy, setPasswordBusy] = useState(false);
@@ -102,6 +105,7 @@ function useProfileScreen() {
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState('');
+  const [showDeleteAccountFlow, setShowDeleteAccountFlow] = useState(false);
   const [showJdDatePicker, setShowJdDatePicker] = useState(false);
 
   const {
@@ -145,13 +149,17 @@ function useProfileScreen() {
       acceptedCommunicationConsent: true,
     });
     setMessage('');
-    setEmailDraft(profile.email);
+    setCurrentEmailDraft(profile.email);
+    setNewEmailDraft('');
+    setConfirmNewEmailDraft('');
     setEmailMessage('');
+    setCurrentPassword('');
     setNewPassword('');
     setConfirmNewPassword('');
     setPasswordMessage('');
     setDeleteConfirmText('');
     setDeleteMessage('');
+    setShowDeleteAccountFlow(false);
     setShowJdDatePicker(false);
   }, [profile, reset]);
 
@@ -210,14 +218,44 @@ function useProfileScreen() {
     setEmailMessage('');
     clearAuthNotice();
     try {
-      await updateEmail(emailDraft);
+      const normalizedCurrentEmail = currentEmailDraft.trim().toLowerCase();
+      const normalizedProfileEmail = (profile?.email ?? '').trim().toLowerCase();
+      const normalizedNewEmail = newEmailDraft.trim().toLowerCase();
+      const normalizedConfirmNewEmail = confirmNewEmailDraft.trim().toLowerCase();
+
+      if (!normalizedCurrentEmail || !normalizedNewEmail || !normalizedConfirmNewEmail) {
+        throw new Error('Complete all email fields.');
+      }
+
+      if (normalizedCurrentEmail !== normalizedProfileEmail) {
+        throw new Error('Current email does not match your account email.');
+      }
+
+      if (normalizedNewEmail !== normalizedConfirmNewEmail) {
+        throw new Error('New email entries do not match.');
+      }
+
+      if (normalizedNewEmail === normalizedCurrentEmail) {
+        throw new Error('New email must be different from current email.');
+      }
+
+      await updateEmail(normalizedNewEmail);
+      setNewEmailDraft('');
+      setConfirmNewEmailDraft('');
       setEmailMessage('Email update requested. Check your inbox to confirm the new address.');
     } catch (error) {
       setEmailMessage((error as Error).message);
     } finally {
       setEmailBusy(false);
     }
-  }, [clearAuthNotice, emailDraft, updateEmail]);
+  }, [
+    clearAuthNotice,
+    confirmNewEmailDraft,
+    currentEmailDraft,
+    newEmailDraft,
+    profile?.email,
+    updateEmail,
+  ]);
 
   const onSubmitProfile = handleSubmit(async (values) => {
     setBusy(true);
@@ -239,13 +277,17 @@ function useProfileScreen() {
     setPasswordMessage('');
     clearAuthNotice();
     try {
+      if (!currentPassword.trim()) {
+        throw new Error('Enter your current password.');
+      }
       if (newPassword.length < 6) {
         throw new Error('Password must be at least 6 characters');
       }
       if (newPassword !== confirmNewPassword) {
         throw new Error('Passwords do not match');
       }
-      await updatePassword(newPassword);
+      await updatePassword(newPassword, currentPassword);
+      setCurrentPassword('');
       setNewPassword('');
       setConfirmNewPassword('');
       setPasswordMessage('Password updated successfully.');
@@ -254,7 +296,7 @@ function useProfileScreen() {
     } finally {
       setPasswordBusy(false);
     }
-  }, [clearAuthNotice, confirmNewPassword, newPassword, updatePassword]);
+  }, [clearAuthNotice, confirmNewPassword, currentPassword, newPassword, updatePassword]);
 
   const onDeleteAccount = useCallback(async () => {
     setDeleteMessage('');
@@ -267,12 +309,28 @@ function useProfileScreen() {
     setDeleteBusy(true);
     try {
       await deleteAccount();
+      setShowDeleteAccountFlow(false);
     } catch (error) {
       setDeleteMessage((error as Error).message);
     } finally {
       setDeleteBusy(false);
     }
   }, [clearAuthNotice, confirmDeletePrompt, deleteAccount]);
+
+  const onOpenDeleteAccountFlow = useCallback(() => {
+    setDeleteConfirmText('');
+    setDeleteMessage('');
+    setShowDeleteAccountFlow(true);
+  }, []);
+
+  const onCloseDeleteAccountFlow = useCallback(() => {
+    if (deleteBusy) {
+      return;
+    }
+    setDeleteConfirmText('');
+    setDeleteMessage('');
+    setShowDeleteAccountFlow(false);
+  }, [deleteBusy]);
 
   const onToggleCity = useCallback(
     (city: CityOption) => {
@@ -323,16 +381,21 @@ function useProfileScreen() {
     deleteConfirmText,
     deleteDisabled,
     deleteMessage,
+    currentEmailDraft,
+    confirmNewEmailDraft,
+    currentPassword,
     emailBusy,
-    emailDraft,
+    newEmailDraft,
     emailMessage,
     errors,
     isHydratingProfile,
     isSigningOut,
     message,
     newPassword,
+    onCloseDeleteAccountFlow,
     onDeleteAccount,
     onMobileBlur,
+    onOpenDeleteAccountFlow,
     onRetryProfile,
     onSignOut,
     onSubmitEmail,
@@ -350,11 +413,15 @@ function useProfileScreen() {
     selectedPracticeAreas,
     onJdDateChange,
     setConfirmNewPassword,
+    setConfirmNewEmailDraft,
+    setCurrentEmailDraft,
+    setCurrentPassword,
     setDeleteConfirmText,
-    setEmailDraft,
+    setNewEmailDraft,
     setNewPassword,
     setShowJdDatePicker,
     setValue,
+    showDeleteAccountFlow,
     showJdDatePicker,
     showAllCities,
     showAllPracticeAreas,
@@ -363,30 +430,105 @@ function useProfileScreen() {
   };
 }
 
-function EmailCard({ h }: { h: ProfileScreenHook }) {
+function ChangeEmailAndPasswordCard({ h }: { h: ProfileScreenHook }) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <View style={styles.card}>
-      <Text style={styles.sectionTitle}>Email</Text>
-      <Text style={styles.helper}>
-        Update your account email. You may need to confirm the new address from your inbox.
-      </Text>
-      <TextInput
-        autoCapitalize="none"
-        keyboardType="email-address"
-        placeholder="Email"
-        style={styles.input}
-        value={h.emailDraft}
-        onChangeText={h.setEmailDraft}
-      />
       <Pressable
-        style={[styles.secondaryButton, h.emailBusy && styles.buttonDisabled]}
-        disabled={h.emailBusy}
-        accessibilityState={{ disabled: h.emailBusy }}
-        onPress={h.onSubmitEmail}
+        style={styles.dropdownHeader}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        onPress={() => setExpanded((value) => !value)}
       >
-        <Text style={styles.secondaryButtonText}>{h.emailBusy ? 'Updating email...' : 'Update email'}</Text>
+        <Text style={styles.sectionTitle}>Change email and password</Text>
+        <Text
+          style={[
+            styles.dropdownHeaderAction,
+            !expanded ? styles.dropdownHeaderActionCollapsed : null,
+          ]}
+        >
+          ^
+        </Text>
       </Pressable>
-      {h.emailMessage ? <Text style={styles.message}>{h.emailMessage}</Text> : null}
+      {expanded ? (
+        <>
+          <Text style={styles.subSectionTitle}>Email change</Text>
+          <Text style={styles.helper}>
+            Enter your current and new email. A verification link will be sent to the new email.
+          </Text>
+          <TextInput
+            autoCapitalize="none"
+            keyboardType="email-address"
+            placeholder="Current email"
+            style={styles.input}
+            value={h.currentEmailDraft}
+            onChangeText={h.setCurrentEmailDraft}
+          />
+          <TextInput
+            autoCapitalize="none"
+            keyboardType="email-address"
+            placeholder="New email"
+            style={styles.input}
+            value={h.newEmailDraft}
+            onChangeText={h.setNewEmailDraft}
+          />
+          <TextInput
+            autoCapitalize="none"
+            keyboardType="email-address"
+            placeholder="Confirm new email"
+            style={styles.input}
+            value={h.confirmNewEmailDraft}
+            onChangeText={h.setConfirmNewEmailDraft}
+          />
+          <Pressable
+            style={[styles.secondaryButton, h.emailBusy && styles.buttonDisabled]}
+            disabled={h.emailBusy}
+            accessibilityState={{ disabled: h.emailBusy }}
+            onPress={h.onSubmitEmail}
+          >
+            <Text style={styles.secondaryButtonText}>
+              {h.emailBusy ? 'Updating email...' : 'Update email'}
+            </Text>
+          </Pressable>
+          {h.emailMessage ? <Text style={styles.message}>{h.emailMessage}</Text> : null}
+
+          <View style={styles.sectionDivider} />
+
+          <Text style={styles.subSectionTitle}>Password change</Text>
+          <Text style={styles.helper}>Enter your current password, then set a new password.</Text>
+          <PasswordInput
+            placeholder="Current password"
+            style={styles.input}
+            value={h.currentPassword}
+            onChangeText={h.setCurrentPassword}
+          />
+          <PasswordInput
+            placeholder="New password"
+            style={styles.input}
+            value={h.newPassword}
+            onChangeText={h.setNewPassword}
+            showStrength
+          />
+          <PasswordInput
+            placeholder="Confirm new password"
+            style={styles.input}
+            value={h.confirmNewPassword}
+            onChangeText={h.setConfirmNewPassword}
+          />
+          <Pressable
+            style={[styles.secondaryButton, h.passwordBusy && styles.buttonDisabled]}
+            disabled={h.passwordBusy}
+            accessibilityState={{ disabled: h.passwordBusy }}
+            onPress={h.onSubmitPassword}
+          >
+            <Text style={styles.secondaryButtonText}>
+              {h.passwordBusy ? 'Updating password...' : 'Update password'}
+            </Text>
+          </Pressable>
+          {h.passwordMessage ? <Text style={styles.message}>{h.passwordMessage}</Text> : null}
+        </>
+      ) : null}
     </View>
   );
 }
@@ -585,74 +727,95 @@ function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
   );
 }
 
-function PasswordCard({ h }: { h: ProfileScreenHook }) {
+function DeleteAccountButton({ h }: { h: ProfileScreenHook }) {
   return (
-    <View style={styles.card}>
-      <Text style={styles.sectionTitle}>Password</Text>
-      <Text style={styles.helper}>Update your password for email sign-in.</Text>
-      <PasswordInput
-        placeholder="New password"
-        style={styles.input}
-        value={h.newPassword}
-        onChangeText={h.setNewPassword}
-        showStrength
-      />
-      <PasswordInput
-        placeholder="Confirm new password"
-        style={styles.input}
-        value={h.confirmNewPassword}
-        onChangeText={h.setConfirmNewPassword}
-      />
-      <Pressable
-        style={[styles.secondaryButton, h.passwordBusy && styles.buttonDisabled]}
-        disabled={h.passwordBusy}
-        accessibilityState={{ disabled: h.passwordBusy }}
-        onPress={h.onSubmitPassword}
-      >
-        <Text style={styles.secondaryButtonText}>
-          {h.passwordBusy ? 'Updating password...' : 'Update password'}
-        </Text>
-      </Pressable>
-      {h.passwordMessage ? <Text style={styles.message}>{h.passwordMessage}</Text> : null}
-    </View>
+    <Pressable
+      style={interactivePressableStyle({
+        base: styles.deleteAccountButton,
+        disabled: h.isSigningOut,
+        disabledStyle: styles.buttonDisabled,
+        hoverStyle: sharedPressableFeedback.hover,
+        focusStyle: sharedPressableFeedback.focus,
+        pressedStyle: sharedPressableFeedback.pressed,
+      })}
+      disabled={h.isSigningOut}
+      accessibilityState={{ disabled: h.isSigningOut }}
+      onPress={h.onOpenDeleteAccountFlow}
+    >
+      <Text style={styles.deleteAccountButtonText}>Delete my account</Text>
+    </Pressable>
   );
 }
 
-function DeleteAccountCard({ h }: { h: ProfileScreenHook }) {
+function DeleteAccountOverlay({ h }: { h: ProfileScreenHook }) {
+  if (!h.showDeleteAccountFlow) {
+    return null;
+  }
+
   return (
-    <View style={[styles.card, styles.dangerCard]}>
-      <Text style={styles.sectionTitle}>Delete Account</Text>
-      <Text style={styles.helper}>
-        Delete your account and sign in information directly in the app. This action is permanent.
-      </Text>
-      <Text style={styles.label}>Type DELETE to confirm</Text>
-      <TextInput
-        autoCapitalize="characters"
-        placeholder="DELETE"
-        style={styles.input}
-        value={h.deleteConfirmText}
-        onChangeText={h.setDeleteConfirmText}
-        editable={!h.deleteBusy}
-      />
-      <Pressable
-        style={interactivePressableStyle({
-          base: styles.deleteAccountButton,
-          disabled: h.deleteDisabled,
-          disabledStyle: styles.buttonDisabled,
-          hoverStyle: sharedPressableFeedback.hover,
-          focusStyle: sharedPressableFeedback.focus,
-          pressedStyle: sharedPressableFeedback.pressed,
-        })}
-        disabled={h.deleteDisabled}
-        accessibilityState={{ disabled: h.deleteDisabled }}
-        onPress={h.onDeleteAccount}
-      >
-        <Text style={styles.deleteAccountButtonText}>
-          {h.deleteBusy ? 'Deleting account...' : 'Delete my account permanently'}
-        </Text>
-      </Pressable>
-      {h.deleteMessage ? <Text style={styles.error}>{h.deleteMessage}</Text> : null}
-    </View>
+    <Modal
+      transparent
+      animationType="fade"
+      visible={h.showDeleteAccountFlow}
+      onRequestClose={h.onCloseDeleteAccountFlow}
+    >
+      <View style={styles.deleteOverlayBackdrop}>
+        <View style={styles.deleteOverlayContent}>
+          <View style={styles.deleteOverlayPanel}>
+            <Pressable
+              style={interactivePressableStyle({
+                base: styles.deleteOverlayBackButton,
+                disabled: h.deleteBusy,
+                disabledStyle: styles.buttonDisabled,
+                hoverStyle: sharedPressableFeedback.hover,
+                focusStyle: sharedPressableFeedback.focus,
+                pressedStyle: sharedPressableFeedback.pressed,
+              })}
+              disabled={h.deleteBusy}
+              accessibilityState={{ disabled: h.deleteBusy }}
+              onPress={h.onCloseDeleteAccountFlow}
+            >
+              <Text style={styles.deleteOverlayBackButtonText}>{'< Back'}</Text>
+            </Pressable>
+
+            <View style={[styles.card, styles.dangerCard]}>
+              <Text style={styles.sectionTitle}>Delete Account</Text>
+              <Text style={styles.helper}>
+                Delete your account and sign in information directly in the app. This action is
+                permanent.
+              </Text>
+              <Text style={styles.label}>Type DELETE to confirm</Text>
+              <TextInput
+                autoCapitalize="characters"
+                placeholder="DELETE"
+                style={styles.input}
+                value={h.deleteConfirmText}
+                onChangeText={h.setDeleteConfirmText}
+                editable={!h.deleteBusy}
+              />
+              <Pressable
+                style={interactivePressableStyle({
+                  base: styles.deleteAccountButton,
+                  disabled: h.deleteDisabled,
+                  disabledStyle: styles.buttonDisabled,
+                  hoverStyle: sharedPressableFeedback.hover,
+                  focusStyle: sharedPressableFeedback.focus,
+                  pressedStyle: sharedPressableFeedback.pressed,
+                })}
+                disabled={h.deleteDisabled}
+                accessibilityState={{ disabled: h.deleteDisabled }}
+                onPress={h.onDeleteAccount}
+              >
+                <Text style={styles.deleteAccountButtonText}>
+                  {h.deleteBusy ? 'Deleting account...' : 'Delete my account permanently'}
+                </Text>
+              </Pressable>
+              {h.deleteMessage ? <Text style={styles.error}>{h.deleteMessage}</Text> : null}
+            </View>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -665,11 +828,9 @@ export function ProfileScreen() {
 
       {h.profile ? (
         <>
-          <EmailCard h={h} />
           <ProfileDetailsCard h={h} />
-          <PasswordCard h={h} />
           <CalendarSyncCard />
-          <DeleteAccountCard h={h} />
+          <ChangeEmailAndPasswordCard h={h} />
         </>
       ) : h.isHydratingProfile ? (
         <View style={styles.placeholderCard}>
@@ -699,6 +860,8 @@ export function ProfileScreen() {
       {h.authNotice ? <Text style={styles.error}>{h.authNotice}</Text> : null}
 
       <SignOutButton isSigningOut={h.isSigningOut} onSignOut={h.onSignOut} />
+      {h.profile ? <DeleteAccountButton h={h} /> : null}
+      {h.profile ? <DeleteAccountOverlay h={h} /> : null}
     </ScreenShell>
   );
 }
@@ -718,6 +881,50 @@ const styles = StyleSheet.create({
   dangerCard: {
     borderColor: uiColors.errorBorder,
     backgroundColor: uiColors.errorBackground,
+  },
+  dropdownHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  dropdownHeaderAction: {
+    color: uiColors.textSecondary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  dropdownHeaderActionCollapsed: {
+    transform: [{ rotate: '180deg' }],
+  },
+  deleteOverlayBackdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    flex: 1,
+  },
+  deleteOverlayContent: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+    justifyContent: 'center',
+    padding: 16,
+  },
+  deleteOverlayPanel: {
+    alignSelf: 'center',
+    gap: 12,
+    maxWidth: 440,
+    width: '100%',
+  },
+  deleteOverlayBackButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  deleteOverlayBackButtonText: {
+    color: uiColors.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
   },
   deleteAccountButton: {
     alignItems: 'center',
@@ -858,6 +1065,17 @@ const styles = StyleSheet.create({
     color: uiColors.textPrimary,
     fontSize: 16,
     fontWeight: '700',
+  },
+  subSectionTitle: {
+    color: uiColors.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  sectionDivider: {
+    borderTopColor: uiColors.border,
+    borderTopWidth: 1,
+    marginVertical: 4,
   },
   wrap: {
     flexDirection: 'row',

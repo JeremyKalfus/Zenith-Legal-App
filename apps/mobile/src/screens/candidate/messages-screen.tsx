@@ -1,18 +1,110 @@
-import { ActivityIndicator, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef } from 'react';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
+import { ActivityIndicator, Platform, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { uiColors } from '../../theme/colors';
-import { Channel, Chat, MessageInput, MessageList, OverlayProvider } from 'stream-chat-expo';
+import {
+  Channel,
+  Chat,
+  MessageInput,
+  MessageList,
+  OverlayProvider,
+  useMessageComposer,
+} from 'stream-chat-expo';
 import { getChatClient } from '../../lib/chat';
 import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
 import { useResolvedCandidateChatChannel } from '../../lib/use-resolved-candidate-chat-channel';
 
+function ApplyInitialDraftMessage({
+  message,
+  messageId,
+  onApplied,
+}: {
+  message?: string | null;
+  messageId?: number;
+  onApplied?: (messageId: number) => void;
+}) {
+  const messageComposer = useMessageComposer();
+  const lastAppliedMessageIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const normalized = message?.trim();
+    if (!normalized || typeof messageId !== 'number') {
+      return;
+    }
+    if (lastAppliedMessageIdRef.current === messageId) {
+      return;
+    }
+
+    messageComposer.textComposer.setText(normalized);
+    messageComposer.textComposer.setSelection({
+      start: normalized.length,
+      end: normalized.length,
+    });
+    lastAppliedMessageIdRef.current = messageId;
+    onApplied?.(messageId);
+  }, [message, messageComposer, messageId, onApplied]);
+
+  return null;
+}
+
 export function MessagesScreen({
   showRecruiterBanner = true,
   candidateUserId,
+  initialDraftMessage,
+  initialDraftMessageId,
+  onConsumeInitialDraftMessage,
 }: {
   showRecruiterBanner?: boolean;
   candidateUserId?: string;
+  initialDraftMessage?: string | null;
+  initialDraftMessageId?: number;
+  onConsumeInitialDraftMessage?: (messageId: number) => void;
 }) {
   const { channel, errorMessage, isLoading } = useResolvedCandidateChatChannel(candidateUserId);
+  const isFocused = useIsFocused();
+  const markChannelRead = useCallback(async () => {
+    if (!channel) {
+      return;
+    }
+
+    try {
+      await channel.watch();
+      await channel.markRead();
+    } catch {
+      // No-op: read markers should not block rendering.
+    }
+  }, [channel]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void markChannelRead();
+      return undefined;
+    }, [markChannelRead]),
+  );
+
+  useEffect(() => {
+    if (!channel || !isFocused) {
+      return;
+    }
+
+    const subscription = channel.on((event) => {
+      if (event.type !== 'message.new') {
+        return;
+      }
+
+      const currentUserId = getChatClient().userID;
+      const eventUserId = typeof event.user?.id === 'string' ? event.user.id : null;
+      if (!eventUserId || eventUserId === currentUserId) {
+        return;
+      }
+
+      void channel.markRead().catch(() => undefined);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [channel, isFocused]);
 
   if (isLoading) {
     return (
@@ -42,8 +134,22 @@ export function MessagesScreen({
       <View style={styles.chatContainer}>
         <OverlayProvider>
           <Chat client={getChatClient()}>
-            <Channel channel={channel}>
-              <MessageList />
+            <Channel
+              channel={channel}
+              keyboardBehavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+              keyboardVerticalOffset={Platform.OS === 'ios' ? 120 : 0}
+            >
+              <ApplyInitialDraftMessage
+                message={initialDraftMessage}
+                messageId={initialDraftMessageId}
+                onApplied={onConsumeInitialDraftMessage}
+              />
+              <MessageList
+                additionalFlatListProps={{
+                  keyboardDismissMode: 'interactive',
+                  keyboardShouldPersistTaps: 'handled',
+                }}
+              />
               <MessageInput />
             </Channel>
           </Chat>

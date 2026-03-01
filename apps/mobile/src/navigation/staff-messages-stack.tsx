@@ -28,10 +28,15 @@ export function StaffMessagesStackNavigator() {
         name="StaffMessageThread"
         options={({ route }) => ({
           title: route.params.conversation.channelName,
+          gestureEnabled: true,
+          fullScreenGestureEnabled: false,
+          gestureResponseDistance: { start: 24 },
+          animation: 'slide_from_right',
+          animationMatchesGesture: true,
         })}
       >
         {({ route }) => (
-          <StaffMessageThreadScreen candidateUserId={route.params.conversation.candidateUserId} />
+          <StaffMessageThreadScreen channelId={route.params.conversation.channelId} />
         )}
       </Stack.Screen>
     </Stack.Navigator>

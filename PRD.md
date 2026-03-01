@@ -28,7 +28,8 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ### Staff (recruiter)
 - Signs in via invite-only magic link.
 - Manages candidate-firm assignments: assigns firms to candidates, updates assignment statuses, unassigns firms.
-- Filters staff candidate lists by text search plus candidate city/practice/JD-year chips on mobile and admin candidates pages.
+- Assigns one recruiter (or none) per candidate in the recruiter mobile candidate detail flow.
+- Filters recruiter mobile candidate lists via a dedicated `Filter Search` screen with: assigned recruiter, current status, practice, assigned firms, preferred cities, and JD years (with `Any` defaults and `Clear`/`Apply` actions), plus free-text search on the list page.
 - Reviews appointment requests (accept/decline).
 - Messages candidates via real-time chat.
 - Ingests firm data in bulk (paste-based).
@@ -55,7 +56,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 
 ### Firm Assignments
 - Staff assigns firms to candidates via `assign_firm_to_candidate`.
-- Staff candidate list views (mobile + admin) support `search AND (city OR practice)` filtering using `candidate_preferences` (`cities`, `practice_areas`, legacy `practice_area` fallback).
+- Recruiter mobile candidate list supports `search AND` structured recruiter filters (assigned recruiter, current status, single-select practice, assigned firms OR-set, preferred cities OR-set, JD years OR-set).
 - Candidates see assigned firms on their dashboard.
 - Candidate and staff firm listings render status-specific badges (Waiting=amber, Authorized=teal, Submitted=blue, Interview=violet, Rejected=red, Offer=green).
 - Candidates authorize firm submissions via `authorize_firm_submission`.
@@ -64,6 +65,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Staff updates assignment status via `staff_update_assignment_status`.
 - Staff can unassign firms via `staff_unassign_firm_from_candidate`.
 - New firm assignments post an automatic shared chat update in the candidate channel so both candidate and recruiter staff see it.
+- Candidate-to-recruiter ownership assignments are stored in `candidate_recruiter_assignments` and can be set to a specific recruiter or `None`.
 
 ### Recruiter Contact Banner
 - Staff can set candidate-specific banner phone/email overrides from the staff mobile Candidates flow.
@@ -81,13 +83,24 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Client calls `ensureValidSession()` before bootstrap; errors from the function are surfaced via `getFunctionErrorMessage` (response body extraction).
 
 ### Appointments
-- Candidates request appointments with title, description, modality (virtual/in-person), optional location (in-person) and video URL (virtual), start/end times, timezone.
+- Candidates request appointments with Date, Time, modality (virtual/in-person), optional video URL/location, and optional note.
 - Appointment requests start in `pending` status.
 - Staff can schedule appointments directly for candidates (mobile + admin workflows) or review pending requests via `staff_review_appointment` (`pending` -> `scheduled`/`declined`).
-- Appointment creation posts an automatic shared chat update in the candidate channel for both candidate and recruiter staff members.
+- Candidate appointment UI is sectioned into: `Overdue` (red, ignore), `Outgoing Requests` (orange, cancel), and `Upcoming Appointments` (neutral, cancel).
+- Staff/admin appointment UI is sectioned into: `Overdue` (red, ignore), `Incoming Requests` (pending candidate-created requests), and `Upcoming Appointments` (modify/cancel).
+- Appointment cards show candidate/date/time overview and a two-line note preview with inline `See more` expansion.
 - Overlap detection prevents conflicting scheduled appointments.
-- Scheduled and declined appointments are hidden from candidate and staff views 24 hours after planned end time.
-- Real-time subscription updates appointment list.
+- `ignore_overdue` and `cancel_outgoing_request` hard-delete appointment rows (removed permanently from candidate + admin views).
+- `cancel_upcoming` hard-deletes scheduled rows after side-effects (chat/notification/calendar unsync), so cancellations disappear from all sectioned views.
+- Appointment request submit/create/accept/decline/cancel/modify actions post candidate-channel chat updates in field format: candidate/date/time/meeting type/conditional location-or-video/note.
+- Intro text contracts are action-specific:
+  - Candidate request submit: `Appointment request sent and waiting for admin approval.`
+  - Admin accepts incoming request: `Appointment request accepted and scheduled.`
+  - Admin direct schedule create: `Appointment scheduled.`
+  - Admin/candidate cancel upcoming: `Scheduled appointment canceled.`
+  - Admin declines incoming request: `Appointment request declined.`
+  - Admin modifies upcoming: `Scheduled appointment modified.`
+- Real-time subscriptions update appointment sections across candidate mobile, staff mobile, and admin web.
 
 ### Profile Management
 - Candidates update email, password, and intake fields (including JD degree date).

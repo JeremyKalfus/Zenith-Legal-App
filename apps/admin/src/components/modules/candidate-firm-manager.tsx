@@ -68,14 +68,6 @@ function filterAssignableFirms(
   });
 }
 
-function getCandidateInitial(name: string | null | undefined): string {
-  const trimmed = name?.trim();
-  if (!trimmed) {
-    return 'C';
-  }
-  return trimmed.charAt(0).toUpperCase();
-}
-
 function useCandidateFirmManager() {
   const [candidates, setCandidates] = useState<CandidateListItem[]>([]);
   const [firms, setFirms] = useState<FirmListItem[]>([]);
@@ -645,9 +637,6 @@ function CandidateListPanel({
                 onClick={() => onSelectCandidate(candidate.id)}
               >
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-sm font-semibold text-slate-700">
-                    {getCandidateInitial(candidate.name)}
-                  </div>
                   <div className="min-w-0">
                     <p className="font-semibold text-slate-900">{candidate.name || 'Unnamed Candidate'}</p>
                     <p className="truncate text-slate-600">{candidate.email}</p>
@@ -772,9 +761,6 @@ export function CandidateFirmManager() {
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-slate-100 text-base font-semibold text-slate-700">
-                {getCandidateInitial(ctx.selectedCandidate?.name)}
-              </div>
               <div>
                 <CardTitle>{ctx.selectedCandidate?.name ?? 'Candidate details'}</CardTitle>
                 {ctx.selectedCandidate ? (

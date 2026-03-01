@@ -1,5 +1,6 @@
 import {
   CITY_OPTIONS,
+  type FirmStatus,
   getJdDegreeYear,
   PRACTICE_AREAS,
   type CityOption,
@@ -30,6 +31,22 @@ export type CandidateFilterInput = {
   selectedCities: readonly CityOption[];
   selectedPracticeAreas: readonly PracticeArea[];
   selectedJdYears?: readonly string[];
+};
+
+export type StaffCandidateFilterable = CandidateFilterable & {
+  assignedRecruiterUserId?: string | null;
+  currentStatuses?: readonly FirmStatus[] | null;
+  assignedFirmIds?: readonly string[] | null;
+};
+
+export type StaffCandidateFilterInput = {
+  query: string;
+  assignedRecruiter: 'any' | 'none' | string;
+  currentStatus: 'any' | FirmStatus;
+  practice: 'any' | PracticeArea;
+  assignedFirmIds: readonly string[];
+  preferredCities: readonly CityOption[];
+  jdYears: readonly string[];
 };
 
 function isCityOption(value: unknown): value is CityOption {
@@ -108,5 +125,71 @@ export function filterCandidatesBySearchCityPractice<T extends CandidateFilterab
     const jdYearMatch = hasJdYearFilters && Boolean(jdYear && selectedJdYearSet.has(jdYear));
 
     return cityMatch || practiceMatch || jdYearMatch;
+  });
+}
+
+export function filterStaffCandidates<T extends StaffCandidateFilterable>(
+  candidates: readonly T[],
+  input: StaffCandidateFilterInput,
+): T[] {
+  const normalizedQuery = input.query.trim().toLowerCase();
+  const selectedFirmIdSet = new Set(input.assignedFirmIds);
+  const selectedCitySet = new Set(input.preferredCities);
+  const selectedJdYearSet = new Set(input.jdYears);
+  const hasAssignedFirmFilter = selectedFirmIdSet.size > 0;
+  const hasPreferredCityFilter = selectedCitySet.size > 0;
+  const hasJdYearFilter = selectedJdYearSet.size > 0;
+
+  return candidates.filter((candidate) => {
+    const searchMatch = normalizedQuery.length === 0 || [candidate.name, candidate.email, candidate.mobile]
+      .filter((value): value is string => Boolean(value))
+      .some((value) => value.toLowerCase().includes(normalizedQuery));
+    if (!searchMatch) {
+      return false;
+    }
+
+    const assignedRecruiterId = candidate.assignedRecruiterUserId ?? null;
+    const assignedRecruiterMatch = input.assignedRecruiter === 'any'
+      ? true
+      : input.assignedRecruiter === 'none'
+        ? !assignedRecruiterId
+        : assignedRecruiterId === input.assignedRecruiter;
+    if (!assignedRecruiterMatch) {
+      return false;
+    }
+
+    const currentStatusMatch = input.currentStatus === 'any'
+      ? true
+      : (candidate.currentStatuses ?? []).includes(input.currentStatus);
+    if (!currentStatusMatch) {
+      return false;
+    }
+
+    const practiceMatch = input.practice === 'any'
+      ? true
+      : (candidate.practiceAreas ?? []).includes(input.practice);
+    if (!practiceMatch) {
+      return false;
+    }
+
+    const assignedFirmMatch = !hasAssignedFirmFilter || (candidate.assignedFirmIds ?? [])
+      .some((firmId) => selectedFirmIdSet.has(firmId));
+    if (!assignedFirmMatch) {
+      return false;
+    }
+
+    const preferredCityMatch = !hasPreferredCityFilter || (candidate.preferredCities ?? [])
+      .some((city) => selectedCitySet.has(city));
+    if (!preferredCityMatch) {
+      return false;
+    }
+
+    const jdYear = getJdDegreeYear(candidate.jdDegreeDate ?? candidate.jd_degree_date);
+    const jdYearMatch = !hasJdYearFilter || Boolean(jdYear && selectedJdYearSet.has(jdYear));
+    if (!jdYearMatch) {
+      return false;
+    }
+
+    return true;
   });
 }

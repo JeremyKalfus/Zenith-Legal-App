@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildJdDegreeDateFromParts,
   appointmentSchema,
+  appointmentLifecycleActionSchema,
   appointmentReviewSchema,
   APPOINTMENT_STATUSES,
   candidateIntakeSchema,
@@ -247,11 +248,11 @@ describe('appointment statuses', () => {
 
 describe('appointment schema', () => {
   const validInput = {
-    title: 'Intro call',
+    date: '2026-03-01',
+    time: '14:00',
     modality: 'virtual' as const,
     videoUrl: 'https://zoom.us/j/123',
-    startAtUtc: '2026-03-01T14:00:00.000Z',
-    endAtUtc: '2026-03-01T15:00:00.000Z',
+    note: 'Discuss case details',
     timezoneLabel: 'America/New_York',
   };
 
@@ -270,20 +271,17 @@ describe('appointment schema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejects missing title', () => {
-    const result = appointmentSchema.safeParse({ ...validInput, title: '' });
+  it('rejects invalid date format', () => {
+    const result = appointmentSchema.safeParse({ ...validInput, date: '03/01/2026' });
     expect(result.success).toBe(false);
   });
 
-  it('rejects endAtUtc before startAtUtc', () => {
+  it('rejects invalid time format', () => {
     const result = appointmentSchema.safeParse({
       ...validInput,
-      endAtUtc: '2026-03-01T13:00:00.000Z',
+      time: '2:00 PM',
     });
     expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.flatten().fieldErrors.endAtUtc?.[0]).toContain('after start time');
-    }
   });
 
   it('accepts virtual appointment without videoUrl', () => {
@@ -319,12 +317,12 @@ describe('appointment schema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('allows optional description', () => {
+  it('allows optional note', () => {
     const result = appointmentSchema.parse({
       ...validInput,
-      description: 'Discuss case details',
+      note: 'Bring questions',
     });
-    expect(result.description).toBe('Discuss case details');
+    expect(result.note).toBe('Bring questions');
   });
 });
 
@@ -364,6 +362,40 @@ describe('appointment review schema', () => {
     const result = appointmentReviewSchema.safeParse({
       appointment_id: 'not-a-uuid',
       decision: 'accepted',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('appointment lifecycle action schema', () => {
+  it('accepts ignore_overdue action', () => {
+    const result = appointmentLifecycleActionSchema.safeParse({
+      appointment_id: '550e8400-e29b-41d4-a716-446655440000',
+      action: 'ignore_overdue',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts cancel_outgoing_request action', () => {
+    const result = appointmentLifecycleActionSchema.safeParse({
+      appointment_id: '550e8400-e29b-41d4-a716-446655440000',
+      action: 'cancel_outgoing_request',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts cancel_upcoming action', () => {
+    const result = appointmentLifecycleActionSchema.safeParse({
+      appointment_id: '550e8400-e29b-41d4-a716-446655440000',
+      action: 'cancel_upcoming',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects invalid lifecycle action', () => {
+    const result = appointmentLifecycleActionSchema.safeParse({
+      appointment_id: '550e8400-e29b-41d4-a716-446655440000',
+      action: 'decline',
     });
     expect(result.success).toBe(false);
   });

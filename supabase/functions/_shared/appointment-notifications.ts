@@ -88,3 +88,43 @@ export async function queueAppointmentReminderNotifications({
     })),
   );
 }
+
+type QueueCancelledParams = {
+  serviceClient: ReturnType<typeof createServiceClient>;
+  appointmentId: string;
+  recipientUserIds: Iterable<string>;
+};
+
+export async function queueAppointmentCancelledNotifications({
+  serviceClient,
+  appointmentId,
+  recipientUserIds,
+}: QueueCancelledParams) {
+  const recipients = Array.from(new Set(recipientUserIds));
+  if (recipients.length === 0) {
+    return;
+  }
+
+  const rows = recipients.flatMap((userId) => [
+    {
+      user_id: userId,
+      channel: 'push',
+      event_type: 'appointment.cancelled',
+      payload: {
+        appointment_id: appointmentId,
+      },
+      status: 'queued',
+    },
+    {
+      user_id: userId,
+      channel: 'email',
+      event_type: 'appointment.cancelled',
+      payload: {
+        appointment_id: appointmentId,
+      },
+      status: 'queued',
+    },
+  ]);
+
+  await serviceClient.from('notification_deliveries').insert(rows);
+}

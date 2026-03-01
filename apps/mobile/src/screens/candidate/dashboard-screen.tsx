@@ -60,9 +60,9 @@ const statusRank = Object.fromEntries(
 export function DashboardScreen({
   onOpenMessages,
 }: {
-  onOpenMessages: () => void;
+  onOpenMessages: (initialDraftMessage?: string) => void;
 }) {
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
   const [assignments, setAssignments] = useState<CandidateFirmAssignment[]>([]);
   const [message, setMessage] = useState('');
   const [busyAssignmentId, setBusyAssignmentId] = useState<string | null>(null);
@@ -162,10 +162,9 @@ export function DashboardScreen({
 
   return (
     <ScreenShell>
-      <CandidatePageTitle title="Dashboard" />
+      <CandidatePageTitle title="Zenith Legal" />
       <Text style={styles.body}>
-        Firms appear here only when they are actively in one of the tracked
-        status stages.
+        Track your firms at a new level
       </Text>
 
       <Pressable
@@ -175,7 +174,7 @@ export function DashboardScreen({
           focusStyle: sharedPressableFeedback.focus,
           pressedStyle: sharedPressableFeedback.pressed,
         })}
-        onPress={onOpenMessages}
+        onPress={() => onOpenMessages()}
       >
         <Text style={styles.primaryCtaText}>One-click message the Zenith team</Text>
       </Pressable>
@@ -265,6 +264,21 @@ export function DashboardScreen({
                     </Pressable>
                   </View>
                 ) : null}
+                <Pressable
+                  style={interactivePressableStyle({
+                    base: styles.statusUpdateButton,
+                    hoverStyle: sharedPressableFeedback.hover,
+                    focusStyle: sharedPressableFeedback.focus,
+                    pressedStyle: sharedPressableFeedback.pressed,
+                  })}
+                  onPress={() => {
+                    const candidateName = profile?.name?.trim() || 'this candidate';
+                    const initialDraftMessage = `Automated message: any updates on the current status for ${candidateName}'s firm "${assignment.firms.name}"?`;
+                    onOpenMessages(initialDraftMessage);
+                  }}
+                >
+                  <Text style={styles.statusUpdateButtonText}>Ask for a status update</Text>
+                </Pressable>
             </View>
           );
         })
@@ -361,5 +375,18 @@ const styles = StyleSheet.create({
   statusBadgeText: {
     fontSize: 12,
     fontWeight: '700',
+  },
+  statusUpdateButton: {
+    alignItems: 'center',
+    backgroundColor: '#E5E7EB',
+    borderColor: uiColors.textPrimary,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  statusUpdateButtonText: {
+    color: uiColors.textPrimary,
+    fontWeight: '600',
   },
 });
