@@ -65,12 +65,10 @@ export function StaffMessagesScreen({
 }) {
   const { session, profile } = useAuth();
   const [conversations, setConversations] = useState<StaffMessageInboxItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasLoadedInbox, setHasLoadedInbox] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const eventSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
-  const hasHydratedInboxRef = useRef(false);
-  const lastSilentRefreshAtRef = useRef(0);
+  const loadInFlightRef = useRef(false);
 
   const syncConversationsFromClient = useCallback(() => {
     const client = getChatClient();
@@ -79,25 +77,17 @@ export function StaffMessagesScreen({
   }, []);
 
   const loadInbox = useCallback(
-    async ({
-      isManualRefresh = false,
-      isSilent = false,
-    }: {
-      isManualRefresh?: boolean;
-      isSilent?: boolean;
-    } = {}) => {
-      if (!session?.user || !profile) {
-        setIsLoading(false);
+    async () => {
+      if (loadInFlightRef.current) {
         return;
       }
 
-      const shouldShowLoading = !isManualRefresh && (!isSilent || !hasHydratedInboxRef.current);
-
-      if (isManualRefresh) {
-        setIsRefreshing(true);
-      } else if (shouldShowLoading) {
-        setIsLoading(true);
+      if (!session?.user || !profile) {
+        setHasLoadedInbox(true);
+        return;
       }
+
+      loadInFlightRef.current = true;
 
       try {
         await ensureValidSession();
@@ -143,7 +133,6 @@ export function StaffMessagesScreen({
         );
 
         setConversations(mapChannelsToStaffInboxItems(channels as unknown[]));
-        hasHydratedInboxRef.current = true;
 
         if (!eventSubscriptionRef.current) {
           eventSubscriptionRef.current = client.on((event) => {
@@ -159,10 +148,8 @@ export function StaffMessagesScreen({
           await getFunctionErrorMessage(error, 'Unable to load messages. Please try again.'),
         );
       } finally {
-        if (shouldShowLoading) {
-          setIsLoading(false);
-        }
-        setIsRefreshing(false);
+        loadInFlightRef.current = false;
+        setHasLoadedInbox(true);
       }
     },
     [profile, session?.user, syncConversationsFromClient],
@@ -182,12 +169,15 @@ export function StaffMessagesScreen({
   useFocusEffect(
     useCallback(() => {
       syncConversationsFromClient();
-      const now = Date.now();
-      if (now - lastSilentRefreshAtRef.current > 20000) {
-        lastSilentRefreshAtRef.current = now;
-        void loadInbox({ isSilent: true });
-      }
-      return undefined;
+      void loadInbox();
+
+      const intervalId = setInterval(() => {
+        void loadInbox();
+      }, 30000);
+
+      return () => {
+        clearInterval(intervalId);
+      };
     }, [loadInbox, syncConversationsFromClient]),
   );
 
@@ -210,10 +200,12 @@ export function StaffMessagesScreen({
 
   const subtitle = useMemo(
     () =>
-      conversations.length === 0
+      !hasLoadedInbox && conversations.length === 0
+        ? 'Inbox syncs automatically in the background.'
+        : conversations.length === 0
         ? 'No candidate conversations yet.'
         : `${conversations.length} active conversation${conversations.length === 1 ? '' : 's'}.`,
-    [conversations.length],
+    [conversations.length, hasLoadedInbox],
   );
 
   return (
@@ -222,21 +214,10 @@ export function StaffMessagesScreen({
       <Text style={styles.body}>Recruiter inbox</Text>
       <Text style={styles.subtle}>{subtitle}</Text>
 
-      <Pressable
-        style={({ pressed }) => [styles.refreshButton, pressed && styles.refreshButtonPressed]}
-        onPress={() => void loadInbox({ isManualRefresh: true })}
-      >
-        <Text style={styles.refreshButtonText}>
-          {isRefreshing ? 'Refreshing...' : 'Refresh inbox'}
-        </Text>
-      </Pressable>
-
       {message ? <Text style={styles.error}>{message}</Text> : null}
 
       <View style={styles.list}>
-        {isLoading ? (
-          <Text style={styles.emptyText}>Loading conversations...</Text>
-        ) : conversations.length === 0 ? (
+        {conversations.length === 0 && hasLoadedInbox ? (
           <Text style={styles.emptyText}>No channels with messages yet.</Text>
         ) : (
           conversations.map((conversation, index) => {
@@ -381,19 +362,6 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
-  },
-  refreshButton: {
-    alignItems: 'center',
-    backgroundColor: uiColors.border,
-    borderRadius: 10,
-    padding: 10,
-  },
-  refreshButtonPressed: {
-    backgroundColor: uiColors.borderStrong,
-  },
-  refreshButtonText: {
-    color: uiColors.textPrimary,
-    fontWeight: '600',
   },
   subtle: {
     color: uiColors.textMuted,

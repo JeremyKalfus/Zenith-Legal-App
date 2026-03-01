@@ -1,5 +1,6 @@
 import { FIRM_STATUSES, getJdDegreeDateLabel, type FirmStatus } from '@zenith/shared';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   Alert,
   Modal,
@@ -99,13 +100,18 @@ export function StaffCandidateFirmsScreen({
     candidate.assignedRecruiterUserId ?? 'none',
   );
   const [showAssignedRecruiterModal, setShowAssignedRecruiterModal] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadedAssignments, setHasLoadedAssignments] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [statusModal, setStatusModal] = useState<StatusModalState>(null);
+  const loadInFlightRef = useRef(false);
 
   const loadData = useCallback(async () => {
-    setIsLoading(true);
+    if (loadInFlightRef.current) {
+      return;
+    }
+
+    loadInFlightRef.current = true;
     try {
       const [assignmentRows, firmRows, recruiterRows, globalContactResult, overrideResult, assignedRecruiterResult] =
         await Promise.all([
@@ -177,13 +183,27 @@ export function StaffCandidateFirmsScreen({
     } catch (error) {
       setMessage((error as Error).message);
     } finally {
-      setIsLoading(false);
+      loadInFlightRef.current = false;
+      setHasLoadedAssignments(true);
     }
   }, [candidate.id]);
 
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadData();
+      const intervalId = setInterval(() => {
+        void loadData();
+      }, 30000);
+
+      return () => {
+        clearInterval(intervalId);
+      };
+    }, [loadData]),
+  );
 
   const assignedFirmIds = useMemo(
     () => new Set(assignments.map((assignment) => assignment.firm_id)),
@@ -411,10 +431,6 @@ export function StaffCandidateFirmsScreen({
         </View>
       </View>
 
-      <Pressable style={styles.secondaryButton} onPress={() => void loadData()}>
-        <Text style={styles.secondaryButtonText}>{isLoading ? 'Refreshing...' : 'Refresh'}</Text>
-      </Pressable>
-
       {message ? <Text style={styles.message}>{message}</Text> : null}
 
       <View style={styles.section}>
@@ -527,9 +543,7 @@ export function StaffCandidateFirmsScreen({
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Assigned Firms</Text>
-        {isLoading ? (
-          <Text style={styles.emptyText}>Loading assignments...</Text>
-        ) : assignments.length === 0 ? (
+        {assignments.length === 0 && hasLoadedAssignments ? (
           <Text style={styles.emptyText}>No firms assigned yet.</Text>
         ) : (
           assignments.map((assignment) => {
@@ -957,12 +971,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
-  secondaryButton: {
-    alignItems: 'center',
-    backgroundColor: uiColors.border,
-    borderRadius: 10,
-    padding: 10,
-  },
   secondaryButtonModal: {
     alignItems: 'center',
     borderColor: uiColors.borderStrong,
@@ -973,10 +981,6 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   secondaryButtonModalText: {
-    color: uiColors.textPrimary,
-    fontWeight: '600',
-  },
-  secondaryButtonText: {
     color: uiColors.textPrimary,
     fontWeight: '600',
   },

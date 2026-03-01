@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { bucketStaffAppointments, type AppointmentStatus } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
@@ -70,60 +71,80 @@ function useStaffAppointmentsScreen() {
 
   const [statusMessage, setStatusMessage] = useState('');
   const [actingAppointmentId, setActingAppointmentId] = useState<string | null>(null);
+  const appointmentsLoadInFlightRef = useRef(false);
+  const candidatesLoadInFlightRef = useRef(false);
 
   const loadAppointments = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('appointments')
-      .select(
-        'id,title,description,modality,location_text,video_url,start_at_utc,end_at_utc,status,timezone_label,candidate_user_id,created_by_user_id,candidate:users_profile!appointments_candidate_user_id_fkey(name)',
-      )
-      .order('start_at_utc', { ascending: true });
-
-    if (error) {
-      setStatusMessage(error.message);
+    if (appointmentsLoadInFlightRef.current) {
       return;
     }
 
-    const mapped: StaffAppointment[] = (data ?? []).map((row: Record<string, unknown>) => {
-      const candidate = row.candidate as { name: string } | { name: string }[] | null;
-      const name = Array.isArray(candidate) ? candidate[0]?.name ?? 'Unknown' : candidate?.name ?? 'Unknown';
+    appointmentsLoadInFlightRef.current = true;
+    try {
+      const { data, error } = await supabase
+        .from('appointments')
+        .select(
+          'id,title,description,modality,location_text,video_url,start_at_utc,end_at_utc,status,timezone_label,candidate_user_id,created_by_user_id,candidate:users_profile!appointments_candidate_user_id_fkey(name)',
+        )
+        .order('start_at_utc', { ascending: true });
 
-      return {
-        id: row.id as string,
-        title: row.title as string,
-        description: row.description as string | null,
-        modality: row.modality as 'virtual' | 'in_person',
-        location_text: row.location_text as string | null,
-        video_url: row.video_url as string | null,
-        start_at_utc: row.start_at_utc as string,
-        end_at_utc: row.end_at_utc as string,
-        status: row.status as AppointmentStatus,
-        timezone_label: (row.timezone_label as string | null) ?? 'America/New_York',
-        candidate_name: name,
-        candidate_user_id: row.candidate_user_id as string,
-        created_by_user_id: row.created_by_user_id as string,
-      };
-    });
+      if (error) {
+        setStatusMessage(error.message);
+        return;
+      }
 
-    setAppointments(mapped);
-    setStatusMessage('');
+      const mapped: StaffAppointment[] = (data ?? []).map((row: Record<string, unknown>) => {
+        const candidate = row.candidate as { name: string } | { name: string }[] | null;
+        const name = Array.isArray(candidate) ? candidate[0]?.name ?? 'Unknown' : candidate?.name ?? 'Unknown';
+
+        return {
+          id: row.id as string,
+          title: row.title as string,
+          description: row.description as string | null,
+          modality: row.modality as 'virtual' | 'in_person',
+          location_text: row.location_text as string | null,
+          video_url: row.video_url as string | null,
+          start_at_utc: row.start_at_utc as string,
+          end_at_utc: row.end_at_utc as string,
+          status: row.status as AppointmentStatus,
+          timezone_label: (row.timezone_label as string | null) ?? 'America/New_York',
+          candidate_name: name,
+          candidate_user_id: row.candidate_user_id as string,
+          created_by_user_id: row.created_by_user_id as string,
+        };
+      });
+
+      setAppointments(mapped);
+      setStatusMessage('');
+    } finally {
+      appointmentsLoadInFlightRef.current = false;
+    }
   }, []);
 
   const loadCandidates = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('users_profile')
-      .select('id,name')
-      .eq('role', 'candidate')
-      .order('name', { ascending: true });
-
-    if (error) {
-      setStatusMessage(error.message);
+    if (candidatesLoadInFlightRef.current) {
       return;
     }
 
-    const mapped = (data ?? []) as CandidateOption[];
-    setCandidates(mapped);
-    setSelectedCandidateId((current) => current || mapped[0]?.id || '');
+    candidatesLoadInFlightRef.current = true;
+    try {
+      const { data, error } = await supabase
+        .from('users_profile')
+        .select('id,name')
+        .eq('role', 'candidate')
+        .order('name', { ascending: true });
+
+      if (error) {
+        setStatusMessage(error.message);
+        return;
+      }
+
+      const mapped = (data ?? []) as CandidateOption[];
+      setCandidates(mapped);
+      setSelectedCandidateId((current) => current || mapped[0]?.id || '');
+    } finally {
+      candidatesLoadInFlightRef.current = false;
+    }
   }, []);
 
   useEffect(() => {
@@ -145,6 +166,22 @@ function useStaffAppointmentsScreen() {
       void supabase.removeChannel(channel);
     };
   }, [loadAppointments, loadCandidates]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadAppointments();
+      void loadCandidates();
+
+      const intervalId = setInterval(() => {
+        void loadAppointments();
+        void loadCandidates();
+      }, 30000);
+
+      return () => {
+        clearInterval(intervalId);
+      };
+    }, [loadAppointments, loadCandidates]),
+  );
 
   const toDeviceCalendarAppointment = useCallback(
     (appointment: StaffAppointment) =>

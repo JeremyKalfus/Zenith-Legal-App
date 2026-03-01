@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   CITY_OPTIONS,
@@ -81,11 +82,16 @@ export function StaffCandidatesScreen({
   const [recruiters, setRecruiters] = useState<RecruiterUserOption[]>([]);
   const [query, setQuery] = useState('');
   const [appliedFilters, setAppliedFilters] = useState<StaffCandidateFilters>(DEFAULT_STAFF_CANDIDATE_FILTERS);
-  const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadedCandidates, setHasLoadedCandidates] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const loadInFlightRef = useRef(false);
 
   const loadCandidates = useCallback(async () => {
-    setIsLoading(true);
+    if (loadInFlightRef.current) {
+      return;
+    }
+
+    loadInFlightRef.current = true;
     try {
       const [candidateRows, activeFirms, recruiterRows] = await Promise.all([
         listStaffCandidates(),
@@ -99,13 +105,27 @@ export function StaffCandidatesScreen({
     } catch (error) {
       setMessage((error as Error).message);
     } finally {
-      setIsLoading(false);
+      loadInFlightRef.current = false;
+      setHasLoadedCandidates(true);
     }
   }, []);
 
   useEffect(() => {
     void loadCandidates();
   }, [loadCandidates]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadCandidates();
+      const intervalId = setInterval(() => {
+        void loadCandidates();
+      }, 30000);
+
+      return () => {
+        clearInterval(intervalId);
+      };
+    }, [loadCandidates]),
+  );
 
   useEffect(() => {
     if (!incomingAppliedFilters) {
@@ -182,16 +202,10 @@ export function StaffCandidatesScreen({
         onChangeText={setQuery}
       />
 
-      <Pressable style={styles.secondaryButton} onPress={() => void loadCandidates()}>
-        <Text style={styles.secondaryButtonText}>{isLoading ? 'Refreshing...' : 'Refresh list'}</Text>
-      </Pressable>
-
       {message ? <Text style={styles.error}>{message}</Text> : null}
 
       <View style={styles.list}>
-        {isLoading ? (
-          <Text style={styles.emptyText}>Loading candidates...</Text>
-        ) : filteredCandidates.length === 0 ? (
+        {filteredCandidates.length === 0 && hasLoadedCandidates ? (
           <Text style={styles.emptyText}>No candidates found.</Text>
         ) : (
           filteredCandidates.map((candidate) => (
@@ -285,15 +299,5 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: 10,
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    backgroundColor: uiColors.border,
-    borderRadius: 10,
-    padding: 10,
-  },
-  secondaryButtonText: {
-    color: uiColors.textPrimary,
-    fontWeight: '600',
   },
 });

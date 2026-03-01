@@ -1,5 +1,6 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { StackActions } from '@react-navigation/native';
 import type { ComponentProps } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { StaffAppointmentsScreen } from '../screens/staff/staff-appointments-screen';
@@ -56,9 +57,35 @@ export function StaffTabs() {
         },
       })}
     >
-      <Tab.Screen name="Messages" component={StaffMessagesStackNavigator} />
+      <Tab.Screen
+        name="Messages"
+        component={StaffMessagesStackNavigator}
+        listeners={({ navigation, route }) => ({
+          blur: () => {
+            const nestedNavigatorKey = (route as { state?: { key?: string } }).state?.key;
+            if (!nestedNavigatorKey) {
+              return;
+            }
+
+            navigation.dispatch({ ...StackActions.popToTop(), target: nestedNavigatorKey });
+          },
+        })}
+      />
       <Tab.Screen name="Appointments" component={StaffAppointmentsScreen} />
-      <Tab.Screen name="Candidates" component={StaffCandidatesStackNavigator} />
+      <Tab.Screen
+        name="Candidates"
+        component={StaffCandidatesStackNavigator}
+        listeners={({ navigation, route }) => ({
+          blur: () => {
+            const nestedNavigatorKey = (route as { state?: { key?: string } }).state?.key;
+            if (!nestedNavigatorKey) {
+              return;
+            }
+
+            navigation.dispatch({ ...StackActions.popToTop(), target: nestedNavigatorKey });
+          },
+        })}
+      />
       <Tab.Screen name="Profile" component={StaffProfileScreen} />
     </Tab.Navigator>
   );
