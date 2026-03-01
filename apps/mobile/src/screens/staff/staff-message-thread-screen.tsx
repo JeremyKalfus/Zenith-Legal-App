@@ -3,6 +3,7 @@ import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { Platform, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import { Channel, Chat, MessageInput, MessageList, OverlayProvider } from 'stream-chat-expo';
 import { getChatClient } from '../../lib/chat';
+import { chatThemeOverrides } from '../../lib/chat-theme-overrides';
 import { uiColors } from '../../theme/colors';
 
 export function StaffMessageThreadScreen({
@@ -67,12 +68,13 @@ export function StaffMessageThreadScreen({
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.chatContainer}>
-        <OverlayProvider>
+        <OverlayProvider value={{ style: chatThemeOverrides }}>
           <Chat client={client}>
             <Channel
               channel={channel}
               keyboardBehavior={Platform.OS === 'ios' ? 'padding' : 'height'}
               keyboardVerticalOffset={Platform.OS === 'ios' ? 120 : 0}
+              messageSwipeToReplyHitSlop={{ bottom: 0, left: 0, right: 0, top: 0 }}
             >
               <MessageList
                 additionalFlatListProps={{

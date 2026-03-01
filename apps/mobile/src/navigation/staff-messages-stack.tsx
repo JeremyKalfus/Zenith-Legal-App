@@ -15,7 +15,7 @@ const Stack = createNativeStackNavigator<StaffMessagesStackParamList>();
 export function StaffMessagesStackNavigator() {
   return (
     <Stack.Navigator>
-      <Stack.Screen name="StaffMessagesInbox" options={{ title: 'Messages' }}>
+      <Stack.Screen name="StaffMessagesInbox" options={{ headerShown: false }}>
         {({ navigation }) => (
           <StaffMessagesScreen
             onOpenConversation={(conversation) => {
@@ -28,9 +28,11 @@ export function StaffMessagesStackNavigator() {
         name="StaffMessageThread"
         options={({ route }) => ({
           title: route.params.conversation.channelName,
+          headerBackTitleVisible: false,
+          headerBackButtonDisplayMode: 'minimal',
           gestureEnabled: true,
           fullScreenGestureEnabled: false,
-          gestureResponseDistance: { start: 24 },
+          gestureResponseDistance: { start: 18 },
           animation: 'slide_from_right',
           animationMatchesGesture: true,
         })}

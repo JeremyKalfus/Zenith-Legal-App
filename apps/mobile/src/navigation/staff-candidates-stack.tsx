@@ -26,7 +26,7 @@ const Stack = createNativeStackNavigator<StaffCandidatesStackParamList>();
 export function StaffCandidatesStackNavigator() {
   return (
     <Stack.Navigator>
-      <Stack.Screen name="StaffCandidatesList" options={{ title: 'Candidates' }}>
+      <Stack.Screen name="StaffCandidatesList" options={{ headerShown: false }}>
         {({ navigation, route }) => (
           <StaffCandidatesScreen
             incomingAppliedFilters={route.params?.appliedFilters}
@@ -43,6 +43,8 @@ export function StaffCandidatesStackNavigator() {
         name="StaffCandidateFirms"
         options={({ route }) => ({
           title: route.params.candidate.name || 'Candidate',
+          headerBackTitleVisible: false,
+          headerBackButtonDisplayMode: 'minimal',
         })}
       >
         {({ route }) => <StaffCandidateFirmsScreen candidate={route.params.candidate} />}

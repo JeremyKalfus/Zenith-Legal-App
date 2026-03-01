@@ -13,6 +13,7 @@ import {
 import { getChatClient } from '../../lib/chat';
 import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
 import { useResolvedCandidateChatChannel } from '../../lib/use-resolved-candidate-chat-channel';
+import { chatThemeOverrides } from '../../lib/chat-theme-overrides';
 
 function ApplyInitialDraftMessage({
   message,
@@ -132,7 +133,7 @@ export function MessagesScreen({
     <SafeAreaView style={styles.safeArea}>
       {showRecruiterBanner ? <GlobalRecruiterBanner /> : null}
       <View style={styles.chatContainer}>
-        <OverlayProvider>
+        <OverlayProvider value={{ style: chatThemeOverrides }}>
           <Chat client={getChatClient()}>
             <Channel
               channel={channel}

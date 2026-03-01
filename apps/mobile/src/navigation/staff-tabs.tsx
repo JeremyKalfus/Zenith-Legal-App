@@ -35,7 +35,7 @@ export function StaffTabs() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
-        headerShown: true,
+        headerShown: false,
         tabBarActiveTintColor: uiColors.primary,
         tabBarInactiveTintColor: '#64748B',
         tabBarHideOnKeyboard: true,
@@ -56,17 +56,9 @@ export function StaffTabs() {
         },
       })}
     >
-      <Tab.Screen
-        name="Messages"
-        component={StaffMessagesStackNavigator}
-        options={{ headerShown: false }}
-      />
+      <Tab.Screen name="Messages" component={StaffMessagesStackNavigator} />
       <Tab.Screen name="Appointments" component={StaffAppointmentsScreen} />
-      <Tab.Screen
-        name="Candidates"
-        component={StaffCandidatesStackNavigator}
-        options={{ headerShown: false }}
-      />
+      <Tab.Screen name="Candidates" component={StaffCandidatesStackNavigator} />
       <Tab.Screen name="Profile" component={StaffProfileScreen} />
     </Tab.Navigator>
   );

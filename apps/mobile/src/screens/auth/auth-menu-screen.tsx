@@ -4,6 +4,8 @@ import {
   Image,
   Keyboard,
   KeyboardEvent,
+  Linking,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -46,13 +48,21 @@ export function AuthMenuScreen({
   const keyboardTopRef = useRef<number>(Number.POSITIVE_INFINITY);
   const keyboardVisibleRef = useRef(false);
   const pendingAnchorScrollRef = useRef(false);
+  const queuedScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isSignup = tab === 'signup';
   const logoSize = 211;
   const normalizedEmail = email.trim().toLowerCase();
   const ctaDisabled = isSignup ? busy || !normalizedEmail : busy || !normalizedEmail || !password;
 
-  const scrollForFocusedField = useCallback(() => {
+  const clearQueuedScroll = useCallback(() => {
+    if (queuedScrollTimeoutRef.current) {
+      clearTimeout(queuedScrollTimeoutRef.current);
+      queuedScrollTimeoutRef.current = null;
+    }
+  }, []);
+
+  const scrollForFocusedField = useCallback((animated = true) => {
     const anchor = tab === 'signup' ? ctaAnchorRef.current : forgotAnchorRef.current ?? ctaAnchorRef.current;
     const keyboardTop = keyboardTopRef.current;
     if (!anchor || !Number.isFinite(keyboardTop)) {
@@ -66,83 +76,89 @@ export function AuthMenuScreen({
       if (Math.abs(delta) < 2) {
         return;
       }
+      const nextY = Math.max(0, scrollYRef.current + delta);
       scrollViewRef.current?.scrollTo({
-        y: Math.max(0, scrollYRef.current + delta),
-        animated: true,
+        y: nextY,
+        animated,
       });
     });
     return true;
   }, [tab]);
 
+  const queueAnchorScroll = useCallback(
+    (delayMs = 0, animated = true) => {
+      clearQueuedScroll();
+      queuedScrollTimeoutRef.current = setTimeout(() => {
+        queuedScrollTimeoutRef.current = null;
+        requestAnimationFrame(() => {
+          scrollForFocusedField(animated);
+        });
+      }, delayMs);
+    },
+    [clearQueuedScroll, scrollForFocusedField],
+  );
+
   const handleFieldFocus = useCallback(() => {
     if (keyboardVisibleRef.current) {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          scrollForFocusedField();
-        });
-      });
+      queueAnchorScroll(40);
       return;
     }
     pendingAnchorScrollRef.current = true;
-    setTimeout(() => {
-      scrollForFocusedField();
-    }, 240);
-  }, [scrollForFocusedField]);
+  }, [queueAnchorScroll]);
 
   useEffect(() => {
     if (keyboardVisibleRef.current) {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (!scrollForFocusedField()) {
-            setTimeout(() => {
-              scrollForFocusedField();
-            }, 120);
-          }
-        });
-      });
+      queueAnchorScroll(48);
       return;
     }
 
     requestAnimationFrame(() => {
       scrollViewRef.current?.scrollTo({ y: 0, animated: true });
     });
-  }, [scrollForFocusedField, tab]);
+  }, [queueAnchorScroll, tab]);
 
   useEffect(() => {
-    const showEvent = 'keyboardDidShow';
-    const hideEvent = 'keyboardDidHide';
-
-    const showSub = Keyboard.addListener(showEvent, (event: KeyboardEvent) => {
+    const applyKeyboardFrame = (event: KeyboardEvent, source: 'will' | 'did') => {
+      Keyboard.scheduleLayoutAnimation(event);
       const nextHeight = event.endCoordinates.height;
       const fallbackKeyboardTop = Dimensions.get('window').height - nextHeight;
       const nextKeyboardTop = event.endCoordinates.screenY || fallbackKeyboardTop;
       keyboardVisibleRef.current = true;
       keyboardTopRef.current = nextKeyboardTop;
       setKeyboardHeight(nextHeight);
+
+      const shouldPrioritizeFocusScroll = pendingAnchorScrollRef.current;
       pendingAnchorScrollRef.current = false;
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (!scrollForFocusedField()) {
-            setTimeout(() => {
-              scrollForFocusedField();
-            }, 120);
-          }
-        });
-      });
+      const delayMs = shouldPrioritizeFocusScroll ? 0 : source === 'will' ? 8 : 20;
+      queueAnchorScroll(delayMs);
+    };
+
+    const willShowSub =
+      Platform.OS === 'ios'
+        ? Keyboard.addListener('keyboardWillShow', (event: KeyboardEvent) => {
+            applyKeyboardFrame(event, 'will');
+          })
+        : null;
+    const showSub = Keyboard.addListener('keyboardDidShow', (event: KeyboardEvent) => {
+      applyKeyboardFrame(event, 'did');
     });
 
-    const hideSub = Keyboard.addListener(hideEvent, () => {
+    const hideSub = Keyboard.addListener('keyboardDidHide', (event: KeyboardEvent) => {
+      Keyboard.scheduleLayoutAnimation(event);
       keyboardVisibleRef.current = false;
       keyboardTopRef.current = Number.POSITIVE_INFINITY;
       setKeyboardHeight(0);
       pendingAnchorScrollRef.current = false;
+      clearQueuedScroll();
     });
 
     return () => {
+      willShowSub?.remove();
       showSub.remove();
       hideSub.remove();
+      clearQueuedScroll();
     };
-  }, [scrollForFocusedField]);
+  }, [clearQueuedScroll, queueAnchorScroll]);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -157,11 +173,17 @@ export function AuthMenuScreen({
         scrollEventThrottle={16}
       >
           <View style={styles.center}>
-            <Image
-              source={require('../../../assets/zenith-legal-logo.png')}
-              style={[styles.brandLogo, { height: logoSize, width: logoSize }]}
-              resizeMode="contain"
-            />
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => Linking.openURL('https://zenithlegal.com/')}
+              style={styles.logoLink}
+            >
+              <Image
+                source={require('../../../assets/zenith-legal-logo.png')}
+                style={[styles.brandLogo, { height: logoSize, width: logoSize }]}
+                resizeMode="contain"
+              />
+            </Pressable>
             <Text style={styles.title}>Zenith Legal</Text>
             <Text style={styles.subtitle}>A HIGHER LEVEL OF LEGAL SEARCH</Text>
 
@@ -203,7 +225,8 @@ export function AuthMenuScreen({
                 <TextInput
                   autoCapitalize="none"
                   keyboardType="email-address"
-                  placeholder="you@example.com"
+                  placeholder="Email"
+                  placeholderTextColor={uiColors.textPlaceholder}
                   style={styles.input}
                   value={email}
                   onChangeText={setEmail}
@@ -215,6 +238,7 @@ export function AuthMenuScreen({
                 <View>
                   <PasswordInput
                     placeholder="Password"
+                    placeholderTextColor={uiColors.textPlaceholder}
                     style={styles.input}
                     value={password}
                     onChangeText={setPassword}
@@ -365,6 +389,10 @@ const styles = StyleSheet.create({
     color: uiColors.textSecondary,
     fontSize: 12,
     textAlign: 'center',
+  },
+  logoLink: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   safeArea: {
     backgroundColor: '#EFF1F4',
