@@ -214,7 +214,7 @@ export function DashboardScreen({
     <ScreenShell>
       <CandidatePageTitle title="Zenith Legal" />
       <Text style={styles.body}>
-        Track your firms at a new level
+        Track your submissions at a high level
       </Text>
 
       <Pressable
@@ -226,7 +226,7 @@ export function DashboardScreen({
         })}
         onPress={() => onOpenMessages()}
       >
-        <Text style={styles.primaryCtaText}>One-click message the Zenith team</Text>
+        <Text style={styles.primaryCtaText}>Message the Zenith team</Text>
       </Pressable>
 
       {message ? <Text style={styles.error}>{message}</Text> : null}

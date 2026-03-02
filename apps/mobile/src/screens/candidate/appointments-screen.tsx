@@ -300,7 +300,7 @@ export function AppointmentsScreen() {
   return (
     <ScreenShell>
       <CandidatePageTitle title="Appointments" />
-      <Text style={styles.body}>View and manage your appointments with Zenith Legal.</Text>
+      <Text style={styles.body}>View your appointments and interview schedule.</Text>
 
       {screen.serverMessage ? (
         <Text style={styles.serverMessage}>{screen.serverMessage}</Text>

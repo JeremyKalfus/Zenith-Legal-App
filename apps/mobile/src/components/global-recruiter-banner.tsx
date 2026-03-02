@@ -30,7 +30,7 @@ export function GlobalRecruiterBanner() {
 
   return (
     <View style={styles.container} accessibilityRole="header">
-      <Text style={styles.title}>Zenith Legal Recruiter Contact</Text>
+      <Text style={styles.title}>Your Recruiter Contact</Text>
       <View style={styles.row}>
         <Pressable
           accessibilityRole="link"
