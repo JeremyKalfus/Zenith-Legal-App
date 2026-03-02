@@ -7,6 +7,7 @@ import {
   APPOINTMENT_STATUSES,
   candidateIntakeSchema,
   candidateRegistrationSchema,
+  CITY_OPTIONS,
   FIRM_STATUSES,
   getLatestAllowedJdDegreeYear,
   PRACTICE_AREAS,
@@ -74,6 +75,31 @@ describe('candidate intake schema', () => {
     if (!result.success) {
       expect(result.error.flatten().fieldErrors.practiceAreas).toBeTruthy();
     }
+  });
+
+  it('keeps the required leading city options order', () => {
+    expect(CITY_OPTIONS.slice(0, 8)).toEqual([
+      'DC',
+      'NYC',
+      'Boston',
+      'Chicago',
+      'Houston',
+      'LA / Southern Cal',
+      'SF / Northern Cal',
+      'Miami',
+    ]);
+  });
+
+  it('keeps the required leading practice area order', () => {
+    expect(PRACTICE_AREAS.slice(0, 7)).toEqual([
+      'Antitrust',
+      'Litigation',
+      'Real Estate',
+      'Corp: M&A/PE',
+      'Corp: Cap Mkts',
+      'Corp: Finance',
+      'Corp: EC/VC',
+    ]);
   });
 
   it('includes Media/Ent before international options', () => {
