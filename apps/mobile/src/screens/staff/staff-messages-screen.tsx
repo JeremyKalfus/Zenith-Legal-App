@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { InteractionManager, Pressable, StyleSheet, Text, View } from 'react-native';
 import { ScreenShell } from '../../components/screen-shell';
+import { StaffPageTitle } from '../../components/staff-page-title';
 import { useAuth } from '../../context/auth-context';
 import type { StaffMessageInboxItem } from '@zenith/shared';
 import { formatRelativeTimestamp, mapChannelsToStaffInboxItems } from '@zenith/shared';
@@ -9,30 +11,68 @@ import { getFunctionErrorMessage } from '../../lib/function-error';
 import { ensureValidSession, supabase } from '../../lib/supabase';
 import { uiColors } from '../../theme/colors';
 
+function deriveConversationName(conversation: StaffMessageInboxItem): string {
+  const candidateName = conversation.candidateDisplayName?.trim();
+  if (candidateName) {
+    return candidateName;
+  }
+
+  const cleaned = conversation.channelName
+    .replace(/\s*(?:·|-)\s*Zenith Legal\s*$/i, '')
+    .trim();
+  return cleaned || conversation.channelName;
+}
+
+const LIVE_CHAT_EVENT_TYPES = new Set([
+  'message.new',
+  'message.updated',
+  'message.deleted',
+  'notification.message_new',
+  'notification.mark_read',
+  'notification.mark_unread',
+  'notification.added_to_channel',
+  'channel.updated',
+  'channel.deleted',
+  'channel.hidden',
+  'channel.visible',
+]);
+
+function formatUnreadCount(count: number): string {
+  return count > 9 ? '9+' : String(count);
+}
+
 export function StaffMessagesScreen({
   onOpenConversation,
+  onStartConversation,
 }: {
   onOpenConversation: (conversation: StaffMessageInboxItem) => void;
+  onStartConversation: () => void;
 }) {
   const { session, profile } = useAuth();
   const [conversations, setConversations] = useState<StaffMessageInboxItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hasLoadedInbox, setHasLoadedInbox] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const connectedRef = useRef(false);
+  const eventSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
+  const loadInFlightRef = useRef(false);
+
+  const syncConversationsFromClient = useCallback(() => {
+    const client = getChatClient();
+    const channels = Object.values(client.activeChannels ?? {});
+    setConversations(mapChannelsToStaffInboxItems(channels as unknown[]));
+  }, []);
 
   const loadInbox = useCallback(
-    async (isManualRefresh = false) => {
-      if (!session?.user || !profile) {
-        setIsLoading(false);
+    async () => {
+      if (loadInFlightRef.current) {
         return;
       }
 
-      if (isManualRefresh) {
-        setIsRefreshing(true);
-      } else {
-        setIsLoading(true);
+      if (!session?.user || !profile) {
+        setHasLoadedInbox(true);
+        return;
       }
+
+      loadInFlightRef.current = true;
 
       try {
         await ensureValidSession();
@@ -52,7 +92,8 @@ export function StaffMessagesScreen({
           user_image?: string;
         };
 
-        if (!connectedRef.current) {
+        const client = getChatClient();
+        if (client.userID !== session.user.id) {
           await ensureChatUserConnected(
             {
               id: session.user.id,
@@ -61,10 +102,7 @@ export function StaffMessagesScreen({
             },
             response.token,
           );
-          connectedRef.current = true;
         }
-
-        const client = getChatClient();
 
         const channels = await client.queryChannels(
           {
@@ -80,78 +118,143 @@ export function StaffMessagesScreen({
         );
 
         setConversations(mapChannelsToStaffInboxItems(channels as unknown[]));
+
+        if (!eventSubscriptionRef.current) {
+          eventSubscriptionRef.current = client.on((event) => {
+            if (!LIVE_CHAT_EVENT_TYPES.has(event.type)) {
+              return;
+            }
+            syncConversationsFromClient();
+          });
+        }
         setMessage(null);
       } catch (error) {
         setMessage(
           await getFunctionErrorMessage(error, 'Unable to load messages. Please try again.'),
         );
       } finally {
-        setIsLoading(false);
-        setIsRefreshing(false);
+        loadInFlightRef.current = false;
+        setHasLoadedInbox(true);
       }
     },
-    [profile, session?.user],
+    [profile, session?.user, syncConversationsFromClient],
   );
 
   useEffect(() => {
     void loadInbox();
   }, [loadInbox]);
 
-  const subtitle = useMemo(
-    () =>
-      conversations.length === 0
-        ? 'No candidate conversations yet.'
-        : `${conversations.length} active conversation${conversations.length === 1 ? '' : 's'}.`,
-    [conversations.length],
+  useEffect(() => {
+    return () => {
+      eventSubscriptionRef.current?.unsubscribe();
+      eventSubscriptionRef.current = null;
+    };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      syncConversationsFromClient();
+      const interactionTask = InteractionManager.runAfterInteractions(() => {
+        void loadInbox();
+      });
+
+      const intervalId = setInterval(() => {
+        void loadInbox();
+      }, 30000);
+
+      return () => {
+        interactionTask.cancel();
+        clearInterval(intervalId);
+      };
+    }, [loadInbox, syncConversationsFromClient]),
+  );
+
+  const handleOpenConversation = useCallback(
+    (conversation: StaffMessageInboxItem) => {
+      setConversations((current) =>
+        current.map((row) =>
+          row.channelId === conversation.channelId ? { ...row, unreadCount: 0 } : row,
+        ),
+      );
+
+      const client = getChatClient();
+      const channel = client.channel('messaging', conversation.channelId);
+      void channel.markRead().catch(() => undefined);
+
+      onOpenConversation({ ...conversation, unreadCount: 0 });
+    },
+    [onOpenConversation],
   );
 
   return (
     <ScreenShell showBanner={false}>
-      <Text style={styles.title}>Messages</Text>
-      <Text style={styles.body}>Recruiter inbox for candidate conversations.</Text>
-      <Text style={styles.subtle}>{subtitle}</Text>
-
-      <Pressable
-        style={({ pressed }) => [styles.refreshButton, pressed && styles.refreshButtonPressed]}
-        onPress={() => void loadInbox(true)}
-      >
-        <Text style={styles.refreshButtonText}>
-          {isRefreshing ? 'Refreshing...' : 'Refresh inbox'}
-        </Text>
-      </Pressable>
+      <StaffPageTitle title="Messages" />
+      <Text style={styles.body}>Recruiter inbox</Text>
+      <View style={styles.subtitleRow}>
+        <View style={styles.subtle} />
+        <Pressable
+          accessibilityLabel="Start conversation"
+          onPress={onStartConversation}
+          style={({ pressed }) => [
+            styles.newConversationButton,
+            pressed ? styles.newConversationButtonPressed : null,
+          ]}
+        >
+          <Text style={styles.newConversationButtonText}>+</Text>
+        </Pressable>
+      </View>
 
       {message ? <Text style={styles.error}>{message}</Text> : null}
 
       <View style={styles.list}>
-        {isLoading ? (
-          <Text style={styles.emptyText}>Loading conversations...</Text>
-        ) : conversations.length === 0 ? (
+        {conversations.length === 0 && hasLoadedInbox ? (
           <Text style={styles.emptyText}>No channels with messages yet.</Text>
         ) : (
-          conversations.map((conversation) => (
+          conversations.map((conversation, index) => {
+            const displayName = deriveConversationName(conversation);
+            const timestamp = formatRelativeTimestamp(conversation.lastMessageAt);
+            const isLast = index === conversations.length - 1;
+            const isUnread = conversation.unreadCount > 0;
+
+            return (
             <Pressable
               key={conversation.channelId}
-              style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-              onPress={() => onOpenConversation(conversation)}
+              style={({ pressed }) => [
+                styles.conversationRow,
+                !isLast ? styles.conversationRowBorder : null,
+                pressed ? styles.conversationRowPressed : null,
+              ]}
+              onPress={() => handleOpenConversation(conversation)}
             >
-              <View style={styles.cardHeader}>
-                <Text numberOfLines={1} style={styles.cardTitle}>
-                  {conversation.channelName}
-                </Text>
-                <Text style={styles.cardTimestamp}>
-                  {formatRelativeTimestamp(conversation.lastMessageAt)}
+              <View style={styles.conversationMain}>
+                <View style={styles.conversationTopRow}>
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.conversationName, isUnread ? styles.conversationNameUnread : null]}
+                  >
+                    {displayName}
+                  </Text>
+                  <View style={styles.conversationMetaRow}>
+                    {isUnread ? (
+                      <View style={styles.unreadBadgeInline}>
+                        <Text style={styles.unreadBadgeText}>{formatUnreadCount(conversation.unreadCount)}</Text>
+                      </View>
+                    ) : null}
+                    <Text style={[styles.conversationTimestamp, isUnread ? styles.conversationTimestampUnread : null]}>
+                      {timestamp}
+                    </Text>
+                  </View>
+                </View>
+                <Text
+                  numberOfLines={1}
+                  style={[styles.conversationPreview, isUnread ? styles.conversationPreviewUnread : null]}
+                >
+                  {conversation.lastMessagePreview}
                 </Text>
               </View>
-              <Text numberOfLines={2} style={styles.cardPreview}>
-                {conversation.lastMessagePreview}
-              </Text>
-              {conversation.unreadCount > 0 ? (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>{conversation.unreadCount}</Text>
-                </View>
-              ) : null}
             </Pressable>
-          ))
+            );
+          })
         )}
       </View>
     </ScreenShell>
@@ -159,55 +262,62 @@ export function StaffMessagesScreen({
 }
 
 const styles = StyleSheet.create({
-  badge: {
-    alignSelf: 'flex-start',
-    backgroundColor: uiColors.textPrimary,
-    borderRadius: 999,
-    marginTop: 8,
-    minWidth: 24,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  badgeText: {
-    color: uiColors.primaryText,
-    fontSize: 12,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
   body: {
     color: uiColors.textSecondary,
   },
-  card: {
-    backgroundColor: uiColors.surface,
-    borderColor: uiColors.border,
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 12,
+  conversationMain: {
+    flex: 1,
+    minWidth: 0,
   },
-  cardHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'space-between',
-  },
-  cardPreview: {
-    color: uiColors.textStrong,
-    marginTop: 4,
-  },
-  cardPressed: {
-    backgroundColor: uiColors.background,
-  },
-  cardTimestamp: {
-    color: uiColors.textMuted,
-    flexShrink: 0,
-    fontSize: 12,
-    marginLeft: 8,
-  },
-  cardTitle: {
+  conversationName: {
     color: uiColors.textPrimary,
     flex: 1,
-    fontSize: 15,
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  conversationNameUnread: {
     fontWeight: '700',
+  },
+  conversationMetaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  conversationPreview: {
+    color: uiColors.textSecondary,
+    fontSize: 16,
+    marginTop: 3,
+  },
+  conversationPreviewUnread: {
+    color: uiColors.textPrimary,
+    fontWeight: '700',
+  },
+  conversationRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 14,
+  },
+  conversationRowBorder: {
+    borderBottomColor: uiColors.border,
+    borderBottomWidth: 1,
+  },
+  conversationRowPressed: {
+    backgroundColor: uiColors.background,
+  },
+  conversationTimestamp: {
+    color: uiColors.textMuted,
+    fontSize: 14,
+  },
+  conversationTimestampUnread: {
+    color: uiColors.textStrong,
+    fontWeight: '600',
+  },
+  conversationTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   emptyText: {
     color: uiColors.textMuted,
@@ -219,28 +329,57 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   list: {
-    gap: 10,
-  },
-  refreshButton: {
-    alignItems: 'center',
-    backgroundColor: uiColors.border,
-    borderRadius: 10,
-    padding: 10,
-  },
-  refreshButtonPressed: {
-    backgroundColor: uiColors.borderStrong,
-  },
-  refreshButtonText: {
-    color: uiColors.textPrimary,
-    fontWeight: '600',
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    borderWidth: 0,
+    overflow: 'visible',
   },
   subtle: {
     color: uiColors.textMuted,
+    flex: 1,
     fontSize: 12,
+    paddingRight: 44,
   },
-  title: {
+  subtitleRow: {
+    marginTop: 2,
+    position: 'relative',
+  },
+  newConversationButton: {
+    alignItems: 'center',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
+    borderRadius: 999,
+    borderWidth: 1,
+    bottom: 0,
+    height: 32,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 0,
+    width: 32,
+  },
+  newConversationButtonPressed: {
+    backgroundColor: uiColors.backgroundAlt,
+  },
+  newConversationButtonText: {
     color: uiColors.textPrimary,
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
+    lineHeight: 24,
+    marginTop: -2,
+  },
+  unreadBadgeInline: {
+    alignItems: 'center',
+    backgroundColor: uiColors.textPrimary,
+    borderRadius: 999,
+    justifyContent: 'center',
+    minWidth: 22,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  unreadBadgeText: {
+    color: uiColors.primaryText,
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
   },
 });

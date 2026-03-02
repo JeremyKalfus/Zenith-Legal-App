@@ -1,5 +1,7 @@
 import {
   CITY_OPTIONS,
+  type FirmStatus,
+  getJdDegreeYear,
   PRACTICE_AREAS,
   type CityOption,
   type PracticeArea,
@@ -20,12 +22,31 @@ export type CandidateFilterable = {
   mobile?: string | null;
   preferredCities?: readonly CityOption[] | null;
   practiceAreas?: readonly PracticeArea[] | null;
+  jdDegreeDate?: string | null;
+  jd_degree_date?: string | null;
 };
 
 export type CandidateFilterInput = {
   query: string;
   selectedCities: readonly CityOption[];
   selectedPracticeAreas: readonly PracticeArea[];
+  selectedJdYears?: readonly string[];
+};
+
+export type StaffCandidateFilterable = CandidateFilterable & {
+  assignedRecruiterUserId?: string | null;
+  currentStatuses?: readonly FirmStatus[] | null;
+  assignedFirmIds?: readonly string[] | null;
+};
+
+export type StaffCandidateFilterInput = {
+  query: string;
+  assignedRecruiter: 'any' | 'none' | string;
+  currentStatus: 'any' | FirmStatus;
+  practices: readonly PracticeArea[];
+  assignedFirmIds: readonly string[];
+  preferredCities: readonly CityOption[];
+  jdYears: readonly string[];
 };
 
 function isCityOption(value: unknown): value is CityOption {
@@ -77,9 +98,11 @@ export function filterCandidatesBySearchCityPractice<T extends CandidateFilterab
   const normalizedQuery = input.query.trim().toLowerCase();
   const selectedCitySet = new Set(input.selectedCities);
   const selectedPracticeSet = new Set(input.selectedPracticeAreas);
+  const selectedJdYearSet = new Set(input.selectedJdYears ?? []);
   const hasCityFilters = selectedCitySet.size > 0;
   const hasPracticeFilters = selectedPracticeSet.size > 0;
-  const hasAnyChipFilters = hasCityFilters || hasPracticeFilters;
+  const hasJdYearFilters = selectedJdYearSet.size > 0;
+  const hasAnyChipFilters = hasCityFilters || hasPracticeFilters || hasJdYearFilters;
 
   return candidates.filter((candidate) => {
     const searchMatch = normalizedQuery.length === 0 || [candidate.name, candidate.email, candidate.mobile]
@@ -98,7 +121,76 @@ export function filterCandidatesBySearchCityPractice<T extends CandidateFilterab
       .some((city) => selectedCitySet.has(city));
     const practiceMatch = hasPracticeFilters && (candidate.practiceAreas ?? [])
       .some((practiceArea) => selectedPracticeSet.has(practiceArea));
+    const jdYear = getJdDegreeYear(candidate.jdDegreeDate ?? candidate.jd_degree_date);
+    const jdYearMatch = hasJdYearFilters && Boolean(jdYear && selectedJdYearSet.has(jdYear));
 
-    return cityMatch || practiceMatch;
+    return cityMatch || practiceMatch || jdYearMatch;
+  });
+}
+
+export function filterStaffCandidates<T extends StaffCandidateFilterable>(
+  candidates: readonly T[],
+  input: StaffCandidateFilterInput,
+): T[] {
+  const normalizedQuery = input.query.trim().toLowerCase();
+  const selectedFirmIdSet = new Set(input.assignedFirmIds);
+  const selectedCitySet = new Set(input.preferredCities);
+  const selectedJdYearSet = new Set(input.jdYears);
+  const selectedPracticeSet = new Set(input.practices);
+  const hasAssignedFirmFilter = selectedFirmIdSet.size > 0;
+  const hasPreferredCityFilter = selectedCitySet.size > 0;
+  const hasJdYearFilter = selectedJdYearSet.size > 0;
+  const hasPracticeFilter = selectedPracticeSet.size > 0;
+
+  return candidates.filter((candidate) => {
+    const searchMatch = normalizedQuery.length === 0 || [candidate.name, candidate.email, candidate.mobile]
+      .filter((value): value is string => Boolean(value))
+      .some((value) => value.toLowerCase().includes(normalizedQuery));
+    if (!searchMatch) {
+      return false;
+    }
+
+    const assignedRecruiterId = candidate.assignedRecruiterUserId ?? null;
+    const assignedRecruiterMatch = input.assignedRecruiter === 'any'
+      ? true
+      : input.assignedRecruiter === 'none'
+        ? !assignedRecruiterId
+        : assignedRecruiterId === input.assignedRecruiter;
+    if (!assignedRecruiterMatch) {
+      return false;
+    }
+
+    const currentStatusMatch = input.currentStatus === 'any'
+      ? true
+      : (candidate.currentStatuses ?? []).includes(input.currentStatus);
+    if (!currentStatusMatch) {
+      return false;
+    }
+
+    const practiceMatch = !hasPracticeFilter || (candidate.practiceAreas ?? [])
+      .some((practice) => selectedPracticeSet.has(practice));
+    if (!practiceMatch) {
+      return false;
+    }
+
+    const assignedFirmMatch = !hasAssignedFirmFilter || (candidate.assignedFirmIds ?? [])
+      .some((firmId) => selectedFirmIdSet.has(firmId));
+    if (!assignedFirmMatch) {
+      return false;
+    }
+
+    const preferredCityMatch = !hasPreferredCityFilter || (candidate.preferredCities ?? [])
+      .some((city) => selectedCitySet.has(city));
+    if (!preferredCityMatch) {
+      return false;
+    }
+
+    const jdYear = getJdDegreeYear(candidate.jdDegreeDate ?? candidate.jd_degree_date);
+    const jdYearMatch = !hasJdYearFilter || Boolean(jdYear && selectedJdYearSet.has(jdYear));
+    if (!jdYearMatch) {
+      return false;
+    }
+
+    return true;
   });
 }

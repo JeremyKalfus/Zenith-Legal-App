@@ -1,13 +1,30 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { FIRM_STATUSES } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
+import { CandidatePageTitle } from '../../components/candidate-page-title';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../context/auth-context';
 import type { CandidateFirmAssignment } from '../../types/domain';
 import { uiColors } from '../../theme/colors';
 import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 import { getFirmStatusBadgeColors } from '../../features/firm-status-badge';
+
+const AUTHORIZED_STATUS = 'Authorized, will submit soon' as const;
+const AUTHORIZED_STATUS_ALIAS = 'Authorize, will submit soon' as const;
+
+function normalizeFirmStatus(
+  value: unknown,
+): CandidateFirmAssignment['status_enum'] | null {
+  if (value === AUTHORIZED_STATUS_ALIAS) {
+    return AUTHORIZED_STATUS;
+  }
+  if (typeof value === 'string' && FIRM_STATUSES.includes(value as (typeof FIRM_STATUSES)[number])) {
+    return value as CandidateFirmAssignment['status_enum'];
+  }
+  return null;
+}
 
 async function extractFunctionInvokeErrorMessage(error: unknown, data: unknown): Promise<string> {
   if (typeof data === 'object' && data && 'error' in data) {
@@ -49,7 +66,7 @@ async function extractFunctionInvokeErrorMessage(error: unknown, data: unknown):
 }
 
 function isTrackedFirmStatus(value: unknown): value is CandidateFirmAssignment['status_enum'] {
-  return typeof value === 'string' && FIRM_STATUSES.includes(value as (typeof FIRM_STATUSES)[number]);
+  return normalizeFirmStatus(value) !== null;
 }
 
 const statusRank = Object.fromEntries(
@@ -59,9 +76,9 @@ const statusRank = Object.fromEntries(
 export function DashboardScreen({
   onOpenMessages,
 }: {
-  onOpenMessages: () => void;
+  onOpenMessages: (initialDraftMessage?: string) => void;
 }) {
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
   const [assignments, setAssignments] = useState<CandidateFirmAssignment[]>([]);
   const [message, setMessage] = useState('');
   const [busyAssignmentId, setBusyAssignmentId] = useState<string | null>(null);
@@ -84,7 +101,7 @@ export function DashboardScreen({
 
     const normalized: CandidateFirmAssignment[] = ((data ?? []) as Record<string, unknown>[])
       .flatMap((row) => {
-        const status = row.status_enum;
+        const status = normalizeFirmStatus(row.status_enum);
         if (!isTrackedFirmStatus(status)) {
           return [];
         }
@@ -113,6 +130,40 @@ export function DashboardScreen({
 
   useEffect(() => {
     loadAssignments();
+  }, [loadAssignments]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`candidate-firm-assignments-${session?.user.id ?? 'anonymous'}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'candidate_firm_assignments' },
+        () => {
+          void loadAssignments();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [loadAssignments, session?.user.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadAssignments();
+      return undefined;
+    }, [loadAssignments]),
+  );
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      void loadAssignments();
+    }, 15000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
   }, [loadAssignments]);
 
   const handleAuthorizationDecision = useCallback(
@@ -161,10 +212,9 @@ export function DashboardScreen({
 
   return (
     <ScreenShell>
-      <Text style={styles.title}>Dashboard</Text>
+      <CandidatePageTitle title="Zenith Legal" />
       <Text style={styles.body}>
-        Firms appear here only when they are actively in one of the tracked
-        status stages.
+        Track your firms at a new level
       </Text>
 
       <Pressable
@@ -174,7 +224,7 @@ export function DashboardScreen({
           focusStyle: sharedPressableFeedback.focus,
           pressedStyle: sharedPressableFeedback.pressed,
         })}
-        onPress={onOpenMessages}
+        onPress={() => onOpenMessages()}
       >
         <Text style={styles.primaryCtaText}>One-click message the Zenith team</Text>
       </Pressable>
@@ -213,8 +263,11 @@ export function DashboardScreen({
                     {assignment.status_enum}
                   </Text>
                 </View>
+                <Text style={styles.cardSubtle}>
+                  Updated {new Date(assignment.status_updated_at).toLocaleString()}
+                </Text>
                 {assignment.status_enum === 'Waiting on your authorization to contact/submit' ||
-                assignment.status_enum === 'Authorized, will submit soon' ? (
+                assignment.status_enum === AUTHORIZED_STATUS ? (
                   <View style={styles.authRow}>
                     {assignment.status_enum === 'Waiting on your authorization to contact/submit' ? (
                       <Pressable
@@ -257,13 +310,28 @@ export function DashboardScreen({
                       <Text style={styles.declineText}>
                         {busyAssignmentId === assignment.id
                           ? 'Saving...'
-                          : assignment.status_enum === 'Authorized, will submit soon'
+                          : assignment.status_enum === AUTHORIZED_STATUS
                             ? 'Cancel'
                             : 'Decline'}
                       </Text>
                     </Pressable>
                   </View>
                 ) : null}
+                <Pressable
+                  style={interactivePressableStyle({
+                    base: styles.statusUpdateButton,
+                    hoverStyle: sharedPressableFeedback.hover,
+                    focusStyle: sharedPressableFeedback.focus,
+                    pressedStyle: sharedPressableFeedback.pressed,
+                  })}
+                  onPress={() => {
+                    const candidateName = profile?.name?.trim() || 'this candidate';
+                    const initialDraftMessage = `Automated message: any updates on the current status for ${candidateName}'s firm "${assignment.firms.name}"?`;
+                    onOpenMessages(initialDraftMessage);
+                  }}
+                >
+                  <Text style={styles.statusUpdateButtonText}>Ask for a status update</Text>
+                </Pressable>
             </View>
           );
         })
@@ -303,6 +371,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     padding: 14,
+  },
+  cardSubtle: {
+    color: uiColors.textMuted,
+    marginTop: 8,
   },
   declineButton: {
     backgroundColor: uiColors.errorBackground,
@@ -361,9 +433,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  title: {
+  statusUpdateButton: {
+    alignItems: 'center',
+    backgroundColor: '#E5E7EB',
+    borderColor: uiColors.textPrimary,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  statusUpdateButtonText: {
     color: uiColors.textPrimary,
-    fontSize: 24,
-    fontWeight: '700',
+    fontWeight: '600',
   },
 });

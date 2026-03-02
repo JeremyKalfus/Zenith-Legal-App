@@ -65,6 +65,7 @@ Deno.serve(
           onboarding_complete: true,
           email: intake.email,
           mobile: intake.mobile,
+          jd_degree_date: intake.jdDegreeDate ?? null,
           consent_versions: {
             privacy_policy_version: PRIVACY_POLICY_VERSION,
             communication_consent_version: COMMUNICATION_CONSENT_VERSION,

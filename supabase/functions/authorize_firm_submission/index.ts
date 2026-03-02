@@ -3,6 +3,7 @@ import { errorResponse, jsonResponse } from '../_shared/http.ts';
 import { createAuthedClient, createServiceClient } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
 import { createEdgeHandler } from '../_shared/edge-handler.ts';
+import { sendCandidateRecruiterChannelMessage } from '../_shared/stream-chat.ts';
 
 const schema = z.object({
   assignment_id: z.string().uuid(),
@@ -26,8 +27,33 @@ const authorizeFirmSubmissionHandler = createEdgeHandler(
         return errorResponse('Assignment not found for user', 404);
       }
 
+      const [{ data: candidateProfile, error: candidateProfileError }, { data: firm, error: firmError }] =
+        await Promise.all([
+          serviceClient
+            .from('users_profile')
+            .select('id,name')
+            .eq('id', assignment.candidate_user_id)
+            .maybeSingle(),
+          serviceClient
+            .from('firms')
+            .select('id,name')
+            .eq('id', assignment.firm_id)
+            .maybeSingle(),
+        ]);
+
+      if (candidateProfileError) {
+        return errorResponse(candidateProfileError.message, 400, 'candidate_lookup_failed');
+      }
+      if (firmError) {
+        return errorResponse(firmError.message, 400, 'firm_lookup_failed');
+      }
+
+      const candidateName = candidateProfile?.name?.trim() || 'Candidate';
+      const firmName = firm?.name?.trim() || 'Firm';
+
       const waitingStatus = 'Waiting on your authorization to contact/submit';
       const authorizedStatus = 'Authorized, will submit soon';
+      const authorizedStatusLegacy = 'Authorized, waiting for submission';
 
       if (payload.decision === 'authorized') {
         if (assignment.status_enum !== waitingStatus) {
@@ -79,6 +105,13 @@ const authorizeFirmSubmissionHandler = createEdgeHandler(
           },
         });
 
+        await sendCandidateRecruiterChannelMessage({
+          serviceClient,
+          candidateUserId: assignment.candidate_user_id,
+          actorUserId: resolvedUserId,
+          text: `Candidate ${candidateName} has authorized submission for the firm ${firmName}`,
+        });
+
         return jsonResponse({
           success: true,
           action: 'assignment_updated',
@@ -88,7 +121,10 @@ const authorizeFirmSubmissionHandler = createEdgeHandler(
         });
       }
 
-      if (assignment.status_enum !== waitingStatus && assignment.status_enum !== authorizedStatus) {
+      const isAuthorizedStatus = assignment.status_enum === authorizedStatus ||
+        assignment.status_enum === authorizedStatusLegacy;
+
+      if (assignment.status_enum !== waitingStatus && !isAuthorizedStatus) {
         return errorResponse(
           'This firm cannot be declined in its current status.',
           400,
@@ -117,6 +153,15 @@ const authorizeFirmSubmissionHandler = createEdgeHandler(
             decision: payload.decision,
             action: 'assignment_deleted',
           },
+        });
+
+        await sendCandidateRecruiterChannelMessage({
+          serviceClient,
+          candidateUserId: assignment.candidate_user_id,
+          actorUserId: resolvedUserId,
+          text:
+            `Candidate ${candidateName} has declined authorization to submit for the firm ${firmName}; ` +
+            'the firm has been unassigned from the candidate',
         });
 
         return jsonResponse({
@@ -167,6 +212,15 @@ const authorizeFirmSubmissionHandler = createEdgeHandler(
           new_status: waitingStatus,
           action: 'assignment_updated',
         },
+      });
+
+      await sendCandidateRecruiterChannelMessage({
+        serviceClient,
+        candidateUserId: assignment.candidate_user_id,
+        actorUserId: resolvedUserId,
+        text:
+          `Candidate ${candidateName} has removed authorization for submission for firm "${firmName}". ` +
+          'The current status is "Waiting on your authorization to contact/submit".',
       });
 
       return jsonResponse({

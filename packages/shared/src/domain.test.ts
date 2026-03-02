@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildJdDegreeDateFromParts,
   appointmentSchema,
+  appointmentLifecycleActionSchema,
   appointmentReviewSchema,
   APPOINTMENT_STATUSES,
   candidateIntakeSchema,
   candidateRegistrationSchema,
   FIRM_STATUSES,
+  PRACTICE_AREAS,
+  getJdDegreeDateLabel,
+  getJdDegreeDayOptions,
+  getJdDegreeYear,
+  getJdDegreeYearOptions,
+  parseJdDegreeDateParts,
 } from './domain';
 
 describe('candidate intake schema', () => {
@@ -66,6 +74,16 @@ describe('candidate intake schema', () => {
     }
   });
 
+  it('includes Media/Ent before international options', () => {
+    const mediaEntIndex = PRACTICE_AREAS.indexOf('Media/Ent');
+    const internationalArbIndex = PRACTICE_AREAS.indexOf("Int'l arb");
+    const internationalRegIndex = PRACTICE_AREAS.indexOf("Int'l reg");
+
+    expect(mediaEntIndex).toBeGreaterThanOrEqual(0);
+    expect(internationalArbIndex).toBeGreaterThan(mediaEntIndex);
+    expect(internationalRegIndex).toBeGreaterThan(mediaEntIndex);
+  });
+
   it('normalizes mobile to E.164 with US default country code', () => {
     const result = candidateIntakeSchema.parse({
       email: 'jane@example.com',
@@ -93,6 +111,33 @@ describe('candidate intake schema', () => {
     }
   });
 
+  it('accepts a valid JD degree date', () => {
+    const result = candidateIntakeSchema.parse({
+      email: 'jane@example.com',
+      preferredCities: [],
+      jdDegreeDate: '2025-05-15',
+      acceptedPrivacyPolicy: true,
+      acceptedCommunicationConsent: true,
+    });
+
+    expect(result.jdDegreeDate).toBe('2025-05-15');
+  });
+
+  it('rejects an invalid JD degree date', () => {
+    const result = candidateIntakeSchema.safeParse({
+      email: 'jane@example.com',
+      preferredCities: [],
+      jdDegreeDate: '2025-02-30',
+      acceptedPrivacyPolicy: true,
+      acceptedCommunicationConsent: true,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.jdDegreeDate).toBeTruthy();
+    }
+  });
+
   it('keeps the exact status order and values', () => {
     expect(FIRM_STATUSES).toEqual([
       'Waiting on your authorization to contact/submit',
@@ -102,6 +147,39 @@ describe('candidate intake schema', () => {
       'Rejected by firm',
       'Offer received!',
     ]);
+  });
+
+  it('builds JD degree year dropdown options', () => {
+    const options = getJdDegreeYearOptions({ fromYear: 2024, toYear: 2026 });
+    expect(options).toEqual(['2026', '2025', '2024']);
+  });
+
+  it('builds JD degree day options for the selected month and year', () => {
+    expect(getJdDegreeDayOptions({ year: '2024', month: '02' }).at(-1)).toBe('29');
+    expect(getJdDegreeDayOptions({ year: '2025', month: '02' }).at(-1)).toBe('28');
+  });
+
+  it('parses and rebuilds JD degree date parts', () => {
+    const parts = parseJdDegreeDateParts('2026-05-15');
+    expect(parts).toEqual({ year: '2026', month: '05', day: '15' });
+    expect(
+      buildJdDegreeDateFromParts({
+        year: '2026',
+        month: '05',
+        day: '15',
+      }),
+    ).toBe('2026-05-15');
+  });
+
+  it('formats JD degree date label from stored date value', () => {
+    expect(getJdDegreeDateLabel('2026-05-15')).toBe('May 15, 2026');
+    expect(getJdDegreeDateLabel(null)).toBe('Not provided');
+  });
+
+  it('extracts JD degree year from stored date value', () => {
+    expect(getJdDegreeYear('2026-05-15')).toBe('2026');
+    expect(getJdDegreeYear('invalid')).toBeUndefined();
+    expect(getJdDegreeYear(null)).toBeUndefined();
   });
 });
 
@@ -170,11 +248,11 @@ describe('appointment statuses', () => {
 
 describe('appointment schema', () => {
   const validInput = {
-    title: 'Intro call',
+    date: '2026-03-01',
+    time: '14:00',
     modality: 'virtual' as const,
     videoUrl: 'https://zoom.us/j/123',
-    startAtUtc: '2026-03-01T14:00:00.000Z',
-    endAtUtc: '2026-03-01T15:00:00.000Z',
+    note: 'Discuss case details',
     timezoneLabel: 'America/New_York',
   };
 
@@ -193,20 +271,17 @@ describe('appointment schema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejects missing title', () => {
-    const result = appointmentSchema.safeParse({ ...validInput, title: '' });
+  it('rejects invalid date format', () => {
+    const result = appointmentSchema.safeParse({ ...validInput, date: '03/01/2026' });
     expect(result.success).toBe(false);
   });
 
-  it('rejects endAtUtc before startAtUtc', () => {
+  it('rejects invalid time format', () => {
     const result = appointmentSchema.safeParse({
       ...validInput,
-      endAtUtc: '2026-03-01T13:00:00.000Z',
+      time: '2:00 PM',
     });
     expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error.flatten().fieldErrors.endAtUtc?.[0]).toContain('after start time');
-    }
   });
 
   it('accepts virtual appointment without videoUrl', () => {
@@ -242,12 +317,12 @@ describe('appointment schema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('allows optional description', () => {
+  it('allows optional note', () => {
     const result = appointmentSchema.parse({
       ...validInput,
-      description: 'Discuss case details',
+      note: 'Bring questions',
     });
-    expect(result.description).toBe('Discuss case details');
+    expect(result.note).toBe('Bring questions');
   });
 });
 
@@ -287,6 +362,40 @@ describe('appointment review schema', () => {
     const result = appointmentReviewSchema.safeParse({
       appointment_id: 'not-a-uuid',
       decision: 'accepted',
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('appointment lifecycle action schema', () => {
+  it('accepts ignore_overdue action', () => {
+    const result = appointmentLifecycleActionSchema.safeParse({
+      appointment_id: '550e8400-e29b-41d4-a716-446655440000',
+      action: 'ignore_overdue',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts cancel_outgoing_request action', () => {
+    const result = appointmentLifecycleActionSchema.safeParse({
+      appointment_id: '550e8400-e29b-41d4-a716-446655440000',
+      action: 'cancel_outgoing_request',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts cancel_upcoming action', () => {
+    const result = appointmentLifecycleActionSchema.safeParse({
+      appointment_id: '550e8400-e29b-41d4-a716-446655440000',
+      action: 'cancel_upcoming',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects invalid lifecycle action', () => {
+    const result = appointmentLifecycleActionSchema.safeParse({
+      appointment_id: '550e8400-e29b-41d4-a716-446655440000',
+      action: 'decline',
     });
     expect(result.success).toBe(false);
   });

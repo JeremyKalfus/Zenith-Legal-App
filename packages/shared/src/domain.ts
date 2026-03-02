@@ -26,8 +26,6 @@ export type CityOption = (typeof CITY_OPTIONS)[number];
 export const PRACTICE_AREAS = [
   'Antitrust',
   'White Collar',
-  "Int'l arb",
-  "Int'l reg",
   'Gov Contracts',
   'SEC / CFTC',
   'IP / Tech Trans',
@@ -39,10 +37,134 @@ export const PRACTICE_AREAS = [
   'Corp: Cap Mkts',
   'Real Estate',
   'Tax & Benefits',
+  'Media/Ent',
+  "Int'l arb",
+  "Int'l reg",
   'Other',
 ] as const;
 export type PracticeArea = (typeof PRACTICE_AREAS)[number];
 const practiceAreaSchema = z.enum(PRACTICE_AREAS);
+
+export type JdDegreeMonthOption = {
+  label: string;
+  value: string;
+};
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+const JD_DEGREE_MONTH_OPTIONS: readonly JdDegreeMonthOption[] = [
+  { label: 'January', value: '01' },
+  { label: 'February', value: '02' },
+  { label: 'March', value: '03' },
+  { label: 'April', value: '04' },
+  { label: 'May', value: '05' },
+  { label: 'June', value: '06' },
+  { label: 'July', value: '07' },
+  { label: 'August', value: '08' },
+  { label: 'September', value: '09' },
+  { label: 'October', value: '10' },
+  { label: 'November', value: '11' },
+  { label: 'December', value: '12' },
+] as const;
+
+function isIsoDateString(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+export type JdDegreeDateParts = {
+  year: string;
+  month: string;
+  day: string;
+};
+
+export function getJdDegreeMonthOptions(): readonly JdDegreeMonthOption[] {
+  return JD_DEGREE_MONTH_OPTIONS;
+}
+
+export function getJdDegreeYearOptions(params?: {
+  fromYear?: number;
+  toYear?: number;
+}): string[] {
+  const currentYear = new Date().getUTCFullYear();
+  const fromYear = params?.fromYear ?? currentYear - 50;
+  const toYear = params?.toYear ?? currentYear + 1;
+
+  const options: string[] = [];
+  for (let year = toYear; year >= fromYear; year -= 1) {
+    options.push(String(year));
+  }
+  return options;
+}
+
+export function getJdDegreeDayOptions(params: {
+  year: string;
+  month: string;
+}): string[] {
+  const year = Number(params.year);
+  const month = Number(params.month);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    return [];
+  }
+
+  const dayCount = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const options: string[] = [];
+  for (let day = 1; day <= dayCount; day += 1) {
+    options.push(pad2(day));
+  }
+  return options;
+}
+
+export function parseJdDegreeDateParts(
+  value: string | null | undefined,
+): JdDegreeDateParts | undefined {
+  if (!value || !isIsoDateString(value)) {
+    return undefined;
+  }
+
+  const [year, month, day] = value.split('-');
+  return { year, month, day };
+}
+
+export function getJdDegreeYear(value: string | null | undefined): string | undefined {
+  return parseJdDegreeDateParts(value)?.year;
+}
+
+export function buildJdDegreeDateFromParts(parts: JdDegreeDateParts): string | undefined {
+  const year = parts.year.trim();
+  const month = parts.month.trim();
+  const day = parts.day.trim();
+  if (!year || !month || !day) {
+    return undefined;
+  }
+
+  const value = `${year}-${month}-${day}`;
+  if (!isIsoDateString(value)) {
+    return undefined;
+  }
+  return value;
+}
+
+export function getJdDegreeDateLabel(value: string | null | undefined): string {
+  if (!value) {
+    return 'Not provided';
+  }
+  if (isIsoDateString(value)) {
+    return new Date(`${value}T00:00:00.000Z`).toLocaleDateString('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+  }
+
+  return value;
+}
 
 export const FIRM_STATUSES = [
   'Waiting on your authorization to contact/submit',
@@ -64,6 +186,28 @@ function optionalTrimmedString(max: number) {
     .transform((value) => (value.length === 0 ? undefined : value))
     .optional()
     .transform((value) => value ?? undefined);
+}
+
+function optionalIsoDateString() {
+  return z
+    .string()
+    .trim()
+    .transform((value) => (value.length === 0 ? undefined : value))
+    .optional()
+    .transform((value) => value ?? undefined)
+    .refine((value) => {
+      if (!value) {
+        return true;
+      }
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return false;
+      }
+      const parsed = new Date(`${value}T00:00:00.000Z`);
+      if (Number.isNaN(parsed.getTime())) {
+        return false;
+      }
+      return parsed.toISOString().slice(0, 10) === value;
+    }, 'Enter a valid date as YYYY-MM-DD');
 }
 
 const optionalMobileInputSchema = z
@@ -98,6 +242,7 @@ export const candidateIntakeSchema = z
     otherCityText: optionalTrimmedString(120),
     practiceAreas: z.array(practiceAreaSchema).max(3, 'Choose up to 3 practice areas').default([]),
     otherPracticeText: optionalTrimmedString(120),
+    jdDegreeDate: optionalIsoDateString(),
     acceptedPrivacyPolicy: z.boolean().refine((value) => value, {
       message: 'Privacy policy acceptance is required',
     }),
@@ -158,23 +303,21 @@ export type AppointmentModality = z.infer<typeof appointmentModalitySchema>;
 
 export const appointmentSchema = z
   .object({
-    title: trimmedString.min(1, 'Title is required').max(120),
-    description: trimmedString.max(2000).optional(),
+    candidateUserId: z.string().uuid().optional(),
+    date: trimmedString.regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
+    time: trimmedString.regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Time must be HH:MM'),
     modality: appointmentModalitySchema,
     locationText: trimmedString.max(255).optional(),
     videoUrl: trimmedString.url('Must be a valid URL').max(500).optional(),
-    startAtUtc: z.string().datetime(),
-    endAtUtc: z.string().datetime(),
+    note: trimmedString.max(2000).optional(),
     timezoneLabel: trimmedString.min(1).max(64),
   })
   .superRefine((data, ctx) => {
-    const start = Date.parse(data.startAtUtc);
-    const end = Date.parse(data.endAtUtc);
-    if (Number.isNaN(start) || Number.isNaN(end) || end <= start) {
+    if (data.modality === 'virtual' && data.videoUrl && !data.videoUrl.trim()) {
       ctx.addIssue({
-        path: ['endAtUtc'],
+        path: ['videoUrl'],
         code: z.ZodIssueCode.custom,
-        message: 'End time must be after start time',
+        message: 'Video URL must be a valid URL',
       });
     }
   });
@@ -187,6 +330,13 @@ export const appointmentReviewSchema = z.object({
 });
 
 export type AppointmentReview = z.infer<typeof appointmentReviewSchema>;
+
+export const appointmentLifecycleActionSchema = z.object({
+  appointment_id: z.string().uuid(),
+  action: z.enum(['ignore_overdue', 'cancel_outgoing_request', 'cancel_upcoming']),
+});
+
+export type AppointmentLifecycleAction = z.infer<typeof appointmentLifecycleActionSchema>;
 
 export const notificationEventSchema = z.enum([
   'message.new',

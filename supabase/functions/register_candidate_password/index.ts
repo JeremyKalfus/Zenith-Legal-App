@@ -145,6 +145,7 @@ Deno.serve(
           },
           source: 'mobile_app',
           upsertConsentsOnlyWhenChanged: false,
+          onboardingComplete: false,
         });
 
         await writeAuditEvent({
@@ -155,9 +156,10 @@ Deno.serve(
           entityId: createdUserId,
           afterJson: {
             role: 'candidate',
-            onboarding_complete: true,
+            onboarding_complete: false,
             email,
             mobile,
+            jd_degree_date: intake.jdDegreeDate ?? null,
           },
         });
 

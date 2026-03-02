@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { CalendarSyncCard } from '../../components/calendar-sync-card';
 import { ScreenShell } from '../../components/screen-shell';
+import { StaffPageTitle } from '../../components/staff-page-title';
 import { SignOutButton } from '../../components/sign-out-button';
 import { useAuth } from '../../context/auth-context';
 import { uiColors } from '../../theme/colors';
@@ -10,13 +11,13 @@ export function StaffProfileScreen() {
 
   return (
     <ScreenShell showBanner={false}>
-      <Text style={styles.title}>Profile</Text>
+      <StaffPageTitle title="Profile" />
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Account</Text>
-        <Text style={styles.value}>{profile?.name || 'Staff user'}</Text>
+        <Text style={styles.value}>{profile?.name || 'Recruiter user'}</Text>
         <Text style={styles.subtle}>{profile?.email ?? 'No email available'}</Text>
-        <Text style={styles.subtle}>Role: {profile?.role ?? 'staff'}</Text>
+        <Text style={styles.subtle}>Role: Recruiter</Text>
       </View>
 
       <CalendarSyncCard />
@@ -47,11 +48,6 @@ const styles = StyleSheet.create({
   },
   subtle: {
     color: uiColors.textSecondary,
-  },
-  title: {
-    color: uiColors.textPrimary,
-    fontSize: 24,
-    fontWeight: '700',
   },
   value: {
     color: uiColors.textPrimary,

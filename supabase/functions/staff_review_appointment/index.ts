@@ -3,16 +3,32 @@ import { errorResponse, jsonResponse } from '../_shared/http.ts';
 import { createServiceClient } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
 import { syncAppointmentForParticipants } from '../_shared/calendar-sync.ts';
+import { sendCandidateRecruiterChannelMessage } from '../_shared/stream-chat.ts';
 import {
   queueAppointmentReminderNotifications,
   queueAppointmentStatusNotifications,
 } from '../_shared/appointment-notifications.ts';
 import { createEdgeHandler } from '../_shared/edge-handler.ts';
+import { buildAppointmentMessage } from '../_shared/appointment-message.ts';
 
 const appointmentReviewSchema = z.object({
   appointment_id: z.string().uuid(),
   decision: z.enum(['accepted', 'declined']),
 });
+
+type AppointmentRecord = {
+  id: string;
+  title: string;
+  description: string | null;
+  modality: 'virtual' | 'in_person';
+  location_text: string | null;
+  video_url: string | null;
+  start_at_utc: string;
+  end_at_utc: string;
+  timezone_label: string;
+  status: string;
+  candidate_user_id: string;
+};
 
 const staffReviewAppointmentHandler = createEdgeHandler(
   async ({ request, userId }) => {
@@ -43,6 +59,13 @@ const staffReviewAppointmentHandler = createEdgeHandler(
       );
     }
 
+    const { data: candidateProfile } = await serviceClient
+      .from('users_profile')
+      .select('name')
+      .eq('id', appointment.candidate_user_id)
+      .maybeSingle();
+    const candidateName = candidateProfile?.name?.trim() || 'Candidate';
+
     if (payload.decision === 'accepted') {
       const { data: conflicts, error: conflictError } = await serviceClient
         .from('appointments')
@@ -67,10 +90,69 @@ const staffReviewAppointmentHandler = createEdgeHandler(
       }
     }
 
-    const nextStatus = payload.decision === 'accepted' ? 'scheduled' : 'declined';
+    if (payload.decision === 'declined') {
+      const appointmentRecord = appointment as AppointmentRecord;
+      try {
+        await sendCandidateRecruiterChannelMessage({
+          serviceClient,
+          candidateUserId: appointment.candidate_user_id,
+          actorUserId,
+          text: buildAppointmentMessage('Appointment request declined.', {
+            candidateName,
+            appointment: appointmentRecord,
+          }),
+        });
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            event: 'appointment_decline_channel_message_failed',
+            appointment_id: appointment.id,
+            candidate_user_id: appointment.candidate_user_id,
+            actor_user_id: actorUserId,
+            message_error: error instanceof Error && error.message
+              ? error.message
+              : String(error),
+          }),
+        );
+      }
+
+      await queueAppointmentStatusNotifications({
+        serviceClient,
+        candidateUserId: appointment.candidate_user_id,
+        appointmentId: appointment.id,
+        eventType: 'appointment.updated',
+        status: 'declined',
+      });
+
+      const { error: deleteError } = await serviceClient
+        .from('appointments')
+        .delete()
+        .eq('id', payload.appointment_id);
+
+      if (deleteError) {
+        return errorResponse(deleteError.message, 400, 'status_update_failed');
+      }
+
+      await writeAuditEvent({
+        client: serviceClient,
+        actorUserId,
+        action: 'staff_decline_appointment_request',
+        entityType: 'appointments',
+        entityId: payload.appointment_id,
+        beforeJson: appointment as Record<string, unknown>,
+      });
+
+      return jsonResponse({
+        success: true,
+        appointment: null,
+        previous_status: appointment.status,
+        new_status: 'deleted',
+      });
+    }
+
     const { data: updated, error: updateError } = await serviceClient
       .from('appointments')
-      .update({ status: nextStatus })
+      .update({ status: 'scheduled' })
       .eq('id', payload.appointment_id)
       .select('*')
       .single();
@@ -83,39 +165,59 @@ const staffReviewAppointmentHandler = createEdgeHandler(
       );
     }
 
-    if (nextStatus === 'scheduled') {
-      await serviceClient.from('appointment_participants').upsert(
-        {
-          appointment_id: appointment.id,
-          user_id: actorUserId,
-          participant_type: 'staff',
-        },
-        { onConflict: 'appointment_id,user_id' },
-      );
-    }
+    await serviceClient.from('appointment_participants').upsert(
+      {
+        appointment_id: appointment.id,
+        user_id: actorUserId,
+        participant_type: 'staff',
+      },
+      { onConflict: 'appointment_id,user_id' },
+    );
 
     await queueAppointmentStatusNotifications({
       serviceClient,
       candidateUserId: appointment.candidate_user_id,
       appointmentId: appointment.id,
       eventType: 'appointment.updated',
-      status: nextStatus,
+      status: 'scheduled',
     });
 
-    if (nextStatus === 'scheduled') {
-      await queueAppointmentReminderNotifications({
-        serviceClient,
-        appointmentId: appointment.id,
-        startAtUtc: appointment.start_at_utc,
-        participantUserIds: [appointment.candidate_user_id, actorUserId],
-      });
-    }
+    await queueAppointmentReminderNotifications({
+      serviceClient,
+      appointmentId: appointment.id,
+      startAtUtc: appointment.start_at_utc,
+      participantUserIds: [appointment.candidate_user_id, actorUserId],
+    });
 
     await syncAppointmentForParticipants({
       serviceClient,
       appointment: updated,
       participantUserIds: [appointment.candidate_user_id, actorUserId],
     });
+
+    try {
+      await sendCandidateRecruiterChannelMessage({
+        serviceClient,
+        candidateUserId: appointment.candidate_user_id,
+        actorUserId,
+        text: buildAppointmentMessage('Appointment request accepted and scheduled.', {
+          candidateName,
+          appointment: updated as AppointmentRecord,
+        }),
+      });
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          event: 'appointment_review_channel_message_failed',
+          appointment_id: appointment.id,
+          candidate_user_id: appointment.candidate_user_id,
+          actor_user_id: actorUserId,
+          message_error: error instanceof Error && error.message
+            ? error.message
+            : String(error),
+        }),
+      );
+    }
 
     await writeAuditEvent({
       client: serviceClient,
@@ -131,7 +233,7 @@ const staffReviewAppointmentHandler = createEdgeHandler(
       success: true,
       appointment: updated,
       previous_status: appointment.status,
-      new_status: nextStatus,
+      new_status: 'scheduled',
     });
   },
   { auth: 'staff' },

@@ -1,59 +1,113 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { InteractionManager, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   CITY_OPTIONS,
-  filterCandidatesBySearchCityPractice,
+  filterStaffCandidates,
+  getJdDegreeDateLabel,
+  getJdDegreeYear,
   PRACTICE_AREAS,
-  type CityOption,
-  type PracticeArea,
 } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
-import type { StaffCandidateListItem } from '../../features/staff-candidate-management';
-import { listStaffCandidates } from '../../features/staff-candidate-management';
+import { StaffPageTitle } from '../../components/staff-page-title';
+import type {
+  RecruiterUserOption,
+  StaffCandidateListItem,
+  StaffFirmOption,
+} from '../../features/staff-candidate-management';
+import {
+  listActiveFirms,
+  listRecruiterUsers,
+  listStaffCandidates,
+} from '../../features/staff-candidate-management';
+import { supabase } from '../../lib/supabase';
+import type { StaffCandidatesStackParamList } from '../../navigation/staff-candidates-stack';
+import {
+  DEFAULT_STAFF_CANDIDATE_FILTERS,
+  type StaffCandidateFilters,
+} from './staff-candidate-filters-screen';
 import { uiColors } from '../../theme/colors';
 
-const COLLAPSED_BUBBLE_ROWS_HEIGHT = 34;
+function countActiveFilters(filters: StaffCandidateFilters): number {
+  let count = 0;
+  if (filters.assignedRecruiter !== 'any') {
+    count += 1;
+  }
+  if (filters.currentStatus !== 'any') {
+    count += 1;
+  }
+  if (filters.practices.length > 0) {
+    count += 1;
+  }
+  if (filters.assignedFirmIds.length > 0) {
+    count += 1;
+  }
+  if (filters.preferredCities.length > 0) {
+    count += 1;
+  }
+  if (filters.jdYears.length > 0) {
+    count += 1;
+  }
+  return count;
+}
 
-function FilterChip({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={[styles.chip, selected ? styles.chipSelected : null]}>
-      <Text style={selected ? styles.chipTextSelected : styles.chipText}>{label}</Text>
-    </Pressable>
-  );
+function toRecruiterOptions(recruiters: RecruiterUserOption[]): { id: string; label: string }[] {
+  return recruiters.map((recruiter) => ({
+    id: recruiter.id,
+    label: recruiter.displayName,
+  }));
+}
+
+function toFirmOptions(firms: StaffFirmOption[]): { id: string; label: string }[] {
+  return firms.map((firm) => ({
+    id: firm.id,
+    label: firm.name,
+  }));
+}
+
+function formatAssignedRecruiter(candidate: StaffCandidateListItem): string {
+  return candidate.assignedRecruiterDisplayName ?? 'None';
 }
 
 export function StaffCandidatesScreen({
+  incomingAppliedFilters,
   onOpenCandidate,
+  onOpenFilterSearch,
 }: {
+  incomingAppliedFilters?: StaffCandidateFilters;
   onOpenCandidate: (candidate: StaffCandidateListItem) => void;
+  onOpenFilterSearch: (params: StaffCandidatesStackParamList['StaffCandidateFilters']) => void;
 }) {
   const [candidates, setCandidates] = useState<StaffCandidateListItem[]>([]);
+  const [firms, setFirms] = useState<StaffFirmOption[]>([]);
+  const [recruiters, setRecruiters] = useState<RecruiterUserOption[]>([]);
   const [query, setQuery] = useState('');
-  const [selectedCities, setSelectedCities] = useState<CityOption[]>([]);
-  const [selectedPracticeAreas, setSelectedPracticeAreas] = useState<PracticeArea[]>([]);
-  const [showAllCityFilters, setShowAllCityFilters] = useState(false);
-  const [showAllPracticeFilters, setShowAllPracticeFilters] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [appliedFilters, setAppliedFilters] = useState<StaffCandidateFilters>(DEFAULT_STAFF_CANDIDATE_FILTERS);
+  const [hasLoadedCandidates, setHasLoadedCandidates] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const loadInFlightRef = useRef(false);
 
   const loadCandidates = useCallback(async () => {
-    setIsLoading(true);
+    if (loadInFlightRef.current) {
+      return;
+    }
+
+    loadInFlightRef.current = true;
     try {
-      const rows = await listStaffCandidates();
-      setCandidates(rows);
+      const [candidateRows, activeFirms, recruiterRows] = await Promise.all([
+        listStaffCandidates(),
+        listActiveFirms(),
+        listRecruiterUsers(),
+      ]);
+      setCandidates(candidateRows);
+      setFirms(activeFirms);
+      setRecruiters(recruiterRows);
       setMessage(null);
     } catch (error) {
       setMessage((error as Error).message);
     } finally {
-      setIsLoading(false);
+      loadInFlightRef.current = false;
+      setHasLoadedCandidates(true);
     }
   }, []);
 
@@ -61,84 +115,139 @@ export function StaffCandidatesScreen({
     void loadCandidates();
   }, [loadCandidates]);
 
+  useEffect(() => {
+    const channel = supabase
+      .channel('staff-candidates-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'candidate_firm_assignments' },
+        () => {
+          void loadCandidates();
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'users_profile' },
+        () => {
+          void loadCandidates();
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'candidate_preferences' },
+        () => {
+          void loadCandidates();
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'candidate_recruiter_assignments' },
+        () => {
+          void loadCandidates();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [loadCandidates]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const interactionTask = InteractionManager.runAfterInteractions(() => {
+        void loadCandidates();
+      });
+      const intervalId = setInterval(() => {
+        void loadCandidates();
+      }, 30000);
+
+      return () => {
+        interactionTask.cancel();
+        clearInterval(intervalId);
+      };
+    }, [loadCandidates]),
+  );
+
+  useEffect(() => {
+    if (!incomingAppliedFilters) {
+      return;
+    }
+    setAppliedFilters(incomingAppliedFilters);
+  }, [incomingAppliedFilters]);
+
+  const jdYearOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          candidates
+            .map((candidate) => getJdDegreeYear(candidate.jdDegreeDate))
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ).sort((left, right) => Number(right) - Number(left)),
+    [candidates],
+  );
+
   const filteredCandidates = useMemo(() => {
-    return filterCandidatesBySearchCityPractice(candidates, {
+    return filterStaffCandidates(candidates, {
       query,
-      selectedCities,
-      selectedPracticeAreas,
+      assignedRecruiter: appliedFilters.assignedRecruiter,
+      currentStatus: appliedFilters.currentStatus,
+      practices: appliedFilters.practices,
+      assignedFirmIds: appliedFilters.assignedFirmIds,
+      preferredCities: appliedFilters.preferredCities,
+      jdYears: appliedFilters.jdYears,
     });
-  }, [candidates, query, selectedCities, selectedPracticeAreas]);
+  }, [appliedFilters, candidates, query]);
+
+  const filterOptions = useMemo(
+    () => ({
+      recruiterOptions: toRecruiterOptions(recruiters),
+      practiceOptions: PRACTICE_AREAS,
+      assignedFirmOptions: toFirmOptions(firms),
+      preferredCityOptions: CITY_OPTIONS,
+      jdYearOptions,
+    }),
+    [firms, jdYearOptions, recruiters],
+  );
+
+  const activeFilterCount = countActiveFilters(appliedFilters);
 
   return (
     <ScreenShell showBanner={false}>
-      <Text style={styles.title}>Candidates</Text>
-      <Text style={styles.body}>
-        Select a candidate to manage visible firms and status updates.
-      </Text>
+      <StaffPageTitle
+        title="Candidates"
+        rightContent={(
+          <Pressable
+            style={styles.filterSearchButton}
+            onPress={() => {
+              onOpenFilterSearch({
+                initialFilters: appliedFilters,
+                options: filterOptions,
+              });
+            }}
+          >
+            <Text style={styles.filterSearchButtonText}>
+              Filter Search{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+            </Text>
+          </Pressable>
+        )}
+      />
+      <Text style={styles.body}>Select a candidate to manage recruiter assignments and firm statuses.</Text>
 
       <TextInput
         style={styles.input}
         placeholder="Search name, email, or mobile"
-        placeholderTextColor="#94A3B8"
+        placeholderTextColor={uiColors.textPlaceholder}
         value={query}
         autoCapitalize="none"
         onChangeText={setQuery}
       />
 
-      <Text style={styles.filterLabel}>Filter by city</Text>
-      <View style={[styles.chipWrap, !showAllCityFilters && styles.chipWrapCollapsed]}>
-        {CITY_OPTIONS.map((city) => {
-          const selected = selectedCities.includes(city);
-          return (
-            <FilterChip
-              key={city}
-              label={city}
-              selected={selected}
-              onPress={() => {
-                setSelectedCities((current) => (selected
-                  ? current.filter((value) => value !== city)
-                  : [...current, city]));
-              }}
-            />
-          );
-        })}
-      </View>
-      <Pressable style={styles.expandButton} onPress={() => setShowAllCityFilters((value) => !value)}>
-        <Text style={styles.expandButtonText}>{showAllCityFilters ? 'Show less' : 'See more'}</Text>
-      </Pressable>
-
-      <Text style={styles.filterLabel}>Filter by practice</Text>
-      <View style={[styles.chipWrap, !showAllPracticeFilters && styles.chipWrapCollapsed]}>
-        {PRACTICE_AREAS.map((area) => {
-          const selected = selectedPracticeAreas.includes(area);
-          return (
-            <FilterChip
-              key={area}
-              label={area}
-              selected={selected}
-              onPress={() => {
-                setSelectedPracticeAreas((current) => (selected
-                  ? current.filter((value) => value !== area)
-                  : [...current, area]));
-              }}
-            />
-          );
-        })}
-      </View>
-      <Pressable style={styles.expandButton} onPress={() => setShowAllPracticeFilters((value) => !value)}>
-        <Text style={styles.expandButtonText}>{showAllPracticeFilters ? 'Show less' : 'See more'}</Text>
-      </Pressable>
-
-      <Pressable style={styles.secondaryButton} onPress={() => void loadCandidates()}>
-        <Text style={styles.secondaryButtonText}>{isLoading ? 'Refreshing...' : 'Refresh list'}</Text>
-      </Pressable>
-
       {message ? <Text style={styles.error}>{message}</Text> : null}
 
       <View style={styles.list}>
-        {isLoading ? (
-          <Text style={styles.emptyText}>Loading candidates...</Text>
-        ) : filteredCandidates.length === 0 ? (
+        {filteredCandidates.length === 0 && hasLoadedCandidates ? (
           <Text style={styles.emptyText}>No candidates found.</Text>
         ) : (
           filteredCandidates.map((candidate) => (
@@ -147,9 +256,15 @@ export function StaffCandidatesScreen({
               style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
               onPress={() => onOpenCandidate(candidate)}
             >
-              <Text style={styles.cardTitle}>{candidate.name || 'Unnamed Candidate'}</Text>
-              <Text style={styles.cardText}>{candidate.email}</Text>
-              <Text style={styles.cardSubtle}>{candidate.mobile}</Text>
+              <View style={styles.cardMeta}>
+                <Text style={styles.cardTitle}>{candidate.name || 'Unnamed Candidate'}</Text>
+                <Text style={styles.cardText}>{candidate.email}</Text>
+                <Text style={styles.cardSubtle}>{candidate.mobile || 'No mobile on file'}</Text>
+                <Text style={styles.cardSubtle}>
+                  JD degree date: {getJdDegreeDateLabel(candidate.jdDegreeDate)}
+                </Text>
+                <Text style={styles.cardSubtle}>Assigned recruiter: {formatAssignedRecruiter(candidate)}</Text>
+              </View>
             </Pressable>
           ))
         )}
@@ -169,6 +284,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 12,
   },
+  cardMeta: {
+    flex: 1,
+    minWidth: 0,
+  },
   cardPressed: {
     backgroundColor: uiColors.background,
   },
@@ -186,32 +305,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
   },
-  chip: {
-    backgroundColor: uiColors.divider,
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  chipSelected: {
-    backgroundColor: uiColors.primary,
-  },
-  chipText: {
-    color: uiColors.textPrimary,
-    fontSize: 12,
-  },
-  chipTextSelected: {
-    color: uiColors.primaryText,
-    fontSize: 12,
-  },
-  chipWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  chipWrapCollapsed: {
-    maxHeight: COLLAPSED_BUBBLE_ROWS_HEIGHT,
-    overflow: 'hidden',
-  },
   emptyText: {
     color: uiColors.textMuted,
     padding: 12,
@@ -221,18 +314,21 @@ const styles = StyleSheet.create({
     color: uiColors.error,
     fontSize: 13,
   },
-  expandButton: {
-    alignSelf: 'flex-start',
-    marginTop: -4,
+  filterSearchButton: {
+    alignItems: 'center',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
+    borderRadius: 999,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 34,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  expandButtonText: {
-    color: uiColors.primary,
+  filterSearchButtonText: {
+    color: uiColors.textPrimary,
     fontSize: 12,
     fontWeight: '700',
-  },
-  filterLabel: {
-    color: uiColors.textPrimary,
-    fontWeight: '600',
   },
   input: {
     backgroundColor: uiColors.surface,
@@ -245,20 +341,5 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: 10,
-  },
-  secondaryButton: {
-    alignItems: 'center',
-    backgroundColor: uiColors.border,
-    borderRadius: 10,
-    padding: 10,
-  },
-  secondaryButtonText: {
-    color: uiColors.textPrimary,
-    fontWeight: '600',
-  },
-  title: {
-    color: uiColors.textPrimary,
-    fontSize: 24,
-    fontWeight: '700',
   },
 });

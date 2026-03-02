@@ -22,6 +22,9 @@ port = 54324
 [functions.register_candidate_password]
 verify_jwt = false
 
+[functions.check_candidate_signup_email]
+verify_jwt = false
+
 [functions.mobile_sign_in_with_identifier_password]
 verify_jwt = false
 
@@ -64,7 +67,13 @@ verify_jwt = false
 [functions.staff_review_appointment]
 verify_jwt = false
 
+[functions.manage_appointment_lifecycle]
+verify_jwt = false
+
 [functions.staff_delete_user]
+verify_jwt = false
+
+[functions.staff_update_user_role]
 verify_jwt = false
 
 [functions.delete_my_account]

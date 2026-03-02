@@ -1,12 +1,12 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { OperationsDashboard } from '@/components/modules/operations-dashboard';
-import { StaffDashboardGuard } from '@/components/modules/staff-dashboard-guard';
 
 export default function DashboardPage() {
   return (
-    <StaffDashboardGuard>
-      <main className="mx-auto min-h-screen max-w-7xl px-4 py-8">
-        <div className="mb-6 space-y-2">
+    <main className="mx-auto min-h-screen max-w-7xl px-4 py-8">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">
             Zenith Legal Operations
           </p>
@@ -31,8 +31,18 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
-        <OperationsDashboard />
-      </main>
-    </StaffDashboardGuard>
+        <Link href="/dashboard" className="inline-flex" aria-label="Zenith Legal dashboard">
+          <Image
+            src="/zenith-legal-logo.png"
+            alt="Zenith Legal"
+            width={120}
+            height={48}
+            className="h-12 w-auto"
+            priority
+          />
+        </Link>
+      </div>
+      <OperationsDashboard />
+    </main>
   );
 }

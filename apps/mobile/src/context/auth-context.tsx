@@ -7,6 +7,7 @@ import {
   type PracticeArea,
 } from '@zenith/shared';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 import type { Session } from '@supabase/supabase-js';
 import {
@@ -49,6 +50,24 @@ type PublicFunctionError = {
   error?: string;
 };
 
+type SupabasePasswordSignInErrorResponse = {
+  code?: string;
+  error_code?: string;
+  error?: string;
+  msg?: string;
+  message?: string;
+};
+
+type JwtPayload = {
+  sub?: unknown;
+  email?: unknown;
+  role?: unknown;
+  aud?: unknown;
+  exp?: unknown;
+  app_metadata?: unknown;
+  user_metadata?: unknown;
+};
+
 function extractErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -63,6 +82,111 @@ function extractErrorMessage(error: unknown): string {
     }
   }
   return 'Unknown error';
+}
+
+function isNetworkRequestFailure(error: unknown): boolean {
+  const message = extractErrorMessage(error).toLowerCase();
+  return message.includes('network request failed') || message.includes('failed to fetch');
+}
+
+function decodeBase64UrlSegment(segment: string): string {
+  const normalized = segment.replace(/-/g, '+').replace(/_/g, '/');
+  const withPadding = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+  if (typeof atob === 'function') {
+    return atob(withPadding);
+  }
+  throw new Error('JWT decoder unavailable');
+}
+
+function parseJwtPayload(token: string): JwtPayload {
+  const parts = token.split('.');
+  if (parts.length < 2 || !parts[1]) {
+    throw new Error('Invalid access token payload');
+  }
+
+  const decoded = decodeBase64UrlSegment(parts[1]);
+  const parsed = JSON.parse(decoded) as JwtPayload;
+  return parsed;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+function buildSessionForLocalFallback(sessionPayload: PasswordAuthSessionPayload): Session {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const jwtPayload = parseJwtPayload(sessionPayload.access_token);
+  const expiresAtFromToken =
+    typeof jwtPayload.exp === 'number' && Number.isFinite(jwtPayload.exp) ? jwtPayload.exp : null;
+  const expiresAtFromPayload =
+    typeof sessionPayload.expires_at === 'number' && Number.isFinite(sessionPayload.expires_at)
+      ? sessionPayload.expires_at
+      : null;
+  const expiresAt = expiresAtFromPayload ?? expiresAtFromToken ?? nowSeconds + 3600;
+  const expiresIn =
+    typeof sessionPayload.expires_in === 'number' && Number.isFinite(sessionPayload.expires_in)
+      ? sessionPayload.expires_in
+      : Math.max(0, expiresAt - nowSeconds);
+
+  const payloadUser = asRecord(sessionPayload.user);
+  const userId =
+    (typeof payloadUser.id === 'string' && payloadUser.id) ||
+    (typeof jwtPayload.sub === 'string' && jwtPayload.sub) ||
+    '';
+
+  if (!userId) {
+    throw new Error('Unable to build local session fallback');
+  }
+
+  const email =
+    (typeof payloadUser.email === 'string' && payloadUser.email) ||
+    (typeof jwtPayload.email === 'string' && jwtPayload.email) ||
+    '';
+
+  const phone = typeof payloadUser.phone === 'string' ? payloadUser.phone : '';
+  const appMetadata = asRecord(payloadUser.app_metadata ?? jwtPayload.app_metadata);
+  const userMetadata = asRecord(payloadUser.user_metadata ?? jwtPayload.user_metadata);
+  const nowIso = new Date().toISOString();
+
+  const sessionUser = {
+    id: userId,
+    aud: typeof jwtPayload.aud === 'string' ? jwtPayload.aud : 'authenticated',
+    role: typeof jwtPayload.role === 'string' ? jwtPayload.role : 'authenticated',
+    email,
+    phone,
+    app_metadata: appMetadata,
+    user_metadata: userMetadata,
+    identities: Array.isArray(payloadUser.identities) ? payloadUser.identities : [],
+    created_at: typeof payloadUser.created_at === 'string' ? payloadUser.created_at : nowIso,
+    updated_at: typeof payloadUser.updated_at === 'string' ? payloadUser.updated_at : nowIso,
+  };
+
+  return {
+    access_token: sessionPayload.access_token,
+    refresh_token: sessionPayload.refresh_token,
+    token_type: 'bearer',
+    expires_in: expiresIn,
+    expires_at: expiresAt,
+    user: sessionUser as Session['user'],
+  };
+}
+
+async function persistSessionWithoutNetwork(sessionPayload: PasswordAuthSessionPayload): Promise<void> {
+  const authInternals = supabase.auth as unknown as {
+    _saveSession?: (session: Session) => Promise<void>;
+    _notifyAllSubscribers?: (event: string, session: Session | null) => Promise<void>;
+  };
+
+  if (
+    typeof authInternals._saveSession !== 'function' ||
+    typeof authInternals._notifyAllSubscribers !== 'function'
+  ) {
+    throw new Error('Supabase auth internals unavailable for local session fallback');
+  }
+
+  const session = buildSessionForLocalFallback(sessionPayload);
+  await authInternals._saveSession(session);
+  await authInternals._notifyAllSubscribers('SIGNED_IN', session);
 }
 
 async function extractFunctionInvokeErrorMessage(error: unknown, data?: unknown): Promise<string> {
@@ -190,6 +314,31 @@ function mapRegistrationErrorToUserMessage(error: unknown): string {
   return mapPasswordAuthErrorToUserMessage(error);
 }
 
+function mapSignupEmailCheckErrorToUserMessage(error: unknown): string {
+  const message = extractErrorMessage(error).toLowerCase();
+
+  if (message.includes('validation_error')) {
+    return 'Enter a valid email address.';
+  }
+  if (message.includes('duplicate_email')) {
+    return 'An account with this email already exists. Sign in or reset your password.';
+  }
+  if (message.includes('network request failed') || message.includes('failed to fetch')) {
+    return 'Cannot reach Supabase right now. Check your internet/VPN and retry.';
+  }
+
+  return extractErrorMessage(error);
+}
+
+function isSignupEmailCheckUnavailableError(error: unknown): boolean {
+  const message = extractErrorMessage(error).toLowerCase();
+  return (
+    message.includes('not_found') ||
+    message.includes('request failed (404)') ||
+    message.includes('function not found')
+  );
+}
+
 function extractCallbackType(url: string | null | undefined): string | null {
   if (!url) {
     return null;
@@ -237,14 +386,63 @@ async function setSupabaseSessionFromPasswordAuth(
     throw new Error('Invalid session returned from auth service');
   }
 
-  const { error } = await supabase.auth.setSession({
-    access_token: sessionPayload.access_token,
-    refresh_token: sessionPayload.refresh_token,
+  try {
+    const { error } = await supabase.auth.setSession({
+      access_token: sessionPayload.access_token,
+      refresh_token: sessionPayload.refresh_token,
+    });
+
+    if (error) {
+      throw error;
+    }
+  } catch (error) {
+    if (!isNetworkRequestFailure(error)) {
+      throw error;
+    }
+    await persistSessionWithoutNetwork(sessionPayload);
+  }
+}
+
+async function signInWithPasswordViaAuthApi(email: string, password: string): Promise<void> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    apikey: env.supabaseAnonKey,
+    'x-client-info': 'zenith-legal-mobile',
+  };
+
+  // New publishable keys (sb_publishable_*) are not JWTs and should not be sent as Bearer auth.
+  if (!env.supabaseAnonKey.startsWith('sb_publishable_')) {
+    headers.Authorization = `Bearer ${env.supabaseAnonKey}`;
+  }
+
+  const response = await fetch(`${env.supabaseUrl}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      email,
+      password,
+    }),
   });
 
-  if (error) {
-    throw error;
+  const json = (await response.json().catch(() => ({}))) as
+    | PasswordAuthSessionPayload
+    | SupabasePasswordSignInErrorResponse;
+
+  if (!response.ok) {
+    const parsedError = json as SupabasePasswordSignInErrorResponse;
+    const code =
+      (typeof parsedError.error_code === 'string' && parsedError.error_code) ||
+      (typeof parsedError.code === 'string' && parsedError.code) ||
+      'request_failed';
+    const message =
+      (typeof parsedError.msg === 'string' && parsedError.msg) ||
+      (typeof parsedError.error === 'string' && parsedError.error) ||
+      (typeof parsedError.message === 'string' && parsedError.message) ||
+      `Request failed (${response.status})`;
+    throw new Error(`${code}: ${message}`);
   }
+
+  await setSupabaseSessionFromPasswordAuth(json as PasswordAuthSessionPayload);
 }
 
 function normalizePhoneForAuthOrThrow(input: string): string {
@@ -271,11 +469,12 @@ type AuthContextValue = {
   isLoading: boolean;
   isSigningOut: boolean;
   setIntakeDraft: (draft: CandidateIntake) => void;
+  checkCandidateSignupEmailAvailability: (email: string) => Promise<void>;
   registerCandidateWithPassword: (input: CandidateRegistration) => Promise<void>;
   signInWithEmailPassword: (email: string, password: string) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
   updateEmail: (email: string) => Promise<void>;
-  updatePassword: (newPassword: string) => Promise<void>;
+  updatePassword: (newPassword: string, currentPassword?: string) => Promise<void>;
   sendEmailMagicLink: (email: string, options?: OtpOptions) => Promise<void>;
   sendSmsOtp: (phone: string, options?: OtpOptions) => Promise<void>;
   verifySmsOtp: (phone: string, token: string) => Promise<void>;
@@ -315,7 +514,15 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+function isMissingUsersProfileColumnError(message: string): boolean {
+  const lowered = message.toLowerCase();
+  return (
+    (lowered.includes('users_profile.jd_degree_date') && lowered.includes('does not exist')) ||
+    lowered.includes('column "jd_degree_date" does not exist')
+  );
+}
+
+async function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, label: string): Promise<T> {
   let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeoutHandle = setTimeout(() => {
@@ -324,7 +531,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
   });
 
   try {
-    return await Promise.race([promise, timeoutPromise]);
+    return await Promise.race([Promise.resolve(promise), timeoutPromise]);
   } finally {
     if (timeoutHandle) {
       clearTimeout(timeoutHandle);
@@ -334,13 +541,36 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: str
 
 async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
   try {
-    const [profileResult, preferencesResult, consentsResult] = await withTimeout(
-      Promise.all([
+    const fullProfileSelect =
+      'id, role, name, email, mobile, jd_degree_date, onboarding_complete';
+    const legacyProfileSelect = 'id, role, name, email, mobile, onboarding_complete';
+
+    let profileIncludesOptionalColumns = true;
+    let profileResult = await withTimeout(
+      supabase
+        .from('users_profile')
+        .select(fullProfileSelect)
+        .eq('id', userId)
+        .maybeSingle(),
+      5000,
+      'Profile fetch',
+    );
+
+    if (profileResult.error && isMissingUsersProfileColumnError(profileResult.error.message)) {
+      profileIncludesOptionalColumns = false;
+      profileResult = await withTimeout(
         supabase
           .from('users_profile')
-          .select('id, role, name, email, mobile, onboarding_complete')
+          .select(legacyProfileSelect)
           .eq('id', userId)
           .maybeSingle(),
+        5000,
+        'Profile legacy fetch',
+      );
+    }
+
+    const [preferencesResult, consentsResult] = await withTimeout(
+      Promise.all([
         supabase
           .from('candidate_preferences')
           .select('cities, other_city_text, practice_areas, practice_area, other_practice_text')
@@ -353,7 +583,7 @@ async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
           .maybeSingle(),
       ]),
       5000,
-      'Profile fetch',
+      'Profile related fetch',
     );
 
     if (profileResult.error) {
@@ -385,17 +615,28 @@ async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
       };
     }
 
-    const profileRow = profileResult.data as Pick<
-      CandidateProfile,
-      'id' | 'role' | 'name' | 'email' | 'mobile' | 'onboarding_complete'
-    >;
+    const profileRow = profileResult.data as {
+      id: string;
+      role: CandidateProfile['role'];
+      name: string | null;
+      email: string;
+      mobile: string | null;
+      onboarding_complete?: boolean | null;
+      jd_degree_date?: string | null;
+    };
     const preferences = (preferencesResult.data as CandidatePreferencesRow | null) ?? null;
     const consents = (consentsResult.data as CandidateConsentsRow | null) ?? null;
 
     return {
       ok: true,
       profile: {
-        ...profileRow,
+        id: profileRow.id,
+        role: profileRow.role,
+        name: profileRow.name,
+        email: profileRow.email,
+        mobile: profileRow.mobile,
+        jd_degree_date: profileIncludesOptionalColumns ? (profileRow.jd_degree_date ?? null) : null,
+        onboarding_complete: profileRow.onboarding_complete ?? true,
         preferredCities: Array.isArray(preferences?.cities) ? preferences.cities : [],
         otherCityText: preferences?.other_city_text ?? null,
         practiceAreas: Array.isArray(preferences?.practice_areas)
@@ -746,20 +987,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     void (async () => {
-      const { error } = await supabase.from('users_profile').update({ email: sessionEmail }).eq('id', userId);
-      if (error || cancelled) {
-        return;
-      }
-
-      setProfile((previous) => {
-        if (!previous || previous.id !== userId) {
-          return previous;
+      try {
+        const { error } = await supabase.from('users_profile').update({ email: sessionEmail }).eq('id', userId);
+        if (error || cancelled) {
+          return;
         }
-        return {
-          ...previous,
-          email: sessionEmail,
-        };
-      });
+
+        setProfile((previous) => {
+          if (!previous || previous.id !== userId) {
+            return previous;
+          }
+          return {
+            ...previous,
+            email: sessionEmail,
+          };
+        });
+      } catch {
+        // Non-blocking best-effort sync.
+      }
     })();
 
     return () => {
@@ -790,6 +1035,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isLoading,
       isSigningOut,
       setIntakeDraft: (draft) => setIntakeDraftState(draft),
+      checkCandidateSignupEmailAvailability: async (email: string) => {
+        if (authConfigError) {
+          throw new Error(authConfigError);
+        }
+
+        const normalizedEmail = email.trim().toLowerCase();
+        if (!normalizedEmail) {
+          throw new Error('Enter your email address.');
+        }
+
+        try {
+          await callPublicFunctionJson<{ ok: true; available: true }>(
+            'check_candidate_signup_email',
+            { email: normalizedEmail },
+          );
+        } catch (error) {
+          if (isSignupEmailCheckUnavailableError(error)) {
+            // Fail open when precheck function is not deployed yet; final registration still enforces uniqueness.
+            return;
+          }
+          throw new Error(mapSignupEmailCheckErrorToUserMessage(error));
+        }
+      },
       registerCandidateWithPassword: async (input: CandidateRegistration) => {
         if (authConfigError) {
           throw new Error(authConfigError);
@@ -816,14 +1084,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error(authConfigError);
         }
         try {
-          const result = await callPublicFunctionJson<{
-            ok: true;
-            session: PasswordAuthSessionPayload;
-          }>('mobile_sign_in_with_identifier_password', {
-            identifier: email.trim().toLowerCase(),
-            password,
-          });
-          await setSupabaseSessionFromPasswordAuth(result.session);
+          const normalizedEmail = email.trim().toLowerCase();
+          if (Platform.OS === 'ios' || Platform.OS === 'android') {
+            await signInWithPasswordViaAuthApi(normalizedEmail, password);
+          } else {
+            try {
+              const { error } = await supabase.auth.signInWithPassword({
+                email: normalizedEmail,
+                password,
+              });
+              if (error) {
+                throw error;
+              }
+            } catch (error) {
+              if (!isNetworkRequestFailure(error)) {
+                throw error;
+              }
+              await signInWithPasswordViaAuthApi(normalizedEmail, password);
+            }
+          }
         } catch (error) {
           throw new Error(mapPasswordAuthErrorToUserMessage(error));
         }
@@ -865,11 +1144,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error(extractErrorMessage(error));
         }
       },
-      updatePassword: async (newPassword: string) => {
+      updatePassword: async (newPassword: string, currentPassword?: string) => {
         if (authConfigError) {
           throw new Error(authConfigError);
         }
         await ensureValidSession();
+
+        if (currentPassword && currentPassword.trim().length > 0) {
+          const currentEmail =
+            session?.user.email?.trim().toLowerCase() ??
+            profile?.email?.trim().toLowerCase() ??
+            '';
+          if (!currentEmail) {
+            throw new Error(
+              'Current password verification requires an email-based account.',
+            );
+          }
+
+          try {
+            await signInWithPasswordViaAuthApi(currentEmail, currentPassword);
+          } catch (error) {
+            throw new Error(mapPasswordAuthErrorToUserMessage(error));
+          }
+        }
+
         const { error } = await supabase.auth.updateUser({ password: newPassword });
         if (error) {
           throw new Error(mapPasswordAuthErrorToUserMessage(error));

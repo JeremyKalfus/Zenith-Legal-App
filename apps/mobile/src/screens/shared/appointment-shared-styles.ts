@@ -27,14 +27,32 @@ export const appointmentSharedStyles = {
     color: uiColors.link,
     fontSize: 13,
   },
+  cardMeta: {
+    color: uiColors.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
   cardDetail: {
     color: uiColors.textSecondary,
     fontSize: 13,
+  },
+  cardNote: {
+    color: uiColors.textMuted,
+    fontSize: 13,
+    marginTop: 2,
   },
   cardDescription: {
     color: uiColors.textMuted,
     fontSize: 13,
     marginTop: 2,
+  },
+  seeMoreButton: {
+    marginTop: 4,
+  },
+  seeMoreText: {
+    color: uiColors.textPrimary,
+    fontSize: 12,
+    fontWeight: '700',
   },
   emptyState: {
     color: uiColors.textPlaceholder,

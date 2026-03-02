@@ -1,70 +1,88 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Platform } from 'react-native';
 import type { DateTimePickerEvent } from '@react-native-community/datetimepicker';
-import { DURATION_OPTIONS } from './appointments-shared';
 
 type UseAppointmentComposerOptions = {
-  defaultDurationMinutes?: number;
   defaultStartOffsetMs?: number;
 };
 
+export function formatDateInputValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+export function formatTimeInputValue(date: Date): string {
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
 export function useAppointmentComposer(options?: UseAppointmentComposerOptions) {
-  const defaultDurationMinutes = options?.defaultDurationMinutes ?? 30;
   const defaultStartOffsetMs = options?.defaultStartOffsetMs ?? 3_600_000;
 
   const [createStartAtLocal, setCreateStartAtLocal] = useState(
     () => new Date(Date.now() + defaultStartOffsetMs),
   );
-  const [showStartPicker, setShowStartPicker] = useState(false);
-  const [createDurationMinutes, setCreateDurationMinutes] = useState(defaultDurationMinutes);
-  const [showDurationPicker, setShowDurationPicker] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
-  const createEndAtLocal = useMemo(
-    () => new Date(createStartAtLocal.getTime() + createDurationMinutes * 60_000),
-    [createDurationMinutes, createStartAtLocal],
-  );
-
-  const selectedDurationLabel = useMemo(
-    () =>
-      DURATION_OPTIONS.find((option) => option.minutes === createDurationMinutes)?.label
-      ?? `${createDurationMinutes} min`,
-    [createDurationMinutes],
-  );
-
-  const handleStartPickerChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
+  const handleDatePickerChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
     if (event.type === 'dismissed') {
-      setShowStartPicker(false);
+      setShowDatePicker(false);
       return;
     }
 
     if (selectedDate) {
-      setCreateStartAtLocal(selectedDate);
+      setCreateStartAtLocal((current) => {
+        const next = new Date(current);
+        next.setFullYear(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+        return next;
+      });
     }
 
     if (Platform.OS === 'android') {
-      setShowStartPicker(false);
+      setShowDatePicker(false);
+    }
+  }, []);
+
+  const handleTimePickerChange = useCallback((event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (event.type === 'dismissed') {
+      setShowTimePicker(false);
+      return;
+    }
+
+    if (selectedDate) {
+      setCreateStartAtLocal((current) => {
+        const next = new Date(current);
+        next.setHours(selectedDate.getHours(), selectedDate.getMinutes(), 0, 0);
+        return next;
+      });
+    }
+
+    if (Platform.OS === 'android') {
+      setShowTimePicker(false);
     }
   }, []);
 
   const resetComposer = useCallback(() => {
-    setShowStartPicker(false);
-    setShowDurationPicker(false);
+    setShowDatePicker(false);
+    setShowTimePicker(false);
     setCreateStartAtLocal(new Date(Date.now() + defaultStartOffsetMs));
-    setCreateDurationMinutes(defaultDurationMinutes);
-  }, [defaultDurationMinutes, defaultStartOffsetMs]);
+  }, [defaultStartOffsetMs]);
 
   return {
     createStartAtLocal,
-    createEndAtLocal,
-    createDurationMinutes,
-    handleStartPickerChange,
+    dateValue: formatDateInputValue(createStartAtLocal),
+    handleDatePickerChange,
+    handleTimePickerChange,
     resetComposer,
-    selectedDurationLabel,
-    setCreateDurationMinutes,
     setCreateStartAtLocal,
-    setShowDurationPicker,
-    setShowStartPicker,
-    showDurationPicker,
-    showStartPicker,
+    setShowDatePicker,
+    setShowTimePicker,
+    showDatePicker,
+    showTimePicker,
+    timeValue: formatTimeInputValue(createStartAtLocal),
   };
 }

@@ -1,7 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Channel, Chat, MessageInput, MessageList, Thread, Window } from 'stream-chat-react';
+import {
+  Avatar as StreamAvatar,
+  Channel,
+  Chat,
+  MessageInput,
+  MessageList,
+  Thread,
+  Window,
+  type AvatarProps,
+} from 'stream-chat-react';
 import type { Channel as StreamChannel } from 'stream-chat';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -17,14 +26,37 @@ import type { StaffMessageInboxItem } from '@zenith/shared';
 import {
   ensureStreamChatStylesheet,
   formatRelativeTimestamp,
+  hasChatAvatarImage,
   mapChannelsToStaffInboxItems,
   STREAM_CHAT_CSS_URL,
 } from '@zenith/shared';
+
+const LIVE_CHAT_EVENT_TYPES = new Set([
+  'message.new',
+  'message.updated',
+  'message.deleted',
+  'notification.message_new',
+  'notification.mark_read',
+  'notification.mark_unread',
+  'notification.added_to_channel',
+  'channel.updated',
+  'channel.deleted',
+  'channel.hidden',
+  'channel.visible',
+]);
 
 function useStreamChatCSS() {
   useEffect(() => {
     ensureStreamChatStylesheet(STREAM_CHAT_CSS_URL);
   }, []);
+}
+
+function Avatar(props: AvatarProps) {
+  if (!hasChatAvatarImage(props.image)) {
+    return null;
+  }
+
+  return <StreamAvatar {...props} />;
 }
 
 type ChatBootstrapResponse = {
@@ -40,7 +72,36 @@ async function queryStaffInboxItems(sessionUserId: string): Promise<StaffMessage
     [{ last_message_at: -1 }],
     { watch: true, state: true, limit: 100 },
   );
-  return mapChannelsToStaffInboxItems(channels as unknown[]);
+  const inboxItems = mapChannelsToStaffInboxItems(channels as unknown[]);
+  const candidateIds = Array.from(new Set(inboxItems.map((item) => item.candidateUserId))).filter(Boolean);
+
+  if (candidateIds.length === 0) {
+    return inboxItems;
+  }
+
+  const { data, error } = await supabaseClient
+    .from('users_profile')
+    .select('id,name')
+    .in('id', candidateIds);
+
+  if (error) {
+    return inboxItems;
+  }
+
+  const profileById = new Map(
+    ((data ?? []) as { id: string; name: string | null }[]).map((row) => [
+      row.id,
+      row,
+    ]),
+  );
+
+  return inboxItems.map((item) => {
+    const profile = profileById.get(item.candidateUserId);
+    return {
+      ...item,
+      candidateDisplayName: profile?.name ?? item.candidateDisplayName ?? null,
+    };
+  });
 }
 
 function useStaffMessagesDashboard() {
@@ -53,6 +114,7 @@ function useStaffMessagesDashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const connectedRef = useRef(false);
+  const eventSubscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
 
   const loadInbox = useCallback(async (isManualRefresh = false) => {
     if (!isStreamChatConfigured()) {
@@ -110,8 +172,20 @@ function useStaffMessagesDashboard() {
         if (current && inboxItems.some((item) => item.channelId === current)) {
           return current;
         }
-        return inboxItems[0]?.channelId ?? null;
+        return null;
       });
+
+      if (!eventSubscriptionRef.current) {
+        const client = getChatClient();
+        eventSubscriptionRef.current = client.on((event) => {
+          if (!LIVE_CHAT_EVENT_TYPES.has(event.type)) {
+            return;
+          }
+
+          const channels = Object.values(client.activeChannels ?? {});
+          setConversations(mapChannelsToStaffInboxItems(channels as unknown[]));
+        });
+      }
       setErrorMessage(null);
     } catch (error) {
       setErrorMessage(await getFunctionErrorMessage(error, 'Unable to load messages. Please try again.'));
@@ -124,6 +198,13 @@ function useStaffMessagesDashboard() {
   useEffect(() => {
     void loadInbox();
   }, [loadInbox]);
+
+  useEffect(() => {
+    return () => {
+      eventSubscriptionRef.current?.unsubscribe();
+      eventSubscriptionRef.current = null;
+    };
+  }, []);
 
   const selectedConversation = useMemo(
     () => conversations.find((item) => item.channelId === selectedChannelId) ?? null,
@@ -149,6 +230,15 @@ function useStaffMessagesDashboard() {
 
   const handleSelectChannel = useCallback((channelId: string) => {
     setSelectedChannelId(channelId);
+    setConversations((current) =>
+      current.map((conversation) =>
+        conversation.channelId === channelId ? { ...conversation, unreadCount: 0 } : conversation,
+      ),
+    );
+
+    const client = getChatClient();
+    const channel = client.channel('messaging', channelId);
+    void channel.watch().then(() => channel.markRead()).catch(() => undefined);
   }, []);
 
   return {
@@ -235,9 +325,11 @@ export function StaffMessagesDashboard() {
                     onClick={() => handleSelectChannel(conversation.channelId)}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="line-clamp-1 text-sm font-semibold text-slate-900">
-                        {conversation.channelName}
-                      </p>
+                      <div className="min-w-0">
+                        <p className="line-clamp-1 text-sm font-semibold text-slate-900">
+                          {conversation.candidateDisplayName || conversation.channelName}
+                        </p>
+                      </div>
                       <p className="shrink-0 text-xs text-slate-500">
                         {formatRelativeTimestamp(conversation.lastMessageAt)}
                       </p>
@@ -259,7 +351,9 @@ export function StaffMessagesDashboard() {
 
         <Card>
           <CardHeader>
-            <CardTitle>{selectedConversation?.channelName ?? 'Conversation'}</CardTitle>
+            <CardTitle>
+              {selectedConversation?.candidateDisplayName || selectedConversation?.channelName || 'Conversation'}
+            </CardTitle>
             <CardDescription>
               {selectedConversation
                 ? `Candidate user ID: ${selectedConversation.candidateUserId}`
@@ -274,7 +368,7 @@ export function StaffMessagesDashboard() {
             ) : (
               <div className="h-[560px] overflow-hidden rounded-md border border-slate-200 bg-white">
                 <Chat client={getChatClient()} theme="str-chat__theme-light">
-                  <Channel channel={selectedChannel}>
+                  <Channel channel={selectedChannel} Avatar={Avatar}>
                     <Window>
                       <MessageList />
                       <MessageInput focus />

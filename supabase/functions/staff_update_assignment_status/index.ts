@@ -3,18 +3,22 @@ import { errorResponse, jsonResponse } from '../_shared/http.ts';
 import { createServiceClient } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
 import { createEdgeHandler } from '../_shared/edge-handler.ts';
+import { sendCandidateRecruiterChannelMessage } from '../_shared/stream-chat.ts';
 
 const FIRM_STATUSES = [
   'Waiting on your authorization to contact/submit',
+  'Authorized, will submit soon',
   'Submitted, waiting to hear from firm',
   'Interview Stage',
   'Rejected by firm',
   'Offer received!',
 ] as const;
+const AUTHORIZED_STATUS = 'Authorized, will submit soon' as const;
+const AUTHORIZED_STATUS_ALIAS = 'Authorize, will submit soon' as const;
 
 const schema = z.object({
   assignment_id: z.string().uuid(),
-  new_status: z.enum(FIRM_STATUSES),
+  new_status: z.enum([...FIRM_STATUSES, AUTHORIZED_STATUS_ALIAS]),
 });
 
 
@@ -29,6 +33,9 @@ Deno.serve(
         return errorResponse('Invalid status update payload', 422, 'invalid_payload');
       }
       const payload = parsed.data;
+      const normalizedNewStatus = payload.new_status === AUTHORIZED_STATUS_ALIAS
+        ? AUTHORIZED_STATUS
+        : payload.new_status;
 
       const { data: before, error: beforeError } = await serviceClient
         .from('candidate_firm_assignments')
@@ -40,20 +47,31 @@ Deno.serve(
         return errorResponse('Assignment not found', 404, 'assignment_not_found');
       }
 
-      if (before.status_enum === payload.new_status) {
+      if (before.status_enum === normalizedNewStatus) {
         return jsonResponse({
           success: true,
           unchanged: true,
           assignment: before,
           previous_status: before.status_enum,
-          new_status: payload.new_status,
+          new_status: normalizedNewStatus,
         });
+      }
+
+      const waitingStatus = 'Waiting on your authorization to contact/submit';
+      const authorizedStatus = AUTHORIZED_STATUS;
+
+      if (normalizedNewStatus === authorizedStatus && before.status_enum !== waitingStatus) {
+        return errorResponse(
+          'Only assignments waiting on candidate authorization can be set to authorized.',
+          400,
+          'invalid_status_transition',
+        );
       }
 
       const { data: updated, error: updateError } = await serviceClient
         .from('candidate_firm_assignments')
         .update({
-          status_enum: payload.new_status,
+          status_enum: normalizedNewStatus,
           status_updated_at: new Date().toISOString(),
         })
         .eq('id', payload.assignment_id)
@@ -68,13 +86,35 @@ Deno.serve(
         );
       }
 
+      if (normalizedNewStatus === authorizedStatus) {
+        const { error: authorizationUpsertError } = await serviceClient
+          .from('candidate_authorizations')
+          .upsert(
+            {
+              assignment_id: payload.assignment_id,
+              decision: 'authorized',
+              decided_by_candidate: updated.candidate_user_id,
+              decided_at: new Date().toISOString(),
+            },
+            { onConflict: 'assignment_id' },
+          );
+
+        if (authorizationUpsertError) {
+          return errorResponse(
+            authorizationUpsertError.message,
+            400,
+            'status_update_failed',
+          );
+        }
+      }
+
       await serviceClient.from('notification_deliveries').insert({
         user_id: updated.candidate_user_id,
         channel: 'push',
         event_type: 'firm_status.updated',
         payload: {
           assignment_id: updated.id,
-          status: payload.new_status,
+          status: normalizedNewStatus,
         },
         status: 'queued',
       });
@@ -89,12 +129,46 @@ Deno.serve(
         afterJson: updated,
       });
 
+      const [{ data: candidateProfile, error: candidateProfileError }, { data: firm, error: firmError }] =
+        await Promise.all([
+          serviceClient
+            .from('users_profile')
+            .select('id,name')
+            .eq('id', updated.candidate_user_id)
+            .maybeSingle(),
+          serviceClient
+            .from('firms')
+            .select('id,name')
+            .eq('id', updated.firm_id)
+            .maybeSingle(),
+        ]);
+
+      if (candidateProfileError) {
+        return errorResponse(candidateProfileError.message, 400, 'candidate_lookup_failed');
+      }
+      if (firmError) {
+        return errorResponse(firmError.message, 400, 'firm_lookup_failed');
+      }
+
+      const candidateName = candidateProfile?.name?.trim() || 'Candidate';
+      const firmName = firm?.name?.trim() || 'Firm';
+      const statusChangeText = normalizedNewStatus === waitingStatus
+        ? `Canidate ${candidateName}'s status for firm "${firmName}" has been updated from "${before.status_enum}" to "Waiting on your authorization to contact/submit". Check the dashboard tab to authorize or cancel submission`
+        : `Canidate ${candidateName}'s status for firm "${firmName}" has been updated from "${before.status_enum}" to "${normalizedNewStatus}". Message the Zenith team here if you have any questions.`;
+
+      await sendCandidateRecruiterChannelMessage({
+        serviceClient,
+        candidateUserId: updated.candidate_user_id,
+        actorUserId,
+        text: statusChangeText,
+      });
+
       return jsonResponse({
         success: true,
         unchanged: false,
         assignment: updated,
         previous_status: before.status_enum,
-        new_status: payload.new_status,
+        new_status: normalizedNewStatus,
       });
     },
     { auth: 'staff' },
