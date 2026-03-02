@@ -15,7 +15,7 @@ export function useCalendarSyncEnabled(userId: string | undefined): boolean {
         .from('calendar_connections')
         .select('provider')
         .eq('user_id', userId)
-        .in('provider', ['google', 'apple'])
+        .eq('provider', 'apple')
         .limit(1);
 
       if (error) {

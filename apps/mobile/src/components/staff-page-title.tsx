@@ -34,11 +34,11 @@ export function StaffPageTitle({
 const styles = StyleSheet.create({
   logo: {
     height: 40,
-    marginTop: -2,
     width: 40,
   },
   logoButton: {
     borderRadius: 6,
+    marginLeft: 4,
   },
   rightGroup: {
     alignItems: 'center',
@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   row: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
@@ -55,6 +55,5 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '700',
     lineHeight: 32,
-    paddingTop: 4,
   },
 });

@@ -24,15 +24,14 @@ export function CandidatePageTitle({ title }: { title: string }) {
 const styles = StyleSheet.create({
   logo: {
     height: 40,
-    marginRight: 0,
-    marginTop: -4,
     width: 40,
   },
   logoButton: {
     borderRadius: 6,
+    marginLeft: 4,
   },
   row: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
@@ -41,6 +40,5 @@ const styles = StyleSheet.create({
     fontSize: 56 / 2,
     fontWeight: '700',
     lineHeight: 64 / 2,
-    paddingTop: 6,
   },
 });

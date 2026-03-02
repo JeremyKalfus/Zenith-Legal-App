@@ -565,7 +565,7 @@ function CandidateListPanel({
         />
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Filter by city</p>
-          <div className={['flex flex-wrap gap-2', showAllCityFilters ? '' : 'max-h-[34px] overflow-hidden'].join(' ')}>
+          <div className={['flex flex-wrap gap-2', showAllCityFilters ? '' : 'max-h-[70px] overflow-hidden'].join(' ')}>
             {CITY_OPTIONS.map((city) => {
               const selected = selectedCities.includes(city);
               return (
@@ -593,7 +593,7 @@ function CandidateListPanel({
         </div>
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Filter by practice</p>
-          <div className={['flex flex-wrap gap-2', showAllPracticeFilters ? '' : 'max-h-[34px] overflow-hidden'].join(' ')}>
+          <div className={['flex flex-wrap gap-2', showAllPracticeFilters ? '' : 'max-h-[70px] overflow-hidden'].join(' ')}>
             {PRACTICE_AREAS.map((practiceArea) => {
               const selected = selectedPracticeAreas.includes(practiceArea);
               return (

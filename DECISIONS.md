@@ -300,7 +300,7 @@
 ## Pending Decisions
 
 - **Notification email provider + scheduler automation** -- Push processing via Expo Push API is implemented; remaining decision is which email provider (for example Resend vs SendGrid) and what production scheduler path invokes `dispatch_notifications` processor mode.
-- **Microsoft calendar provider support** -- `calendar_provider` still includes `microsoft`, but user-facing setup and sync behavior are currently implemented for Google + Apple only.
+- **Microsoft calendar provider support** -- `calendar_provider` still includes `microsoft`, but user-facing setup and sync behavior are currently implemented for Apple only.
 - **Staging environment setup** -- Dedicated Supabase project and Vercel preview deployment configuration.
 - **Mobile release strategy** -- TestFlight/Play Store rollout cadence, Google Play submit credential ownership, OTA update policy.
 
@@ -328,7 +328,7 @@
 
 **Rationale:** The existing notification queue can support reminder timing with a minimal schema change and no new service. Calendar links need to be user-specific (candidate and staff participants) to avoid collisions and support parallel provider connections.
 
-**Consequences:** Dispatch processor now sends only due push rows (`send_after_utc <= now`). Appointment writes/reviews enqueue reminder events. Calendar sync records are keyed by appointment/provider/user and currently support Google API sync plus Apple ICS-link representation.
+**Consequences:** Dispatch processor now sends only due push rows (`send_after_utc <= now`). Appointment writes/reviews enqueue reminder events. Calendar sync records are keyed by appointment/provider/user and currently support Apple ICS-link representation.
 
 ### [2026-02-27] Mobile self-service calendar connection in Profile screens
 
@@ -341,7 +341,7 @@
 
 **Rationale:** Calendar sync is participant-specific (candidate + staff), so both roles need a first-class setup path. Profile is the natural location for account-level external integrations.
 
-**Consequences:** Mobile profile now exposes provider status + connect actions. Google uses OAuth code flow with PKCE and in-app token exchange (`expo-auth-session`), then stores tokens through `connect_calendar_provider`. Apple uses one-tap connect for ICS sync mode. Calendar token parsing in sync code now supports nested `oauth_tokens` payload shape from connection rows.
+**Consequences:** Mobile profile now exposes provider status + connect actions. Apple uses one-tap connect for ICS sync mode through `connect_calendar_provider`.
 
 ### [2026-02-27] Use device-native calendar sync in Expo appointment screens
 
@@ -508,3 +508,16 @@
 **Rationale:** Product requirements now use JD year selection via wheel controls and year-only presentation. Compatibility mapping avoids breaking existing schema, queries, and environments while allowing immediate UX/contract alignment.
 
 **Consequences:** Candidate intake/profile forms now send `jdDegreeDate` as a year string. Edge functions validate year range (`2000..currentYear-1`) and persist `jd_degree_date` as `YYYY-01-01`. Profile hydration converts stored date values back to year strings, and shared helpers render/filter correctly for both legacy date rows and year-only values.
+
+### [2026-03-02] Remove Google calendar sync and canonicalize Apple-only provider flow
+
+**Decision:** Remove Google calendar sync from mobile and backend contracts, and canonicalize Apple as the only active calendar provider path.
+
+**Options considered:**
+1. UI-only removal -- hides Google from users but leaves dead runtime/data paths.
+2. Runtime removal without schema cleanup -- reduces active code but leaves stale provider rows/enum values.
+3. Full product-level removal with schema/data/provider cleanup (chosen).
+
+**Rationale:** Product scope now requires Apple-only calendar sync. Keeping Google paths created avoidable complexity across mobile settings UI, provider validation, sync execution branches, and database provider values.
+
+**Consequences:** `connect_calendar_provider` now accepts only `apple`; shared calendar sync logic no longer executes Google API branches; mobile Profile Calendar Sync exposes only Apple setup; and schema migration removes Google provider rows while replacing `calendar_provider` enum values with Apple/Microsoft only.

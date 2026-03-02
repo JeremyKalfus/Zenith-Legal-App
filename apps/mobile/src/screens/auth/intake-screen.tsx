@@ -24,7 +24,7 @@ import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/
 
 type CandidateRegistrationFormValues = z.input<typeof candidateRegistrationSchema>;
 type IntakeMode = 'registration' | 'finishProfile' | 'signupCompletion';
-const COLLAPSED_BUBBLE_ROWS_HEIGHT = 34;
+const COLLAPSED_BUBBLE_ROWS_HEIGHT = 70;
 
 function MultiSelectOption({
   label,

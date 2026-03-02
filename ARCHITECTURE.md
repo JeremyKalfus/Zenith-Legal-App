@@ -59,7 +59,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 | `manage_appointment_lifecycle` | User JWT | Appointment lifecycle action endpoint: `ignore_overdue` (hard delete scheduled-overdue), `cancel_outgoing_request` (hard delete candidate-created pending request), and `cancel_upcoming` (chat + notification + calendar unsync side-effects, then hard delete) |
 | `authorize_firm_submission` | User JWT | Candidate authorizes/declines firm |
 | `chat_auth_bootstrap` | User JWT | Provisions Stream Chat token; candidates (and staff targeting a candidate) also get/create deterministic `candidate-<user_id>` channel. Staff can omit `user_id` to bootstrap inbox listing without creating/selecting a channel. Returns 404 if `users_profile` row missing (no fallback creation) |
-| `connect_calendar_provider` | User JWT | Connect Google/Apple calendar credentials/tokens for per-user appointment sync |
+| `connect_calendar_provider` | User JWT | Connect Apple calendar credentials/tokens for per-user appointment sync |
 | `staff_review_appointment` | Staff JWT | Review appointment requests (pending -> scheduled/declined with overlap detection), enqueue notifications/reminders, trigger calendar sync, and post action-specific chat intros (`Appointment request accepted and scheduled...` / `Appointment request declined...`) |
 | `assign_firm_to_candidate` | Staff JWT | Assign firm to candidate and post candidate-channel chat updates |
 | `staff_update_assignment_status` | Staff JWT | Update assignment status |
@@ -75,7 +75,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 
 ## Database Schema
 
-23 migrations in `supabase/migrations/`. Key tables:
+24 migrations in `supabase/migrations/`. Key tables:
 
 - `users_profile` -- User identity and role (candidate/staff)
 - `users_profile` includes candidate profile metadata used across mobile/admin surfaces (`jd_degree_date`, persisted as a `date` for compatibility while app contracts use JD year strings)
@@ -98,10 +98,8 @@ All tables enforce Row Level Security. Staff-only mutations are routed through e
 ## Calendar Connection UX (Mobile)
 
 - `apps/mobile/src/components/calendar-sync-card.tsx` is a shared profile settings card used by both candidate and staff Profile tabs.
-- Google Calendar setup uses `expo-auth-session` (`AuthRequest` + PKCE + authorization code exchange) and sends tokens to `connect_calendar_provider`.
 - Apple setup is a one-tap connect path that stores provider state through `connect_calendar_provider`.
 - Connection status is read from `calendar_connections` (`provider`, `sync_state`, `updated_at`) with user-scoped RLS access.
-- Mobile Google OAuth client configuration is provided via `EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID`.
 - Appointment screens run device-native calendar sync via `expo-calendar` (candidate + staff), creating/updating scheduled events and removing declined/cancelled events from device calendars when provider connection is enabled.
 
 ## Shared Package (`@zenith/shared`)

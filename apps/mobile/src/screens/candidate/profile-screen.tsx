@@ -24,7 +24,7 @@ import { uiColors } from '../../theme/colors';
 import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 
 type CandidateProfileFormValues = z.input<typeof candidateIntakeSchema>;
-const COLLAPSED_BUBBLE_ROWS_HEIGHT = 34;
+const COLLAPSED_BUBBLE_ROWS_HEIGHT = 70;
 const EMPTY_SELECTED_CITIES: CityOption[] = [];
 const EMPTY_SELECTED_PRACTICE_AREAS: (typeof PRACTICE_AREAS)[number][] = [];
 

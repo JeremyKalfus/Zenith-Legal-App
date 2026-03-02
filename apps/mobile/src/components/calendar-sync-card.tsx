@@ -1,17 +1,12 @@
-import * as AuthSession from 'expo-auth-session';
-import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../context/auth-context';
-import { env } from '../config/env';
 import { getFunctionErrorMessage } from '../lib/function-error';
 import { ensureValidSession, supabase } from '../lib/supabase';
 import { uiColors } from '../theme/colors';
 import { interactivePressableStyle, sharedPressableFeedback } from '../theme/pressable';
 
-WebBrowser.maybeCompleteAuthSession();
-
-type CalendarProvider = 'google' | 'apple';
+type CalendarProvider = 'apple';
 type MessageTone = 'info' | 'error' | 'success';
 
 type CalendarConnectionRow = {
@@ -19,18 +14,6 @@ type CalendarConnectionRow = {
   sync_state: Record<string, unknown> | null;
   updated_at: string | null;
 };
-
-const GOOGLE_DISCOVERY = {
-  authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-  tokenEndpoint: 'https://oauth2.googleapis.com/token',
-};
-
-const GOOGLE_SCOPES = [
-  'openid',
-  'profile',
-  'email',
-  'https://www.googleapis.com/auth/calendar.events',
-];
 
 function getProviderStateLabel(connection: CalendarConnectionRow | null): string {
   if (!connection) {
@@ -61,24 +44,15 @@ function getProviderStateLabel(connection: CalendarConnectionRow | null): string
 
 export function CalendarSyncCard() {
   const { session } = useAuth();
-  const [connections, setConnections] = useState<CalendarConnectionRow[]>([]);
+  const [connection, setConnection] = useState<CalendarConnectionRow | null>(null);
   const [loading, setLoading] = useState(false);
-  const [busyProvider, setBusyProvider] = useState<CalendarProvider | null>(null);
+  const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [messageTone, setMessageTone] = useState<MessageTone>('info');
 
-  const googleConnection = useMemo(
-    () => connections.find((connection) => connection.provider === 'google') ?? null,
-    [connections],
-  );
-  const appleConnection = useMemo(
-    () => connections.find((connection) => connection.provider === 'apple') ?? null,
-    [connections],
-  );
-
   const refreshConnections = useCallback(async () => {
     if (!session?.user.id) {
-      setConnections([]);
+      setConnection(null);
       return;
     }
 
@@ -87,8 +61,10 @@ export function CalendarSyncCard() {
       .from('calendar_connections')
       .select('provider,sync_state,updated_at')
       .eq('user_id', session.user.id)
-      .in('provider', ['google', 'apple'])
-      .order('updated_at', { ascending: false });
+      .eq('provider', 'apple')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (error) {
       setMessageTone('error');
@@ -97,10 +73,7 @@ export function CalendarSyncCard() {
       return;
     }
 
-    const rows = ((data ?? []) as CalendarConnectionRow[]).filter(
-      (row) => row.provider === 'google' || row.provider === 'apple',
-    );
-    setConnections(rows);
+    setConnection((data as CalendarConnectionRow | null) ?? null);
     setLoading(false);
   }, [session?.user.id]);
 
@@ -108,112 +81,8 @@ export function CalendarSyncCard() {
     void refreshConnections();
   }, [refreshConnections]);
 
-  const handleConnectGoogle = useCallback(async () => {
-    if (!env.googleOAuthClientId) {
-      setMessageTone('error');
-      setMessage('Google OAuth is not configured. Set EXPO_PUBLIC_GOOGLE_OAUTH_CLIENT_ID.');
-      return;
-    }
-
-    setBusyProvider('google');
-    setMessage('');
-
-    try {
-      await ensureValidSession();
-      const redirectUri = AuthSession.makeRedirectUri({
-        scheme: 'zenithlegal',
-        path: 'oauth/google',
-        preferLocalhost: true,
-      });
-      const request = new AuthSession.AuthRequest({
-        clientId: env.googleOAuthClientId,
-        redirectUri,
-        scopes: GOOGLE_SCOPES,
-        responseType: AuthSession.ResponseType.Code,
-        usePKCE: true,
-        extraParams: {
-          access_type: 'offline',
-          prompt: 'consent',
-        },
-      });
-
-      const result = await request.promptAsync(GOOGLE_DISCOVERY);
-      if (result.type === 'cancel' || result.type === 'dismiss') {
-        setMessageTone('info');
-        setMessage('Google connection cancelled.');
-        return;
-      }
-      if (result.type === 'error') {
-        const detail =
-          result.error?.description ??
-          result.params.error_description ??
-          result.params.error ??
-          'Google sign-in failed.';
-        setMessageTone('error');
-        setMessage(detail);
-        return;
-      }
-      if (result.type !== 'success') {
-        setMessageTone('info');
-        setMessage('Google connection was not completed.');
-        return;
-      }
-
-      const authorizationCode = result.params.code;
-      if (!authorizationCode) {
-        setMessageTone('error');
-        setMessage('Google sign-in did not return an authorization code.');
-        return;
-      }
-
-      const tokenResponse = await AuthSession.exchangeCodeAsync(
-        {
-          clientId: env.googleOAuthClientId,
-          code: authorizationCode,
-          redirectUri,
-          extraParams: request.codeVerifier
-            ? { code_verifier: request.codeVerifier }
-            : undefined,
-        },
-        GOOGLE_DISCOVERY,
-      );
-
-      const { error } = await supabase.functions.invoke('connect_calendar_provider', {
-        body: {
-          provider: 'google',
-          oauth_tokens: {
-            access_token: tokenResponse.accessToken,
-            refresh_token: tokenResponse.refreshToken ?? null,
-            expires_in: tokenResponse.expiresIn ?? null,
-            token_type: tokenResponse.tokenType ?? null,
-            scope: tokenResponse.scope ?? null,
-            id_token: tokenResponse.idToken ?? null,
-            issued_at: tokenResponse.issuedAt,
-            redirect_uri: redirectUri,
-          },
-        },
-      });
-      if (error) {
-        throw error;
-      }
-
-      setMessageTone('success');
-      setMessage('Google Calendar connected.');
-      await refreshConnections();
-    } catch (error) {
-      const readable = await getFunctionErrorMessage(
-        error,
-        'Unable to connect Google Calendar.',
-      );
-      setMessageTone('error');
-      setMessage(readable);
-    } finally {
-      setBusyProvider(null);
-    }
-  }, [refreshConnections]);
-
   const handleConnectApple = useCallback(async () => {
-    setBusyProvider('apple');
+    setBusy(true);
     setMessage('');
 
     try {
@@ -243,7 +112,7 @@ export function CalendarSyncCard() {
       setMessageTone('error');
       setMessage(readable);
     } finally {
-      setBusyProvider(null);
+      setBusy(false);
     }
   }, [refreshConnections]);
 
@@ -251,47 +120,20 @@ export function CalendarSyncCard() {
     <View style={styles.card}>
       <Text style={styles.sectionTitle}>Calendar Sync</Text>
       <Text style={styles.helper}>
-        Connect Google or Apple calendar to sync scheduled appointments and updates.
+        Connect Apple calendar to sync scheduled appointments and updates.
       </Text>
-
-      <View style={styles.providerRow}>
-        <View style={styles.providerCopy}>
-          <Text style={styles.providerTitle}>Google Calendar</Text>
-          <Text style={styles.providerStatus}>
-            Status: {getProviderStateLabel(googleConnection)}
-          </Text>
-        </View>
-        <Pressable
-          style={interactivePressableStyle({
-            base: styles.secondaryButton,
-            disabled: busyProvider === 'google',
-            disabledStyle: styles.buttonDisabled,
-            hoverStyle: sharedPressableFeedback.hover,
-            focusStyle: sharedPressableFeedback.focus,
-            pressedStyle: sharedPressableFeedback.pressed,
-          })}
-          onPress={() => {
-            void handleConnectGoogle();
-          }}
-          disabled={busyProvider === 'google'}
-        >
-          <Text style={styles.secondaryButtonText}>
-            {busyProvider === 'google' ? 'Connecting...' : 'Connect'}
-          </Text>
-        </Pressable>
-      </View>
 
       <View style={styles.providerRow}>
         <View style={styles.providerCopy}>
           <Text style={styles.providerTitle}>Apple Calendar</Text>
           <Text style={styles.providerStatus}>
-            Status: {getProviderStateLabel(appleConnection)}
+            Status: {getProviderStateLabel(connection)}
           </Text>
         </View>
         <Pressable
           style={interactivePressableStyle({
             base: styles.secondaryButton,
-            disabled: busyProvider === 'apple',
+            disabled: busy,
             disabledStyle: styles.buttonDisabled,
             hoverStyle: sharedPressableFeedback.hover,
             focusStyle: sharedPressableFeedback.focus,
@@ -300,10 +142,10 @@ export function CalendarSyncCard() {
           onPress={() => {
             void handleConnectApple();
           }}
-          disabled={busyProvider === 'apple'}
+          disabled={busy}
         >
           <Text style={styles.secondaryButtonText}>
-            {busyProvider === 'apple' ? 'Connecting...' : 'Connect'}
+            {busy ? 'Connecting...' : 'Connect'}
           </Text>
         </Pressable>
       </View>

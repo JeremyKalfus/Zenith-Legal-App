@@ -4,7 +4,7 @@ import { writeAuditEvent } from '../_shared/audit.ts';
 import { createEdgeHandler } from '../_shared/edge-handler.ts';
 
 type ConnectCalendarPayload = {
-  provider: 'google' | 'apple';
+  provider: 'apple';
   oauth_code?: string;
   oauth_tokens?: Record<string, unknown>;
 };
@@ -16,8 +16,8 @@ function parsePayload(input: unknown): ConnectCalendarPayload {
 
   const record = input as Record<string, unknown>;
   const provider = record.provider;
-  if (provider !== 'google' && provider !== 'apple') {
-    throw new Error('Invalid payload: provider must be google or apple.');
+  if (provider !== 'apple') {
+    throw new Error('Invalid payload: provider must be apple.');
   }
 
   const oauthCode =

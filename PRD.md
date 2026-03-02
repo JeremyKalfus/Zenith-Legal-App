@@ -135,12 +135,10 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Candidate consents tracked with version and timestamp.
 
 ### Calendar Integration
-- `connect_calendar_provider` edge function (Google, Apple).
+- `connect_calendar_provider` edge function (Apple).
 - Mobile app exposes user-facing setup in Profile:
-  - Google Calendar: OAuth authorization code flow with PKCE and in-app token exchange.
   - Apple Calendar: one-tap connect path for provider-enabled sync.
 - Appointment writes/reviews trigger per-user calendar sync for candidate + staff participants:
-  - Google: direct Calendar API create/update/delete when access token is available.
   - Mobile app: device-native `expo-calendar` event sync for connected users (scheduled upsert, declined/cancelled delete).
 - `calendar_connections` and `calendar_event_links` tables persist provider connection state and synced event links.
 

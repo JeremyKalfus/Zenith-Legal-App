@@ -20,7 +20,7 @@
 - [x] Push notification dispatch queue processor (Expo Push API send + queued delivery status updates)
 - [x] Staff-created appointment scheduling for candidate accounts (mobile + admin)
 - [x] Appointment reminder queue timing support (`notification_deliveries.send_after_utc`, 15-minute push reminders)
-- [x] Calendar sync baseline (Google API sync + Apple ICS link sync records per appointment/provider/user)
+- [x] Calendar sync baseline (Apple ICS link sync records per appointment/provider/user)
 - [x] Sectioned appointment lifecycle UX across candidate mobile + staff mobile + admin web (`overdue`, `incoming/outgoing`, `upcoming` with ignore/cancel/modify actions and sync)
 - [x] Appointment format overhaul across candidate/staff/admin (Date+Time start-only input, note-first cards with inline expansion, standardized field-based chat templates, and hard-delete upcoming cancellations)
 - [x] Appointment chat intro alignment across all triggers (candidate submit pending, admin accept incoming, admin direct schedule, admin/candidate cancel, admin decline, admin modify)
@@ -48,7 +48,7 @@
 ### High Priority
 
 1. **Notification dispatch implementation (email provider + processor automation)** -- Push queue processing and delayed reminder support are implemented; email delivery provider integration and production scheduler automation still need completion.
-2. **Calendar sync hardening** -- Google/Apple sync wiring is implemented; production OAuth credential rollout and Apple pathway confirmation (ICS vs CalDAV) still need completion.
+2. **Calendar sync hardening** -- Apple sync wiring is implemented; production credential rollout and Apple pathway confirmation (ICS vs CalDAV) still need completion.
 
 ### Medium Priority
 
@@ -58,7 +58,7 @@
 
 ## Blockers and Dependencies
 
-- **Vendor secrets required** for: notification dispatch email provider (push via Expo Push API does not require a provider secret), calendar OAuth (Google/Apple credentials depending final Apple path), Sentry, PostHog. Stream Chat (`STREAM_API_KEY`, `STREAM_API_SECRET`) are set in Supabase edge function secrets for messaging.
+- **Vendor secrets required** for: notification dispatch email provider (push via Expo Push API does not require a provider secret), Apple calendar provider credentials (if Apple path evolves beyond current ICS mode), Sentry, PostHog. Stream Chat (`STREAM_API_KEY`, `STREAM_API_SECRET`) are set in Supabase edge function secrets for messaging.
 - **Google Play service account required** for: automated Android `eas submit` uploads. (iOS APNs + App Store Connect API key are configured.)
 - **Staging Supabase project** needed before promoting beyond dev.
 
@@ -102,7 +102,7 @@
 
 ### 2. Harden calendar sync rollout
 
-**Scope:** Complete production credential rollout and provider-path hardening for the implemented calendar sync foundation (`connect_calendar_provider`, per-user event links, Google API sync, Apple ICS-link path).
+**Scope:** Complete production credential rollout and provider-path hardening for the implemented calendar sync foundation (`connect_calendar_provider`, per-user event links, Apple ICS-link path).
 
 **Verification:**
 - Calendar connection persists provider tokens/connection data.
