@@ -76,7 +76,7 @@
 - [ ] No console errors or unhandled promise rejections.
 - [ ] Environment-specific secrets configured (not committed).
 
-### Release Snapshot (2026-02-25)
+### Release Snapshot (2026-02-25, last externally verified)
 
 - [x] Production app identifiers set to `com.zenithlegal.app` in `apps/mobile/app.json`.
 - [x] Apple Developer App ID created (`com.zenithlegal.app`) with Push Notifications enabled.
@@ -149,8 +149,9 @@ python3 -m desloppify fix unused-imports
 python3 -m desloppify review --run-batches --runner codex --parallel --scan-after-import
 ```
 
-### Score Tracking (as of 2026-02-26)
+### Score Tracking (as of 2026-03-02)
 
-- Overall: 91.5/100 (lenient), 86.2/100 (strict)
-- Open findings: 213
-- Key dimensions: File health 100%, Code quality 97.9%, Duplication 86.7%, Test health 23%, Security 100%
+- Overall: 68.1/100 (lenient), 61.3/100 (strict)
+- Objective score: 95.0/100
+- Open findings (in-scope): 232
+- Key dimensions: File health 97.2%, Code quality 98.8%, Duplication 94.1%, Test health 85.7% (strict 11.7%), Security 98.6%

@@ -299,7 +299,7 @@
 
 ## Pending Decisions
 
-- **Notification delivery providers** -- Which push notification service (Expo Push, FCM, APNs) and email provider (Resend, SendGrid) to use for `dispatch_notifications`.
+- **Notification email provider + scheduler automation** -- Push processing via Expo Push API is implemented; remaining decision is which email provider (for example Resend vs SendGrid) and what production scheduler path invokes `dispatch_notifications` processor mode.
 - **Microsoft calendar provider support** -- `calendar_provider` still includes `microsoft`, but user-facing setup and sync behavior are currently implemented for Google + Apple only.
 - **Staging environment setup** -- Dedicated Supabase project and Vercel preview deployment configuration.
 - **Mobile release strategy** -- TestFlight/Play Store rollout cadence, Google Play submit credential ownership, OTA update policy.
@@ -434,22 +434,22 @@
 
 **Consequences:** Admin candidate manager now exposes a Promote to Staff action backed by `staff_update_user_role`; all role promotions from this workflow are audited via `audit_events`.
 
-### [2026-03-01] Sectioned appointment lifecycle with hard-delete request cleanup + cancellable upcoming schedule
+### [2026-03-01] Sectioned appointment lifecycle with hard-delete request cleanup + hard-delete upcoming cancellations
 
 **Decision:** Standardize appointment UIs around section buckets and route destructive actions through a dedicated lifecycle endpoint:
 - Candidate sections: `Overdue Confirmed`, `Outgoing Requests`, `Upcoming Appointments`
 - Staff/admin sections: `Overdue Confirmed`, `Incoming Requests`, `Upcoming Appointments`
 - `ignore_overdue` and `cancel_outgoing_request` hard-delete appointment rows
-- `cancel_upcoming` sets status to `cancelled` (not delete)
+- `cancel_upcoming` hard-deletes upcoming scheduled rows after side-effects (chat + notifications + calendar unsync)
 
 **Options considered:**
 1. Keep one mixed appointment list and rely on status badges -- lower implementation cost, but does not satisfy workflow clarity and action semantics.
 2. Soft-hide outgoing/overdue rows with extra status/flag columns -- preserves rows, but adds filtering complexity and “ghost” lifecycle semantics.
-3. Add explicit lifecycle actions with mixed delete/cancel strategy (chosen) -- highest UX clarity with minimal schema changes and explicit side-effects.
+3. Add explicit lifecycle actions with hard-delete cancellation semantics (chosen) -- highest UX clarity with minimal schema changes and explicit side-effects.
 
-**Rationale:** Product requires explicit sections and action-specific behavior: some records should disappear permanently from both sides (outgoing cancel/overdue ignore), while upcoming cancellation must remain auditable and messageable.
+**Rationale:** Product requires explicit sections and action-specific behavior where cancelled requests and cancelled upcoming appointments disappear from active views on both candidate and staff/admin surfaces.
 
-**Consequences:** Added `manage_appointment_lifecycle` edge function, shared appointment section bucketing helpers in `@zenith/shared`, and sectioned render paths in candidate mobile, staff mobile, and admin web. Cancellation and staff modification flows now emit candidate-channel chat updates with appointment summaries; cancellation also queues `appointment.cancelled` notifications.
+**Consequences:** Added `manage_appointment_lifecycle` edge function, shared appointment section bucketing helpers in `@zenith/shared`, and sectioned render paths in candidate mobile, staff mobile, and admin web. Cancellation and staff modification flows now emit candidate-channel chat updates with appointment summaries; cancellation also queues `appointment.cancelled` notifications before hard-delete completion.
 
 ### [2026-03-01] Adopt start-only appointment input format with hard-delete cancellation semantics
 

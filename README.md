@@ -85,7 +85,9 @@ python3 -m desloppify plan
 - [x] Code quality pass: consolidated duplicates into shared package, centralized mobile theme, extracted custom hooks, refactored edge functions
 - [ ] Vendor credential wiring for end-to-end runtime (requires secrets)
 - [ ] Notification email provider + scheduled dispatch automation (push processor is implemented; automation still pending)
-- [ ] Device-level release signing and EAS submit credentials
+- [x] Device-level release signing baseline (EAS Android keystore + iOS distribution certificate/provisioning profile + iOS APNs/App Store Connect API key)
+- [ ] Android `eas submit` credential setup (Google Play service account)
+- [ ] EAS production runtime env vars configured and validated in store builds
 
 ## Git Workflow
 
