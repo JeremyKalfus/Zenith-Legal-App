@@ -101,6 +101,7 @@ All tables enforce Row Level Security. Staff-only mutations are routed through e
 - Apple setup is a one-tap connect path that stores provider state through `connect_calendar_provider`.
 - Connection status is read from `calendar_connections` (`provider`, `sync_state`, `updated_at`) with user-scoped RLS access.
 - Appointment screens run device-native calendar sync via `expo-calendar` (candidate + staff), creating/updating scheduled events and removing declined/cancelled events from device calendars when provider connection is enabled.
+- Candidate Profile renders settings as collapsible cards (`Change Profile Details`, `Calendar Sync`, `Change Email or Password`) with profile details expanded by default.
 
 ## Shared Package (`@zenith/shared`)
 

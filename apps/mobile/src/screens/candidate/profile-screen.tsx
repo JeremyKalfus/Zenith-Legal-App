@@ -398,7 +398,7 @@ function ChangeEmailAndPasswordCard({ h }: { h: ProfileScreenHook }) {
         accessibilityState={{ expanded }}
         onPress={() => setExpanded((value) => !value)}
       >
-        <Text style={styles.sectionTitle}>Change email and password</Text>
+        <Text style={styles.sectionTitle}>Change Email or Password</Text>
         <Text
           style={[
             styles.dropdownHeaderAction,
@@ -491,45 +491,65 @@ function ChangeEmailAndPasswordCard({ h }: { h: ProfileScreenHook }) {
 }
 
 function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
+  const [expanded, setExpanded] = useState(true);
+
   return (
     <View style={styles.card}>
-      <Text style={styles.sectionTitle}>Profile Details</Text>
+      <Pressable
+        style={styles.dropdownHeader}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        onPress={() => setExpanded((value) => !value)}
+      >
+        <Text style={styles.sectionTitle}>Change Profile Details</Text>
+        <Text
+          style={[
+            styles.dropdownHeaderAction,
+            !expanded ? styles.dropdownHeaderActionCollapsed : null,
+          ]}
+        >
+          ^
+        </Text>
+      </Pressable>
 
-      <Controller
-        control={h.control}
-        name="name"
-        render={({ field }) => (
-          <TextInput
-            placeholder="Full name (optional)"
-            style={styles.input}
-            onChangeText={field.onChange}
-            value={field.value ?? ''}
-          />
-        )}
-      />
-      {h.errors.name ? <Text style={styles.error}>{h.errors.name.message}</Text> : null}
+      {expanded ? (
+        <>
 
-      <Controller
-        control={h.control}
-        name="mobile"
-        render={({ field }) => (
-          <TextInput
-            keyboardType="phone-pad"
-            placeholder="Mobile number (optional)"
-            style={styles.input}
-            onChangeText={(value) => field.onChange(sanitizePhoneInput(value))}
-            onBlur={() => {
-              h.onMobileBlur(field.value ?? '');
-              field.onBlur();
-            }}
-            value={field.value ?? ''}
+          <Controller
+            control={h.control}
+            name="name"
+            render={({ field }) => (
+              <TextInput
+                placeholder="Full name (optional)"
+                style={styles.input}
+                onChangeText={field.onChange}
+                value={field.value ?? ''}
+              />
+            )}
           />
-        )}
-      />
-      {h.errors.mobile ? <Text style={styles.error}>{h.errors.mobile.message}</Text> : null}
-      {!h.errors.mobile ? (
-        <Text style={styles.helper}>US numbers can be entered without +1.</Text>
-      ) : null}
+          {h.errors.name ? <Text style={styles.error}>{h.errors.name.message}</Text> : null}
+
+          <Controller
+            control={h.control}
+            name="mobile"
+            render={({ field }) => (
+              <TextInput
+                keyboardType="phone-pad"
+                placeholder="Mobile number (optional)"
+                style={styles.input}
+                onChangeText={(value) => field.onChange(sanitizePhoneInput(value))}
+                onBlur={() => {
+                  h.onMobileBlur(field.value ?? '');
+                  field.onBlur();
+                }}
+                value={field.value ?? ''}
+              />
+            )}
+          />
+          {h.errors.mobile ? <Text style={styles.error}>{h.errors.mobile.message}</Text> : null}
+          {!h.errors.mobile ? (
+            <Text style={styles.helper}>US numbers can be entered without +1.</Text>
+          ) : null}
 
       <Text style={styles.label}>Preferred Cities (choose 0-3)</Text>
       <View style={[styles.wrap, !h.showAllCities && styles.wrapCollapsed]}>
@@ -670,22 +690,50 @@ function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
         <Text style={styles.error}>{h.errors.acceptedPrivacyPolicy.message}</Text>
       ) : null}
 
+          <Pressable
+            style={interactivePressableStyle({
+              base: styles.primaryButton,
+              disabled: h.busy,
+              disabledStyle: styles.buttonDisabled,
+              hoverStyle: sharedPressableFeedback.hover,
+              focusStyle: sharedPressableFeedback.focus,
+              pressedStyle: sharedPressableFeedback.pressed,
+            })}
+            disabled={h.busy}
+            accessibilityState={{ disabled: h.busy }}
+            onPress={h.onSubmitProfile}
+          >
+            <Text style={styles.primaryButtonText}>{h.busy ? 'Saving...' : 'Save profile'}</Text>
+          </Pressable>
+          {h.message ? <Text style={styles.message}>{h.message}</Text> : null}
+        </>
+      ) : null}
+    </View>
+  );
+}
+
+function CalendarSyncDropdownCard() {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <View style={styles.card}>
       <Pressable
-        style={interactivePressableStyle({
-          base: styles.primaryButton,
-          disabled: h.busy,
-          disabledStyle: styles.buttonDisabled,
-          hoverStyle: sharedPressableFeedback.hover,
-          focusStyle: sharedPressableFeedback.focus,
-          pressedStyle: sharedPressableFeedback.pressed,
-        })}
-        disabled={h.busy}
-        accessibilityState={{ disabled: h.busy }}
-        onPress={h.onSubmitProfile}
+        style={styles.dropdownHeader}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        onPress={() => setExpanded((value) => !value)}
       >
-        <Text style={styles.primaryButtonText}>{h.busy ? 'Saving...' : 'Save profile'}</Text>
+        <Text style={styles.sectionTitle}>Calendar Sync</Text>
+        <Text
+          style={[
+            styles.dropdownHeaderAction,
+            !expanded ? styles.dropdownHeaderActionCollapsed : null,
+          ]}
+        >
+          ^
+        </Text>
       </Pressable>
-      {h.message ? <Text style={styles.message}>{h.message}</Text> : null}
+      {expanded ? <CalendarSyncCard embedded hideHeader /> : null}
     </View>
   );
 }
@@ -792,7 +840,7 @@ export function ProfileScreen() {
       {h.profile ? (
         <>
           <ProfileDetailsCard h={h} />
-          <CalendarSyncCard />
+          <CalendarSyncDropdownCard />
           <ChangeEmailAndPasswordCard h={h} />
         </>
       ) : h.isHydratingProfile ? (

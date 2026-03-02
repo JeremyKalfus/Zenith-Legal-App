@@ -42,7 +42,13 @@ function getProviderStateLabel(connection: CalendarConnectionRow | null): string
   return state.replace(/_/g, ' ');
 }
 
-export function CalendarSyncCard() {
+export function CalendarSyncCard({
+  embedded = false,
+  hideHeader = false,
+}: {
+  embedded?: boolean;
+  hideHeader?: boolean;
+} = {}) {
   const { session } = useAuth();
   const [connection, setConnection] = useState<CalendarConnectionRow | null>(null);
   const [loading, setLoading] = useState(false);
@@ -117,11 +123,13 @@ export function CalendarSyncCard() {
   }, [refreshConnections]);
 
   return (
-    <View style={styles.card}>
-      <Text style={styles.sectionTitle}>Calendar Sync</Text>
-      <Text style={styles.helper}>
-        Connect Apple calendar to sync scheduled appointments and updates.
-      </Text>
+    <View style={embedded ? styles.embeddedContent : styles.card}>
+      {!hideHeader ? <Text style={styles.sectionTitle}>Calendar Sync</Text> : null}
+      {!hideHeader ? (
+        <Text style={styles.helper}>
+          Connect Apple calendar to sync scheduled appointments and updates.
+        </Text>
+      ) : null}
 
       <View style={styles.providerRow}>
         <View style={styles.providerCopy}>
@@ -198,6 +206,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 10,
     padding: 12,
+  },
+  embeddedContent: {
+    gap: 10,
   },
   helper: {
     color: uiColors.textMuted,
