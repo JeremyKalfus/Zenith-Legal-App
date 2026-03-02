@@ -86,8 +86,9 @@ Deno.serve(
         candidateUserId: payload.candidate_id,
         actorUserId,
         text:
-          `Firm assignment created: ${firm.name}. ` +
-          'Current status is "Waiting on your authorization to contact/submit".',
+          `Firm "${firm.name}" has been added to your dashboard. ` +
+          'Current status is "Waiting on your authorization to contact/submit". ' +
+          'Check the dashboard tab to authorize or cancel submission.',
       });
 
       return jsonResponse({

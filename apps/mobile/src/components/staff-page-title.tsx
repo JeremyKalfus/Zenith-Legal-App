@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { uiColors } from '../theme/colors';
 
 const STAFF_HEADER_LOGO = require('../../assets/candidate-header-logo.png');
+const ZENITH_LEGAL_URL = 'https://zenithlegal.com/';
 
 export function StaffPageTitle({
   title,
@@ -16,7 +17,15 @@ export function StaffPageTitle({
       <Text style={styles.title}>{title}</Text>
       <View style={styles.rightGroup}>
         {rightContent}
-        <Image source={STAFF_HEADER_LOGO} resizeMode="contain" style={styles.logo} />
+        <Pressable
+          accessibilityRole="link"
+          onPress={() => {
+            void Linking.openURL(ZENITH_LEGAL_URL);
+          }}
+          style={styles.logoButton}
+        >
+          <Image source={STAFF_HEADER_LOGO} resizeMode="contain" style={styles.logo} />
+        </Pressable>
       </View>
     </View>
   );
@@ -27,6 +36,9 @@ const styles = StyleSheet.create({
     height: 40,
     marginTop: -2,
     width: 40,
+  },
+  logoButton: {
+    borderRadius: 6,
   },
   rightGroup: {
     alignItems: 'center',

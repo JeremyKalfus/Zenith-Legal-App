@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { FIRM_STATUSES } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
 import { CandidatePageTitle } from '../../components/candidate-page-title';
@@ -9,6 +10,21 @@ import type { CandidateFirmAssignment } from '../../types/domain';
 import { uiColors } from '../../theme/colors';
 import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 import { getFirmStatusBadgeColors } from '../../features/firm-status-badge';
+
+const AUTHORIZED_STATUS = 'Authorized, will submit soon' as const;
+const AUTHORIZED_STATUS_ALIAS = 'Authorize, will submit soon' as const;
+
+function normalizeFirmStatus(
+  value: unknown,
+): CandidateFirmAssignment['status_enum'] | null {
+  if (value === AUTHORIZED_STATUS_ALIAS) {
+    return AUTHORIZED_STATUS;
+  }
+  if (typeof value === 'string' && FIRM_STATUSES.includes(value as (typeof FIRM_STATUSES)[number])) {
+    return value as CandidateFirmAssignment['status_enum'];
+  }
+  return null;
+}
 
 async function extractFunctionInvokeErrorMessage(error: unknown, data: unknown): Promise<string> {
   if (typeof data === 'object' && data && 'error' in data) {
@@ -50,7 +66,7 @@ async function extractFunctionInvokeErrorMessage(error: unknown, data: unknown):
 }
 
 function isTrackedFirmStatus(value: unknown): value is CandidateFirmAssignment['status_enum'] {
-  return typeof value === 'string' && FIRM_STATUSES.includes(value as (typeof FIRM_STATUSES)[number]);
+  return normalizeFirmStatus(value) !== null;
 }
 
 const statusRank = Object.fromEntries(
@@ -85,7 +101,7 @@ export function DashboardScreen({
 
     const normalized: CandidateFirmAssignment[] = ((data ?? []) as Record<string, unknown>[])
       .flatMap((row) => {
-        const status = row.status_enum;
+        const status = normalizeFirmStatus(row.status_enum);
         if (!isTrackedFirmStatus(status)) {
           return [];
         }
@@ -114,6 +130,40 @@ export function DashboardScreen({
 
   useEffect(() => {
     loadAssignments();
+  }, [loadAssignments]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel(`candidate-firm-assignments-${session?.user.id ?? 'anonymous'}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'candidate_firm_assignments' },
+        () => {
+          void loadAssignments();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [loadAssignments, session?.user.id]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadAssignments();
+      return undefined;
+    }, [loadAssignments]),
+  );
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      void loadAssignments();
+    }, 15000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
   }, [loadAssignments]);
 
   const handleAuthorizationDecision = useCallback(
@@ -213,8 +263,11 @@ export function DashboardScreen({
                     {assignment.status_enum}
                   </Text>
                 </View>
+                <Text style={styles.cardSubtle}>
+                  Updated {new Date(assignment.status_updated_at).toLocaleString()}
+                </Text>
                 {assignment.status_enum === 'Waiting on your authorization to contact/submit' ||
-                assignment.status_enum === 'Authorized, will submit soon' ? (
+                assignment.status_enum === AUTHORIZED_STATUS ? (
                   <View style={styles.authRow}>
                     {assignment.status_enum === 'Waiting on your authorization to contact/submit' ? (
                       <Pressable
@@ -257,7 +310,7 @@ export function DashboardScreen({
                       <Text style={styles.declineText}>
                         {busyAssignmentId === assignment.id
                           ? 'Saving...'
-                          : assignment.status_enum === 'Authorized, will submit soon'
+                          : assignment.status_enum === AUTHORIZED_STATUS
                             ? 'Cancel'
                             : 'Decline'}
                       </Text>
@@ -318,6 +371,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     padding: 14,
+  },
+  cardSubtle: {
+    color: uiColors.textMuted,
+    marginTop: 8,
   },
   declineButton: {
     backgroundColor: uiColors.errorBackground,

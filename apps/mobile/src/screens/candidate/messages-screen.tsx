@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
-import { ActivityIndicator, Platform, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  View,
+  type ImageProps,
+} from 'react-native';
 import { uiColors } from '../../theme/colors';
 import {
   Channel,
@@ -18,9 +27,45 @@ import { useResolvedCandidateChatChannel } from '../../lib/use-resolved-candidat
 import { chatThemeOverrides } from '../../lib/chat-theme-overrides';
 import { hasChatAvatarImage } from '@zenith/shared';
 
+const ZENITH_LEGAL_CHAT_AVATAR_URI = Image.resolveAssetSource(
+  require('../../../assets/zenith-legal-logo.png'),
+).uri;
+
+function ZenithLogoImage(props: ImageProps) {
+  return (
+    <Image
+      {...props}
+      resizeMode="contain"
+      style={[props.style, styles.zenithLogoAvatarImage]}
+    />
+  );
+}
+
 function MessageAvatar(props: MessageAvatarProps) {
-  if (!hasChatAvatarImage(props.message?.user?.image)) {
+  const messageUserId = typeof props.message?.user?.id === 'string' ? props.message.user.id : null;
+  const isCurrentUser = messageUserId === getChatClient().userID;
+
+  if (isCurrentUser) {
     return null;
+  }
+
+  if (!hasChatAvatarImage(props.message?.user?.image)) {
+    const messageWithZenithLogo = {
+      ...(props.message ?? {}),
+      user: {
+        ...(props.message?.user ?? {}),
+        image: ZENITH_LEGAL_CHAT_AVATAR_URI,
+        name: props.message?.user?.name ?? 'Zenith Legal',
+      },
+    } as typeof props.message;
+
+    return (
+      <StreamMessageAvatar
+        {...props}
+        ImageComponent={ZenithLogoImage}
+        message={messageWithZenithLogo}
+      />
+    );
   }
 
   return <StreamMessageAvatar {...props} />;
@@ -188,5 +233,9 @@ const styles = StyleSheet.create({
   safeArea: {
     backgroundColor: uiColors.background,
     flex: 1,
+  },
+  zenithLogoAvatarImage: {
+    backgroundColor: '#FFFFFF',
+    padding: 3,
   },
 });

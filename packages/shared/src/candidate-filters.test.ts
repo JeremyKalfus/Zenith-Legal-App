@@ -221,7 +221,7 @@ describe('filterStaffCandidates', () => {
       query: 'alice',
       assignedRecruiter: 'any',
       currentStatus: 'any',
-      practice: 'any',
+      practices: [],
       assignedFirmIds: [],
       preferredCities: [],
       jdYears: [],
@@ -235,7 +235,7 @@ describe('filterStaffCandidates', () => {
       query: '',
       assignedRecruiter: 'none',
       currentStatus: 'any',
-      practice: 'any',
+      practices: [],
       assignedFirmIds: [],
       preferredCities: [],
       jdYears: [],
@@ -249,7 +249,7 @@ describe('filterStaffCandidates', () => {
       query: '',
       assignedRecruiter: 'r2',
       currentStatus: 'any',
-      practice: 'any',
+      practices: [],
       assignedFirmIds: [],
       preferredCities: [],
       jdYears: [],
@@ -263,7 +263,7 @@ describe('filterStaffCandidates', () => {
       query: '',
       assignedRecruiter: 'any',
       currentStatus: 'Interview Stage',
-      practice: 'any',
+      practices: [],
       assignedFirmIds: [],
       preferredCities: [],
       jdYears: [],
@@ -272,12 +272,12 @@ describe('filterStaffCandidates', () => {
     expect(result.map((candidate) => candidate.id)).toEqual(['2']);
   });
 
-  it('matches single-select practice', () => {
+  it('matches selected practices', () => {
     const result = filterStaffCandidates(candidates, {
       query: '',
       assignedRecruiter: 'any',
       currentStatus: 'any',
-      practice: 'Tax & Benefits',
+      practices: ['Tax & Benefits'],
       assignedFirmIds: [],
       preferredCities: [],
       jdYears: [],
@@ -286,12 +286,26 @@ describe('filterStaffCandidates', () => {
     expect(result.map((candidate) => candidate.id)).toEqual(['2', '3']);
   });
 
+  it('uses OR semantics for multiple selected practices', () => {
+    const result = filterStaffCandidates(candidates, {
+      query: '',
+      assignedRecruiter: 'any',
+      currentStatus: 'any',
+      practices: ['Litigation', 'Tax & Benefits'],
+      assignedFirmIds: [],
+      preferredCities: [],
+      jdYears: [],
+    });
+
+    expect(result.map((candidate) => candidate.id)).toEqual(['1', '2', '3']);
+  });
+
   it('uses OR semantics for assigned firms', () => {
     const result = filterStaffCandidates(candidates, {
       query: '',
       assignedRecruiter: 'any',
       currentStatus: 'any',
-      practice: 'any',
+      practices: [],
       assignedFirmIds: ['f1', 'f3'],
       preferredCities: [],
       jdYears: [],
@@ -305,7 +319,7 @@ describe('filterStaffCandidates', () => {
       query: '',
       assignedRecruiter: 'any',
       currentStatus: 'any',
-      practice: 'any',
+      practices: [],
       assignedFirmIds: [],
       preferredCities: ['NYC', 'DC'],
       jdYears: [],
@@ -319,7 +333,7 @@ describe('filterStaffCandidates', () => {
       query: '',
       assignedRecruiter: 'any',
       currentStatus: 'any',
-      practice: 'any',
+      practices: [],
       assignedFirmIds: [],
       preferredCities: [],
       jdYears: ['2020', '2022'],
@@ -333,7 +347,7 @@ describe('filterStaffCandidates', () => {
       query: 'carol',
       assignedRecruiter: 'r2',
       currentStatus: 'any',
-      practice: 'Tax & Benefits',
+      practices: ['Tax & Benefits'],
       assignedFirmIds: [],
       preferredCities: ['DC'],
       jdYears: [],

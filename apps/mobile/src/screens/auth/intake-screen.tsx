@@ -134,7 +134,7 @@ export function IntakeScreen({
     : 'Select JD degree date';
   const selectedJdDegreeDateValue = toJdDegreeLocalDate(selectedJdDegreeDate) ?? new Date();
   const handleJdDateChange = (event: DateTimePickerEvent, nextDate?: Date) => {
-    if (event.type !== 'set' || !nextDate) {
+    if (event.type === 'dismissed' || !nextDate) {
       if (Platform.OS !== 'ios') {
         setShowJdDatePicker(false);
       }

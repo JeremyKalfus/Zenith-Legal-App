@@ -53,7 +53,6 @@ export function StaffCandidatesStackNavigator() {
         name="StaffCandidateFilters"
         options={{
           title: 'Filter Search',
-          headerBackTitleVisible: false,
           headerBackButtonDisplayMode: 'minimal',
         }}
         component={StaffCandidateFiltersScreen}

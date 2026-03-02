@@ -133,3 +133,23 @@ Append a new entry immediately after incidents and after post-fix verification i
 - **Fix applied:** Updated chat bootstrap and shared Stream messaging upserts to send `image: ''` for non-Zenith users (candidate + non-brand staff), and gated UI avatar rendering on a real image URL.
 - **Prevention rule:** When deprecating/removing a remote profile field, write an explicit clearing value instead of omitting the field in upsert payloads.
 - **Follow-up checks:** `npm run lint`, `npm run typecheck`, `npm run test`, and `python3 -m desloppify scan --path .` completed after the change.
+
+### 2026-03-01 — JD Date Sync Needed Profile-Table Realtime Listeners
+
+- **Date:** 2026-03-01
+- **Context:** Candidate profile JD degree date updates needed to propagate to staff/admin candidate lists and JD-year filter options.
+- **Error:** Candidate list refresh listeners only watched `candidate_firm_assignments` (or were absent), so JD date and preference-based filter data could remain stale until manual reload/poll.
+- **Why it happened:** Realtime subscriptions did not include source tables for JD date and chip filters (`users_profile`, `candidate_preferences`).
+- **Fix applied:** Added realtime `postgres_changes` listeners in admin candidate manager and mobile staff candidates list for `users_profile` and `candidate_preferences` (plus recruiter assignment table on mobile), triggering list reload via existing guarded loaders.
+- **Prevention rule:** Any UI surface deriving filter options from profile/preference fields must subscribe to those source tables, not only assignment/status tables.
+- **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after the sync listener updates.
+
+### 2026-03-01 — JD Date Picker Was Dropping Valid Non-`set` Events
+
+- **Date:** 2026-03-01
+- **Context:** Candidate JD date selection appeared to do nothing and did not persist to profile/admin/filter surfaces.
+- **Error:** JD date handlers required `event.type === 'set'`, which can ignore valid selection events on non-native picker implementations.
+- **Why it happened:** Date-picker event handling was too strict and tied to one event-type string instead of accepting any non-dismiss event with a valid date payload.
+- **Fix applied:** Updated intake/profile JD handlers to reject only `dismissed` events and accept any event carrying `nextDate`, then persist `jdDegreeDate`.
+- **Prevention rule:** For cross-platform picker handlers, gate by payload validity (`nextDate`) and explicit dismiss states, not a single success event literal.
+- **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after the fix.

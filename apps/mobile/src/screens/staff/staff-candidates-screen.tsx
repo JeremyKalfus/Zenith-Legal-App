@@ -20,6 +20,7 @@ import {
   listRecruiterUsers,
   listStaffCandidates,
 } from '../../features/staff-candidate-management';
+import { supabase } from '../../lib/supabase';
 import type { StaffCandidatesStackParamList } from '../../navigation/staff-candidates-stack';
 import {
   DEFAULT_STAFF_CANDIDATE_FILTERS,
@@ -35,7 +36,7 @@ function countActiveFilters(filters: StaffCandidateFilters): number {
   if (filters.currentStatus !== 'any') {
     count += 1;
   }
-  if (filters.practice !== 'any') {
+  if (filters.practices.length > 0) {
     count += 1;
   }
   if (filters.assignedFirmIds.length > 0) {
@@ -114,6 +115,44 @@ export function StaffCandidatesScreen({
     void loadCandidates();
   }, [loadCandidates]);
 
+  useEffect(() => {
+    const channel = supabase
+      .channel('staff-candidates-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'candidate_firm_assignments' },
+        () => {
+          void loadCandidates();
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'users_profile' },
+        () => {
+          void loadCandidates();
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'candidate_preferences' },
+        () => {
+          void loadCandidates();
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'candidate_recruiter_assignments' },
+        () => {
+          void loadCandidates();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [loadCandidates]);
+
   useFocusEffect(
     useCallback(() => {
       const interactionTask = InteractionManager.runAfterInteractions(() => {
@@ -154,7 +193,7 @@ export function StaffCandidatesScreen({
       query,
       assignedRecruiter: appliedFilters.assignedRecruiter,
       currentStatus: appliedFilters.currentStatus,
-      practice: appliedFilters.practice,
+      practices: appliedFilters.practices,
       assignedFirmIds: appliedFilters.assignedFirmIds,
       preferredCities: appliedFilters.preferredCities,
       jdYears: appliedFilters.jdYears,

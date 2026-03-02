@@ -172,7 +172,7 @@ function useProfileScreen() {
   const selectedJdDegreeDateValue = toJdDegreeLocalDate(selectedJdDegreeDate) ?? new Date();
   const onJdDateChange = useCallback(
     (event: DateTimePickerEvent, nextDate?: Date) => {
-      if (event.type !== 'set' || !nextDate) {
+      if (event.type === 'dismissed' || !nextDate) {
         if (Platform.OS !== 'ios') {
           setShowJdDatePicker(false);
         }

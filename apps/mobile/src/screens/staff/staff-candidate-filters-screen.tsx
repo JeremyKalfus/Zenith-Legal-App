@@ -18,7 +18,7 @@ import type { StaffCandidatesStackParamList } from '../../navigation/staff-candi
 export type StaffCandidateFilters = {
   assignedRecruiter: 'any' | 'none' | string;
   currentStatus: 'any' | FirmStatus;
-  practice: 'any' | PracticeArea;
+  practices: PracticeArea[];
   assignedFirmIds: string[];
   preferredCities: CityOption[];
   jdYears: string[];
@@ -27,7 +27,7 @@ export type StaffCandidateFilters = {
 export const DEFAULT_STAFF_CANDIDATE_FILTERS: StaffCandidateFilters = {
   assignedRecruiter: 'any',
   currentStatus: 'any',
-  practice: 'any',
+  practices: [],
   assignedFirmIds: [],
   preferredCities: [],
   jdYears: [],
@@ -44,7 +44,7 @@ type Props = NativeStackScreenProps<StaffCandidatesStackParamList, 'StaffCandida
 type ModalMode =
   | 'assignedRecruiter'
   | 'currentStatus'
-  | 'practice'
+  | 'practices'
   | 'assignedFirmIds'
   | 'preferredCities'
   | 'jdYears'
@@ -80,6 +80,7 @@ function ToggleRow({
 export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
   const [draftFilters, setDraftFilters] = useState<StaffCandidateFilters>(route.params.initialFilters);
   const [modalMode, setModalMode] = useState<ModalMode>(null);
+  const [assignedFirmQuery, setAssignedFirmQuery] = useState('');
   const [jdYearInput, setJdYearInput] = useState('');
   const [jdYearRangeStart, setJdYearRangeStart] = useState('');
   const [jdYearRangeEnd, setJdYearRangeEnd] = useState('');
@@ -101,7 +102,7 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
       : recruiterLabelById.get(draftFilters.assignedRecruiter) ?? 'Any';
 
   const currentStatusLabel = draftFilters.currentStatus === 'any' ? 'Any' : draftFilters.currentStatus;
-  const practiceLabel = draftFilters.practice === 'any' ? 'Any' : draftFilters.practice;
+  const practicesLabel = formatMultiValue(draftFilters.practices);
   const assignedFirmsLabel = formatMultiValue(
     draftFilters.assignedFirmIds
       .map((firmId) => firmLabelById.get(firmId))
@@ -109,6 +110,16 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
   );
   const preferredCitiesLabel = formatMultiValue(draftFilters.preferredCities);
   const jdYearsLabel = formatMultiValue(draftFilters.jdYears);
+  const filteredAssignedFirmOptions = useMemo(() => {
+    const normalizedQuery = assignedFirmQuery.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return route.params.options.assignedFirmOptions;
+    }
+
+    return route.params.options.assignedFirmOptions.filter((option) =>
+      option.label.toLowerCase().includes(normalizedQuery),
+    );
+  }, [assignedFirmQuery, route.params.options.assignedFirmOptions]);
 
   function appendJdYears(yearsToAdd: readonly string[]): void {
     setDraftFilters((current) => {
@@ -188,15 +199,21 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
           </View>
         </Pressable>
 
-        <Pressable style={styles.filterField} onPress={() => setModalMode('practice')}>
-          <Text style={styles.filterLabel}>Practice</Text>
+        <Pressable style={styles.filterField} onPress={() => setModalMode('practices')}>
+          <Text style={styles.filterLabel}>Practices</Text>
           <View style={styles.filterValueRow}>
-            <Text style={styles.filterValue}>{practiceLabel}</Text>
+            <Text style={styles.filterValue}>{practicesLabel}</Text>
             <Text style={styles.chevron}>⌄</Text>
           </View>
         </Pressable>
 
-        <Pressable style={styles.filterField} onPress={() => setModalMode('assignedFirmIds')}>
+        <Pressable
+          style={styles.filterField}
+          onPress={() => {
+            setAssignedFirmQuery('');
+            setModalMode('assignedFirmIds');
+          }}
+        >
           <Text style={styles.filterLabel}>Assigned firms</Text>
           <View style={styles.filterValueRow}>
             <Text style={styles.filterValue}>{assignedFirmsLabel}</Text>
@@ -315,24 +332,27 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
                 </>
               ) : null}
 
-              {modalMode === 'practice' ? (
+              {modalMode === 'practices' ? (
                 <>
                   <ToggleRow
                     label="Any"
-                    selected={draftFilters.practice === 'any'}
+                    selected={draftFilters.practices.length === 0}
                     onPress={() => {
-                      setDraftFilters((current) => ({ ...current, practice: 'any' }));
-                      setModalMode(null);
+                      setDraftFilters((current) => ({ ...current, practices: [] }));
                     }}
                   />
                   {route.params.options.practiceOptions.map((practice) => (
                     <ToggleRow
                       key={practice}
                       label={practice}
-                      selected={draftFilters.practice === practice}
+                      selected={draftFilters.practices.includes(practice)}
                       onPress={() => {
-                        setDraftFilters((current) => ({ ...current, practice }));
-                        setModalMode(null);
+                        setDraftFilters((current) => ({
+                          ...current,
+                          practices: current.practices.includes(practice)
+                            ? current.practices.filter((value) => value !== practice)
+                            : [...current.practices, practice],
+                        }));
                       }}
                     />
                   ))}
@@ -341,6 +361,13 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
 
               {modalMode === 'assignedFirmIds' ? (
                 <>
+                  <TextInput
+                    style={styles.modalSearchInput}
+                    placeholder="Search firms"
+                    placeholderTextColor={uiColors.textPlaceholder}
+                    value={assignedFirmQuery}
+                    onChangeText={setAssignedFirmQuery}
+                  />
                   <ToggleRow
                     label="Any"
                     selected={draftFilters.assignedFirmIds.length === 0}
@@ -348,7 +375,10 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
                       setDraftFilters((current) => ({ ...current, assignedFirmIds: [] }));
                     }}
                   />
-                  {route.params.options.assignedFirmOptions.map((firm) => {
+                  {filteredAssignedFirmOptions.length === 0 ? (
+                    <Text style={styles.emptySelectionText}>No matching firms.</Text>
+                  ) : null}
+                  {filteredAssignedFirmOptions.map((firm) => {
                     const selected = draftFilters.assignedFirmIds.includes(firm.id);
                     return (
                       <ToggleRow
@@ -489,7 +519,7 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
               <Pressable style={styles.modalCancelButton} onPress={() => setModalMode(null)}>
                 <Text style={styles.modalCancelButtonText}>Close</Text>
               </Pressable>
-              {modalMode === 'assignedFirmIds' || modalMode === 'preferredCities' || modalMode === 'jdYears' ? (
+              {modalMode === 'practices' || modalMode === 'assignedFirmIds' || modalMode === 'preferredCities' || modalMode === 'jdYears' ? (
                 <Pressable style={styles.modalDoneButton} onPress={() => setModalMode(null)}>
                   <Text style={styles.modalDoneButtonText}>Done</Text>
                 </Pressable>
@@ -731,12 +761,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   panel: {
-    backgroundColor: uiColors.backgroundAlt,
-    borderColor: uiColors.borderStrong,
-    borderRadius: 20,
-    borderWidth: 1,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
     gap: 12,
-    padding: 14,
+    padding: 0,
+  },
+  modalSearchInput: {
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
+    borderRadius: 10,
+    borderWidth: 1,
+    color: uiColors.textPrimary,
+    fontSize: 16,
+    minHeight: 44,
+    paddingHorizontal: 12,
   },
   subtitle: {
     color: uiColors.textSecondary,

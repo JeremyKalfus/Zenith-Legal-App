@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
 import { uiColors } from '../../theme/colors';
 import {
   Avatar as StreamAvatar,
@@ -20,9 +20,33 @@ import {
 } from '@zenith/shared';
 import { useResolvedCandidateChatChannel } from '../../lib/use-resolved-candidate-chat-channel';
 
+const ZENITH_LEGAL_CHAT_AVATAR_URI = Image.resolveAssetSource(
+  require('../../../assets/zenith-legal-logo.png'),
+).uri;
+
 function Avatar(props: AvatarProps) {
-  if (!hasChatAvatarImage(props.image)) {
+  const isCurrentUser = props.user?.id === getChatClient().userID;
+  if (isCurrentUser) {
     return null;
+  }
+
+  if (!hasChatAvatarImage(props.image)) {
+    return (
+      <div
+        className="str-chat__avatar str-chat__message-sender-avatar"
+        data-testid="avatar"
+        role="button"
+        title={props.name ?? 'Zenith Legal'}
+      >
+        <img
+          alt={props.name ?? 'Zenith Legal'}
+          className="str-chat__avatar-image"
+          data-testid="avatar-img"
+          src={ZENITH_LEGAL_CHAT_AVATAR_URI}
+          style={{ backgroundColor: '#FFFFFF', objectFit: 'contain', padding: 3 }}
+        />
+      </div>
+    );
   }
 
   return <StreamAvatar {...props} />;

@@ -6,6 +6,7 @@ import {
   InteractionManager,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -38,10 +39,7 @@ type StatusModalState = {
   selectedStatus: FirmStatus;
 } | null;
 
-const USER_ONLY_AUTHORIZED_STATUS = 'Authorized, will submit soon' as const;
-const STAFF_SETTABLE_FIRM_STATUSES = FIRM_STATUSES.filter(
-  (status) => status !== USER_ONLY_AUTHORIZED_STATUS,
-) as FirmStatus[];
+const STAFF_SETTABLE_FIRM_STATUSES = FIRM_STATUSES as readonly FirmStatus[];
 const BANNER_OVERRIDES_UNAVAILABLE_MESSAGE =
   'Candidate-specific banner overrides are unavailable in this environment. Apply the latest Supabase migration and refresh schema cache.';
 
@@ -101,6 +99,7 @@ export function StaffCandidateFirmsScreen({
   const [message, setMessage] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [statusModal, setStatusModal] = useState<StatusModalState>(null);
+  const [showAssignFirmModal, setShowAssignFirmModal] = useState(false);
   const loadInFlightRef = useRef(false);
 
   const loadData = useCallback(async () => {
@@ -185,6 +184,28 @@ export function StaffCandidateFirmsScreen({
     void loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    const channel = supabase
+      .channel(`staff-candidate-firms-${candidate.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'candidate_firm_assignments',
+          filter: `candidate_user_id=eq.${candidate.id}`,
+        },
+        () => {
+          void loadData();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [candidate.id, loadData]);
+
   useFocusEffect(
     useCallback(() => {
       const interactionTask = InteractionManager.runAfterInteractions(() => {
@@ -206,10 +227,10 @@ export function StaffCandidateFirmsScreen({
     [assignments],
   );
 
-  const filteredAssignableFirms = useMemo(() => {
+  const filteredFirms = useMemo(() => {
     const query = firmQuery.trim().toLowerCase();
     return firms.filter((firm) => {
-      if (!firm.active || assignedFirmIds.has(firm.id)) {
+      if (!firm.active) {
         return false;
       }
       if (!query) {
@@ -217,7 +238,7 @@ export function StaffCandidateFirmsScreen({
       }
       return firm.name.toLowerCase().includes(query);
     });
-  }, [assignedFirmIds, firmQuery, firms]);
+  }, [firmQuery, firms]);
 
   const assignedRecruiterLabelById = useMemo(
     () =>
@@ -264,6 +285,7 @@ export function StaffCandidateFirmsScreen({
       setMessage(null);
       try {
         await assignFirmToCandidate(candidate.id, firm.id);
+        setShowAssignFirmModal(false);
         setMessage(`Assigned ${firm.name}.`);
         await loadData();
       } catch (error) {
@@ -277,10 +299,6 @@ export function StaffCandidateFirmsScreen({
 
   const handleSaveStatus = useCallback(async () => {
     if (!statusModal) {
-      return;
-    }
-    if (statusModal.selectedStatus === USER_ONLY_AUTHORIZED_STATUS) {
-      setMessage('Only candidates can set "Authorized, will submit soon". Choose the next recruiter status.');
       return;
     }
 
@@ -612,40 +630,82 @@ export function StaffCandidateFirmsScreen({
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Assign Active Firms</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="Filter firms"
-          placeholderTextColor={uiColors.textPlaceholder}
-          value={firmQuery}
-          onChangeText={setFirmQuery}
-        />
-        {filteredAssignableFirms.length === 0 ? (
-          <Text style={styles.emptyText}>No matching assignable firms.</Text>
-        ) : (
-          filteredAssignableFirms.slice(0, 20).map((firm) => (
-            <View key={firm.id} style={styles.assignRow}>
-              <Text style={styles.assignFirmName}>{firm.name}</Text>
-              <Pressable
-                style={interactivePressableStyle({
-                  base: styles.primaryButtonSmall,
-                  disabled: busyAction !== null,
-                  disabledStyle: styles.buttonDisabled,
-                  hoverStyle: sharedPressableFeedback.hover,
-                  focusStyle: sharedPressableFeedback.focus,
-                  pressedStyle: sharedPressableFeedback.pressed,
-                })}
-                disabled={busyAction !== null}
-                onPress={() => void handleAssign(firm)}
-              >
-                <Text style={styles.primaryButtonSmallText}>
-                  {busyAction === `assign:${firm.id}` ? 'Assigning...' : 'Assign'}
-                </Text>
-              </Pressable>
-            </View>
-          ))
-        )}
+        <Pressable
+          style={interactivePressableStyle({
+            base: styles.primaryButton,
+            disabled: busyAction !== null,
+            disabledStyle: styles.buttonDisabled,
+            hoverStyle: sharedPressableFeedback.hover,
+            focusStyle: sharedPressableFeedback.focus,
+            pressedStyle: sharedPressableFeedback.pressed,
+          })}
+          disabled={busyAction !== null}
+          onPress={() => setShowAssignFirmModal(true)}
+        >
+          <Text style={styles.primaryButtonText}>Assign Firm</Text>
+        </Pressable>
       </View>
+
+      <Modal
+        visible={showAssignFirmModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAssignFirmModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.assignModalHeader}>
+              <Pressable
+                style={styles.modalBackButton}
+                onPress={() => setShowAssignFirmModal(false)}
+              >
+                <Text style={styles.modalBackButtonText}>{'< Back'}</Text>
+              </Pressable>
+              <Text style={styles.modalTitle}>Assign Firm</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Search firms"
+                placeholderTextColor={uiColors.textPlaceholder}
+                value={firmQuery}
+                onChangeText={setFirmQuery}
+              />
+            </View>
+            <ScrollView style={styles.assignListScroll} contentContainerStyle={styles.assignListContent}>
+              {filteredFirms.length === 0 ? (
+                <Text style={styles.emptyText}>No matching firms.</Text>
+              ) : (
+                filteredFirms.map((firm) => {
+                  const isAssigned = assignedFirmIds.has(firm.id);
+                  const isAssigning = busyAction === `assign:${firm.id}`;
+                  return (
+                    <View key={firm.id} style={styles.assignRow}>
+                      <Text style={styles.assignFirmName}>{firm.name}</Text>
+                      <Pressable
+                        style={interactivePressableStyle({
+                          base: isAssigned ? styles.secondaryButtonSmall : styles.primaryButtonSmall,
+                          disabled: busyAction !== null || isAssigned,
+                          disabledStyle: styles.buttonDisabled,
+                          hoverStyle: sharedPressableFeedback.hover,
+                          focusStyle: sharedPressableFeedback.focus,
+                          pressedStyle: sharedPressableFeedback.pressed,
+                        })}
+                        disabled={busyAction !== null || isAssigned}
+                        onPress={() => void handleAssign(firm)}
+                      >
+                        <Text
+                          style={isAssigned ? styles.secondaryButtonSmallText : styles.primaryButtonSmallText}
+                        >
+                          {isAssigned ? 'Assigned' : isAssigning ? 'Assigning...' : 'Assign'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  );
+                })
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={showAssignedRecruiterModal}
@@ -712,11 +772,6 @@ export function StaffCandidateFirmsScreen({
           <View style={styles.modalCard}>
             <Text style={styles.modalTitle}>Update Status</Text>
             <Text style={styles.modalSubtitle}>{statusModal?.firmName ?? ''}</Text>
-            {statusModal?.selectedStatus === USER_ONLY_AUTHORIZED_STATUS ? (
-              <Text style={styles.modalHelper}>
-                Candidate-only status. Select a recruiter status to continue.
-              </Text>
-            ) : null}
             <View style={styles.statusOptionList}>
               {STAFF_SETTABLE_FIRM_STATUSES.map((status) => {
                 const selected = statusModal?.selectedStatus === status;
@@ -755,7 +810,6 @@ export function StaffCandidateFirmsScreen({
                   base: styles.primaryButtonModal,
                   disabled:
                     !statusModal ||
-                    statusModal.selectedStatus === USER_ONLY_AUTHORIZED_STATUS ||
                     !!busyAction?.startsWith('status:'),
                   hoverStyle: sharedPressableFeedback.hover,
                   focusStyle: sharedPressableFeedback.focus,
@@ -763,7 +817,6 @@ export function StaffCandidateFirmsScreen({
                 })}
                 disabled={
                   !statusModal ||
-                  statusModal.selectedStatus === USER_ONLY_AUTHORIZED_STATUS ||
                   !!busyAction?.startsWith('status:')
                 }
                 onPress={() => void handleSaveStatus()}
@@ -781,6 +834,10 @@ export function StaffCandidateFirmsScreen({
 }
 
 const styles = StyleSheet.create({
+  assignModalHeader: {
+    gap: 10,
+    marginBottom: 8,
+  },
   assignFirmName: {
     color: uiColors.textPrimary,
     flex: 1,
@@ -800,6 +857,14 @@ const styles = StyleSheet.create({
     gap: 10,
     justifyContent: 'space-between',
     padding: 10,
+  },
+  assignListContent: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  assignListScroll: {
+    marginTop: 12,
+    maxHeight: 380,
   },
   body: {
     color: uiColors.textSecondary,
@@ -895,6 +960,20 @@ const styles = StyleSheet.create({
     padding: 16,
     width: '100%',
   },
+  modalBackButton: {
+    alignSelf: 'flex-start',
+    borderColor: uiColors.borderStrong,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  modalBackButtonText: {
+    color: uiColors.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
   modalHelper: {
     color: uiColors.warning,
     fontSize: 12,
@@ -917,6 +996,16 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   primaryButtonModalText: {
+    color: uiColors.primaryText,
+    fontWeight: '700',
+  },
+  primaryButton: {
+    alignItems: 'center',
+    backgroundColor: uiColors.primary,
+    borderRadius: 10,
+    padding: 12,
+  },
+  primaryButtonText: {
     color: uiColors.primaryText,
     fontWeight: '700',
   },

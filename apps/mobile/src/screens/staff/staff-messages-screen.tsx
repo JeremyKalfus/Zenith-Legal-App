@@ -329,11 +329,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   list: {
-    backgroundColor: uiColors.surface,
-    borderColor: uiColors.border,
-    borderRadius: 16,
-    borderWidth: 1,
-    overflow: 'hidden',
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    borderWidth: 0,
+    overflow: 'visible',
   },
   subtle: {
     color: uiColors.textMuted,

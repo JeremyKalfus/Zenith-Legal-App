@@ -55,9 +55,12 @@ type FunctionSuccess<T> = {
 type CandidateFirmAssignmentLookupRow = {
   candidate_user_id: string;
   firm_id: string;
-  status_enum: FirmStatus;
+  status_enum: FirmStatus | 'Authorize, will submit soon';
   firms: { id: string; name: string } | { id: string; name: string }[] | null;
 };
+
+const AUTHORIZED_STATUS = 'Authorized, will submit soon' as const;
+const AUTHORIZED_STATUS_ALIAS = 'Authorize, will submit soon' as const;
 
 function normalizeFirmRelation(
   relation:
@@ -72,8 +75,14 @@ function normalizeFirmRelation(
   return Array.isArray(relation) ? (relation[0] ?? null) : relation;
 }
 
-function isTrackedFirmStatus(value: unknown): value is FirmStatus {
-  return typeof value === 'string' && FIRM_STATUSES.includes(value as FirmStatus);
+function normalizeFirmStatus(value: unknown): FirmStatus | null {
+  if (value === AUTHORIZED_STATUS_ALIAS) {
+    return AUTHORIZED_STATUS;
+  }
+  if (typeof value === 'string' && FIRM_STATUSES.includes(value as FirmStatus)) {
+    return value as FirmStatus;
+  }
+  return null;
 }
 
 function isMissingCandidateRecruiterAssignmentsTableError(
@@ -186,7 +195,8 @@ export async function listStaffCandidates(): Promise<StaffCandidateListItem[]> {
     { statuses: Set<FirmStatus>; firmIds: Set<string>; firmNames: Set<string> }
   >();
   for (const row of (assignmentLookupResult.data ?? []) as CandidateFirmAssignmentLookupRow[]) {
-    if (!isTrackedFirmStatus(row.status_enum)) {
+    const normalizedStatus = normalizeFirmStatus(row.status_enum);
+    if (!normalizedStatus) {
       continue;
     }
     const candidateId = row.candidate_user_id;
@@ -196,7 +206,7 @@ export async function listStaffCandidates(): Promise<StaffCandidateListItem[]> {
       firmNames: new Set<string>(),
     };
 
-    existing.statuses.add(row.status_enum);
+    existing.statuses.add(normalizedStatus);
     existing.firmIds.add(row.firm_id);
     const firm = normalizeFirmRelation(row.firms);
     if (firm?.name) {
@@ -323,7 +333,8 @@ export async function listCandidateAssignments(
   return ((data ?? []) as Record<string, unknown>[])
     .flatMap((row) => {
       const status = row.status_enum;
-      if (!isTrackedFirmStatus(status)) {
+      const normalizedStatus = normalizeFirmStatus(status);
+      if (!normalizedStatus) {
         return [];
       }
 
@@ -334,7 +345,7 @@ export async function listCandidateAssignments(
         id: String(row.id),
         candidate_user_id: String(row.candidate_user_id),
         firm_id: String(row.firm_id),
-        status_enum: status,
+        status_enum: normalizedStatus,
         status_updated_at: String(row.status_updated_at),
         firm: {
           id: firm?.id ?? '',

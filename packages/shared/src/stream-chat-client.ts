@@ -18,11 +18,20 @@ export function createStreamChatClientManager(getApiKey: () => string) {
 
   async function ensureChatUserConnected(user: StreamChatUser, token: string): Promise<StreamChat> {
     const client = getChatClient();
-    if (client.userID === user.id) {
+    const hasToken =
+      Boolean(
+        (
+          client as StreamChat & {
+            tokenManager?: { token?: string | null };
+          }
+        ).tokenManager?.token,
+      );
+
+    if (client.userID === user.id && hasToken) {
       return client;
     }
 
-    if (client.userID && client.userID !== user.id) {
+    if (client.userID) {
       await client.disconnectUser();
     }
 

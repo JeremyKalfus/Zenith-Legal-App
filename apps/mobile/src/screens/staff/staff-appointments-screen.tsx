@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
-import { InteractionManager, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  InteractionManager,
+  Keyboard,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { bucketStaffAppointments, type AppointmentStatus } from '@zenith/shared';
 import { ScreenShell } from '../../components/screen-shell';
 import { StaffPageTitle } from '../../components/staff-page-title';
@@ -63,6 +74,8 @@ function useStaffAppointmentsScreen() {
     showTimePicker,
   } = useAppointmentComposer();
   const [showForm, setShowForm] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showCandidateSearchModal, setShowCandidateSearchModal] = useState(false);
   const [createModality, setCreateModality] = useState<'virtual' | 'in_person'>('virtual');
   const [createLocation, setCreateLocation] = useState('');
   const [createVideoUrl, setCreateVideoUrl] = useState('');
@@ -182,8 +195,20 @@ function useStaffAppointmentsScreen() {
       return () => {
         interactionTask.cancel();
         clearInterval(intervalId);
+        // Root-reset behavior for Appointments tab: leaving the tab closes all open forms/modals.
+        setShowForm(false);
+        setShowEditModal(false);
+        setCreateNote('');
+        setCreateModality('virtual');
+        setCreateLocation('');
+        setCreateVideoUrl('');
+        setEditingAppointmentId(null);
+        setCandidateSearchText('');
+        setShowCandidateSearchModal(false);
+        resetComposer();
+        Keyboard.dismiss();
       };
-    }, [loadAppointments, loadCandidates]),
+    }, [loadAppointments, loadCandidates, resetComposer]),
   );
 
   const toDeviceCalendarAppointment = useCallback(
@@ -225,6 +250,8 @@ function useStaffAppointmentsScreen() {
     setCreateLocation('');
     setCreateVideoUrl('');
     setEditingAppointmentId(null);
+    setCandidateSearchText('');
+    setShowCandidateSearchModal(false);
     resetComposer();
   }, [resetComposer]);
 
@@ -299,7 +326,11 @@ function useStaffAppointmentsScreen() {
       }
 
       setStatusMessage(editingAppointmentId ? 'Appointment updated.' : 'Appointment scheduled.');
-      setShowForm(false);
+      if (editingAppointmentId) {
+        setShowEditModal(false);
+      } else {
+        setShowForm(false);
+      }
       resetFormState();
       await loadAppointments();
     } catch (err) {
@@ -321,8 +352,10 @@ function useStaffAppointmentsScreen() {
 
   const startEditAppointment = useCallback((appointment: StaffAppointment) => {
     setEditingAppointmentId(appointment.id);
-    setShowForm(true);
+    setShowForm(false);
+    setShowEditModal(true);
     setSelectedCandidateId(appointment.candidate_user_id);
+    setShowCandidateSearchModal(false);
     setCreateNote(appointment.description ?? '');
     setCreateModality(appointment.modality);
     setCreateLocation(appointment.location_text ?? '');
@@ -330,10 +363,21 @@ function useStaffAppointmentsScreen() {
     setCreateStartAtLocal(new Date(appointment.start_at_utc));
   }, [setCreateStartAtLocal]);
 
+  const closeEditModal = useCallback(() => {
+    setShowEditModal(false);
+    resetFormState();
+  }, [resetFormState]);
+
+  const closeCandidateSearchModal = useCallback(() => {
+    setShowCandidateSearchModal(false);
+    setCandidateSearchText('');
+    Keyboard.dismiss();
+  }, []);
+
   return {
     sections,
     showForm,
-    setShowForm,
+    showEditModal,
     toggleForm,
     statusMessage,
     actingAppointmentId,
@@ -341,6 +385,8 @@ function useStaffAppointmentsScreen() {
     filteredCandidates,
     selectedCandidateId,
     setSelectedCandidateId,
+    showCandidateSearchModal,
+    setShowCandidateSearchModal,
     candidateSearchText,
     setCandidateSearchText,
     selectedCandidateName,
@@ -360,10 +406,10 @@ function useStaffAppointmentsScreen() {
     handleDatePickerChange,
     handleTimePickerChange,
     creating,
-    editingAppointmentId,
     handleSubmitAppointment,
     startEditAppointment,
-    resetFormState,
+    closeEditModal,
+    closeCandidateSearchModal,
   };
 }
 
@@ -371,6 +417,7 @@ export function StaffAppointmentsScreen() {
   const {
     sections,
     showForm,
+    showEditModal,
     toggleForm,
     statusMessage,
     actingAppointmentId,
@@ -378,6 +425,8 @@ export function StaffAppointmentsScreen() {
     filteredCandidates,
     selectedCandidateId,
     setSelectedCandidateId,
+    showCandidateSearchModal,
+    setShowCandidateSearchModal,
     candidateSearchText,
     setCandidateSearchText,
     selectedCandidateName,
@@ -397,14 +446,130 @@ export function StaffAppointmentsScreen() {
     handleDatePickerChange,
     handleTimePickerChange,
     creating,
-    editingAppointmentId,
     handleSubmitAppointment,
     startEditAppointment,
+    closeEditModal,
+    closeCandidateSearchModal,
   } = useStaffAppointmentsScreen();
 
   const hasSections =
     sections.overdueConfirmed.length > 0 ||
     sections.upcomingAppointments.length > 0;
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
+      setKeyboardHeight(event.endCoordinates?.height ?? 0);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
+  const renderAppointmentForm = (submitLabel: string, options?: { allowCandidateSelection?: boolean }) => (
+    <>
+      <Pressable
+        style={[
+          styles.candidateSearchTrigger,
+          options?.allowCandidateSelection === false ? styles.candidateSearchTriggerDisabled : null,
+        ]}
+        onPress={() => {
+          if (options?.allowCandidateSelection === false) {
+            return;
+          }
+          setShowCandidateSearchModal(true);
+        }}
+      >
+        <Text
+          style={[
+            selectedCandidateName ? styles.candidateSearchValue : styles.candidateSearchPlaceholder,
+            options?.allowCandidateSelection === false ? styles.candidateSearchValueDisabled : null,
+          ]}
+          numberOfLines={1}
+        >
+          {selectedCandidateName || 'Search candidates'}
+        </Text>
+        {options?.allowCandidateSelection === false ? null : (
+          <Text style={styles.candidateSearchIcon}>⌕</Text>
+        )}
+      </Pressable>
+
+      {selectedCandidateName ? <Text style={styles.helperText}>Selected: {selectedCandidateName}</Text> : null}
+
+      <View style={styles.row}>
+        <Pressable
+          style={[styles.tag, createModality === 'virtual' ? styles.tagSelected : null]}
+          onPress={() => setCreateModality('virtual')}
+        >
+          <Text>Virtual</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.tag, createModality === 'in_person' ? styles.tagSelected : null]}
+          onPress={() => setCreateModality('in_person')}
+        >
+          <Text>In-person</Text>
+        </Pressable>
+      </View>
+
+      <AppointmentTimingControls
+        createStartAtLocal={createStartAtLocal}
+        handleDatePickerChange={handleDatePickerChange}
+        handleTimePickerChange={handleTimePickerChange}
+        setShowDatePicker={setShowDatePicker}
+        setShowTimePicker={setShowTimePicker}
+        showDatePicker={showDatePicker}
+        showTimePicker={showTimePicker}
+        styles={styles}
+      />
+
+      {createModality === 'in_person' ? (
+        <TextInput
+          style={styles.input}
+          placeholder="Location (optional)"
+          value={createLocation}
+          onChangeText={setCreateLocation}
+        />
+      ) : null}
+
+      {createModality === 'virtual' ? (
+        <TextInput
+          style={styles.input}
+          placeholder="Video URL (optional)"
+          value={createVideoUrl}
+          onChangeText={setCreateVideoUrl}
+          autoCapitalize="none"
+        />
+      ) : null}
+
+      <TextInput
+        style={[styles.input, styles.textArea]}
+        placeholder="Note (optional)"
+        value={createNote}
+        onChangeText={setCreateNote}
+        multiline
+      />
+
+      <Pressable
+        style={interactivePressableStyle({
+          base: styles.primaryCta,
+          disabled: creating,
+          disabledStyle: styles.primaryCtaDisabled,
+          hoverStyle: sharedPressableFeedback.hover,
+          focusStyle: sharedPressableFeedback.focus,
+          pressedStyle: sharedPressableFeedback.pressed,
+        })}
+        onPress={() => void handleSubmitAppointment()}
+        disabled={creating}
+      >
+        <Text style={styles.primaryCtaText}>{creating ? 'Saving...' : submitLabel}</Text>
+      </Pressable>
+    </>
+  );
 
   return (
     <ScreenShell showBanner={false}>
@@ -421,115 +586,102 @@ export function StaffAppointmentsScreen() {
         onPress={toggleForm}
       >
         <Text style={styles.primaryCtaText}>
-          {showForm
-            ? 'Close form'
-            : editingAppointmentId
-              ? 'Modify appointment'
-              : 'Schedule for candidate'}
+          {showForm ? 'Close form' : 'Schedule for candidate'}
         </Text>
       </Pressable>
 
       {showForm ? (
         <View style={styles.formCard}>
-          <TextInput
-            style={styles.input}
-            placeholder="Search candidates"
-            value={candidateSearchText}
-            onChangeText={setCandidateSearchText}
-          />
-          <View style={styles.searchResults}>
-            {filteredCandidates.length > 0 ? (
-              filteredCandidates.map((candidate) => {
-                const isSelected = candidate.id === selectedCandidateId;
-                return (
-                  <Pressable
-                    key={candidate.id}
-                    style={[styles.searchResultItem, isSelected ? styles.searchResultItemSelected : null]}
-                    onPress={() => setSelectedCandidateId(candidate.id)}
-                  >
-                    <Text style={isSelected ? styles.searchResultTextSelected : styles.searchResultText}>
-                      {candidate.name}
-                    </Text>
-                  </Pressable>
-                );
-              })
-            ) : (
-              <Text style={styles.searchEmptyText}>No candidates match your search.</Text>
-            )}
-          </View>
-          {selectedCandidateName ? <Text style={styles.helperText}>Selected: {selectedCandidateName}</Text> : null}
-
-          <View style={styles.row}>
-            <Pressable
-              style={[styles.tag, createModality === 'virtual' ? styles.tagSelected : null]}
-              onPress={() => setCreateModality('virtual')}
-            >
-              <Text>Virtual</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.tag, createModality === 'in_person' ? styles.tagSelected : null]}
-              onPress={() => setCreateModality('in_person')}
-            >
-              <Text>In-person</Text>
-            </Pressable>
-          </View>
-
-          <AppointmentTimingControls
-            createStartAtLocal={createStartAtLocal}
-            handleDatePickerChange={handleDatePickerChange}
-            handleTimePickerChange={handleTimePickerChange}
-            setShowDatePicker={setShowDatePicker}
-            setShowTimePicker={setShowTimePicker}
-            showDatePicker={showDatePicker}
-            showTimePicker={showTimePicker}
-            styles={styles}
-          />
-
-          {createModality === 'in_person' ? (
-            <TextInput
-              style={styles.input}
-              placeholder="Location (optional)"
-              value={createLocation}
-              onChangeText={setCreateLocation}
-            />
-          ) : null}
-
-          {createModality === 'virtual' ? (
-            <TextInput
-              style={styles.input}
-              placeholder="Video URL (optional)"
-              value={createVideoUrl}
-              onChangeText={setCreateVideoUrl}
-              autoCapitalize="none"
-            />
-          ) : null}
-
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            placeholder="Note (optional)"
-            value={createNote}
-            onChangeText={setCreateNote}
-            multiline
-          />
-
-          <Pressable
-            style={interactivePressableStyle({
-              base: styles.primaryCta,
-              disabled: creating,
-              disabledStyle: styles.primaryCtaDisabled,
-              hoverStyle: sharedPressableFeedback.hover,
-              focusStyle: sharedPressableFeedback.focus,
-              pressedStyle: sharedPressableFeedback.pressed,
-            })}
-            onPress={() => void handleSubmitAppointment()}
-            disabled={creating}
-          >
-            <Text style={styles.primaryCtaText}>
-              {creating ? 'Saving...' : editingAppointmentId ? 'Save changes' : 'Schedule appointment'}
-            </Text>
-          </Pressable>
+          {renderAppointmentForm('Schedule appointment', { allowCandidateSelection: true })}
         </View>
       ) : null}
+
+      <Modal
+        visible={showCandidateSearchModal}
+        transparent
+        animationType="fade"
+        onRequestClose={closeCandidateSearchModal}
+      >
+        <View
+          style={[
+            styles.candidateSearchModalBackdrop,
+            keyboardHeight > 0 ? styles.candidateSearchModalBackdropKeyboardOpen : null,
+          ]}
+        >
+          <View
+            style={[
+              styles.candidateSearchModalCard,
+              keyboardHeight > 0
+                ? { marginBottom: Platform.OS === 'ios' ? keyboardHeight + 8 : keyboardHeight + 4 }
+                : null,
+            ]}
+          >
+            <Pressable style={styles.modalBackButton} onPress={closeCandidateSearchModal}>
+              <Text style={styles.modalBackButtonText}>{'< Back'}</Text>
+            </Pressable>
+            <Text style={styles.candidateSearchModalTitle}>Search Candidates</Text>
+            <TextInput
+              style={[styles.input, styles.candidateSearchInput]}
+              placeholder="Search candidates"
+              value={candidateSearchText}
+              onChangeText={setCandidateSearchText}
+              autoFocus
+            />
+            <ScrollView
+              style={styles.modalContentScroll}
+              contentContainerStyle={styles.modalContentContainer}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.searchResults}>
+                {filteredCandidates.length > 0 ? (
+                  filteredCandidates.map((candidate) => {
+                    const isSelected = candidate.id === selectedCandidateId;
+                    return (
+                      <Pressable
+                        key={candidate.id}
+                        style={[styles.searchResultItem, isSelected ? styles.searchResultItemSelected : null]}
+                        onPress={() => {
+                          setSelectedCandidateId(candidate.id);
+                          closeCandidateSearchModal();
+                        }}
+                      >
+                        <Text style={isSelected ? styles.searchResultTextSelected : styles.searchResultText}>
+                          {candidate.name}
+                        </Text>
+                      </Pressable>
+                    );
+                  })
+                ) : (
+                  <Text style={styles.searchEmptyText}>No candidates match your search.</Text>
+                )}
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showEditModal}
+        transparent
+        animationType="fade"
+        onRequestClose={closeEditModal}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Pressable style={styles.modalBackButton} onPress={closeEditModal}>
+              <Text style={styles.modalBackButtonText}>{'< Back'}</Text>
+            </Pressable>
+            <Text style={styles.modalTitle}>Modify Appointment</Text>
+            <ScrollView
+              style={styles.modalContentScroll}
+              contentContainerStyle={styles.modalContentContainer}
+              keyboardShouldPersistTaps="handled"
+            >
+              {renderAppointmentForm('Save changes', { allowCandidateSelection: false })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {statusMessage ? <Text style={styles.statusMessage}>{statusMessage}</Text> : null}
 
@@ -628,9 +780,112 @@ export function StaffAppointmentsScreen() {
 
 const styles = StyleSheet.create({
   ...appointmentSharedStyles,
+  candidateSearchInput: {
+    marginBottom: 8,
+  },
+  candidateSearchModalBackdrop: {
+    alignItems: 'center',
+    backgroundColor: uiColors.modalOverlay,
+    flex: 1,
+    justifyContent: 'center',
+    padding: 16,
+  },
+  candidateSearchModalBackdropKeyboardOpen: {
+    justifyContent: 'flex-end',
+  },
+  candidateSearchModalCard: {
+    backgroundColor: uiColors.surface,
+    borderRadius: 14,
+    maxWidth: 560,
+    padding: 16,
+    width: '100%',
+  },
+  candidateSearchModalTitle: {
+    color: uiColors.textPrimary,
+    fontSize: 22,
+    fontWeight: '700',
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  candidateSearchTrigger: {
+    alignItems: 'center',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  candidateSearchTriggerDisabled: {
+    backgroundColor: uiColors.backgroundAlt,
+  },
+  candidateSearchIcon: {
+    color: uiColors.textMuted,
+    fontSize: 16,
+    marginLeft: 8,
+    marginTop: -2,
+  },
+  candidateSearchPlaceholder: {
+    color: uiColors.textPlaceholder,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  candidateSearchValue: {
+    color: uiColors.textPrimary,
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  candidateSearchValueDisabled: {
+    color: uiColors.textMuted,
+  },
   input: {
     ...appointmentSharedStyles.input,
     color: uiColors.textPrimary,
+  },
+  modalBackdrop: {
+    alignItems: 'center',
+    backgroundColor: uiColors.modalOverlay,
+    flex: 1,
+    justifyContent: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    backgroundColor: uiColors.surface,
+    borderRadius: 14,
+    maxWidth: 560,
+    padding: 16,
+    width: '100%',
+  },
+  modalBackButton: {
+    alignSelf: 'flex-start',
+    borderColor: uiColors.borderStrong,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  modalBackButtonText: {
+    color: uiColors.textPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  modalContentContainer: {
+    gap: 10,
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  modalContentScroll: {
+    maxHeight: 520,
+  },
+  modalTitle: {
+    color: uiColors.textPrimary,
+    fontSize: 22,
+    fontWeight: '700',
   },
   searchResults: {
     borderColor: uiColors.borderStrong,

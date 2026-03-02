@@ -209,6 +209,30 @@ function useCandidateFirmManager() {
   }, [loadBaseData]);
 
   useEffect(() => {
+    const channel = supabaseClient
+      .channel('admin-candidate-manager-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'users_profile' },
+        () => {
+          void loadBaseData();
+        },
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'candidate_preferences' },
+        () => {
+          void loadBaseData();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabaseClient.removeChannel(channel);
+    };
+  }, [loadBaseData]);
+
+  useEffect(() => {
     void loadAssignments(selectedCandidateId);
   }, [loadAssignments, selectedCandidateId]);
 

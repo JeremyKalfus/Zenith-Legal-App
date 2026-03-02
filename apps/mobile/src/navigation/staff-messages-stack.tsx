@@ -14,6 +14,17 @@ type StaffMessagesStackParamList = {
 
 const Stack = createNativeStackNavigator<StaffMessagesStackParamList>();
 
+function getConversationHeaderTitle(conversation: StaffMessageInboxItem): string {
+  const candidateName = conversation.candidateDisplayName?.trim();
+  if (candidateName) {
+    return candidateName;
+  }
+
+  return conversation.channelName
+    .replace(/\s*(?:·|-)\s*Zenith Legal\s*$/i, '')
+    .trim();
+}
+
 export function StaffMessagesStackNavigator() {
   return (
     <Stack.Navigator>
@@ -47,7 +58,7 @@ export function StaffMessagesStackNavigator() {
       <Stack.Screen
         name="StaffMessageThread"
         options={({ route }) => ({
-          title: route.params.conversation.channelName,
+          title: getConversationHeaderTitle(route.params.conversation),
           headerBackButtonDisplayMode: 'minimal',
           gestureEnabled: true,
           fullScreenGestureEnabled: false,
