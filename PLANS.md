@@ -12,12 +12,10 @@
 - [x] Staff appointment review workflow (pending/scheduled/declined, edge function, mobile + admin UI)
 - [x] Admin appointment management (accept/decline in dashboard)
 - [x] Error handling standardization (shared `getFunctionErrorMessage` utility; response-body extraction via `error.context` / `Response.clone()`)
-- [x] Test coverage expansion (41 tests across 6 files)
+- [x] Test coverage expansion (13 active test files across admin/mobile/shared/supabase)
 - [x] Stream messaging on web (stream-chat-react, CDN CSS, `chat_auth_bootstrap` secrets; no users_profile fallback)
 - [x] Practice areas multi-select (0–3; `practice_areas` column, shared schema and edge functions updated)
 - [x] Staff mobile messaging (shared candidate channels, staff inbox-first navigation, web + native)
-- [x] Admin web staff messaging inbox + candidate deletion workflow (candidate-only hard delete)
-- [x] Candidate dashboard authorization UX semantics (waiting decline deletes assignment; authorized decline labeled cancel)
 - [x] Candidate self-service in-app account deletion flow (Profile screen + `delete_my_account` edge function)
 - [x] Push notification dispatch queue processor (Expo Push API send + queued delivery status updates)
 - [x] Staff-created appointment scheduling for candidate accounts (mobile + admin)
@@ -62,7 +60,7 @@
 - **Google Play service account required** for: automated Android `eas submit` uploads. (iOS APNs + App Store Connect API key are configured.)
 - **Staging Supabase project** needed before promoting beyond dev.
 
-## Mobile Release Prep Snapshot (2026-02-25)
+## Mobile Release Prep Snapshot (2026-02-25, last externally verified)
 
 - Apple Developer App ID created: `com.zenithlegal.app` (Push Notifications enabled).
 - App Store Connect app created: `Zenith Legal` (bundle ID `com.zenithlegal.app`, SKU `zenith-legal-ios-prod`).

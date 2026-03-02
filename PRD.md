@@ -4,7 +4,7 @@
 
 Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (candidates) with law firms through a recruiter-mediated workflow. The platform consists of a mobile app for candidates and staff, and a web admin dashboard for recruiter operations.
 
-### Distribution Readiness (Operational Snapshot: 2026-02-25)
+### Distribution Readiness (Store/Ops Snapshot: 2026-02-25, last externally verified)
 
 - Mobile production identifiers are set to `com.zenithlegal.app` for both iOS and Android.
 - Apple Developer App ID and App Store Connect app record (`Zenith Legal`) are created for the production iOS app.
@@ -18,7 +18,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ## User Roles
 
 ### Candidate (job-seeking lawyer)
-- Registers via email/password, completes an intake profile (name, email, mobile, JD degree date, preferred cities, practice area, privacy/communication consents).
+- Registers via email/password, completes an intake profile (name, email, mobile, JD degree date, preferred cities, practice areas, privacy/communication consents).
 - Views a dashboard of law firms they have been assigned to by staff.
 - Authorizes or declines firm submissions (recruiter submitting their resume to a firm).
 - Messages the recruiter team via real-time chat.
@@ -26,7 +26,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Manages their profile (email, password, intake fields).
 
 ### Staff (recruiter)
-- Signs in via invite-only magic link.
+- Signs in with staff-approved Supabase credentials (email/password in current admin flow; magic-link auth remains available at the platform level).
 - Manages candidate-firm assignments: assigns firms to candidates, updates assignment statuses, unassigns firms.
 - Assigns one recruiter (or none) per candidate in the recruiter mobile candidate detail flow.
 - Filters recruiter mobile candidate lists via a dedicated `Filter Search` screen with: assigned recruiter, current status, practice, assigned firms, preferred cities, and JD years (with `Any` defaults and `Clear`/`Apply` actions), plus free-text search on the list page.
@@ -38,12 +38,11 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ## Confirmed Features (observed in code)
 
 ### Authentication
-- Email/password registration and sign-in (custom edge functions: `register_candidate_password`, `mobile_sign_in_with_identifier_password`).
+- Email/password registration and sign-in (registration via `register_candidate_password`; sign-in uses Supabase password auth in current app flows).
 - Unauthenticated candidates use a single combined auth menu screen with `Sign Up`/`Log In` tabs.
 - `Sign Up` now captures only email first, checks availability, and routes available emails into a dedicated `Finish your profile` registration flow.
 - Signup completion captures intake fields plus password/confirm-password on the `Finish your profile` screen with email locked to the prechecked value.
-- Email magic link sign-in.
-- SMS OTP verification.
+- Email magic-link and SMS OTP methods exist in auth context plumbing, but are not part of the primary mobile/admin auth screens.
 - Password reset flow.
 - Invalid or revoked persisted sessions are cleared on app startup (users are returned to sign-in instead of hitting a startup auth refresh error loop).
 - Role-based routing: candidate tabs vs staff tabs after sign-in.

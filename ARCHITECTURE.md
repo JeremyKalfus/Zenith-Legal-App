@@ -52,7 +52,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 |---|---|---|
 | `check_candidate_signup_email` | Public | Candidate sign-up precheck for email availability before routing into signup completion |
 | `register_candidate_password` | Public | Candidate account creation from auth menu sign-up (email/password) with initial `onboarding_complete = false` |
-| `mobile_sign_in_with_identifier_password` | Public | Password sign-in |
+| `mobile_sign_in_with_identifier_password` | Public | Optional identifier/password sign-in endpoint (present in backend contract; current mobile flow signs in directly via Supabase Auth password grant) |
 | `create_or_update_candidate_profile` | User JWT | Intake profile upsert |
 | `delete_my_account` | User JWT | Candidate self-service account deletion (hard delete auth user + cascaded app data; non-cascading refs nulled first) |
 | `schedule_or_update_appointment` | User JWT | Appointment create/update for candidates and staff; accepts Date/Time + note style payloads (with internal 30-minute end-time normalization), enqueues notifications/reminders/calendar sync, posts `Appointment request sent and waiting for admin approval...` on candidate pending submit, posts `Appointment scheduled...` on staff direct scheduled creates, and posts `Scheduled appointment modified...` on staff updates |
@@ -113,7 +113,7 @@ The shared package (`packages/shared/`) exports modules consumed by both admin a
 - **`staff-messaging.ts`** -- Staff messaging helpers consolidated from duplicate implementations in admin and mobile: `StaffMessageInboxItem` type, `parseCandidateUserIdFromChannelId`, `mapChannelsToStaffInboxItems`, `formatRelativeTimestamp`.
 - **`candidate-filters.ts`** -- Candidate preference normalization and shared filtering helpers: legacy city/practice/JD chip filtering (`search AND (city OR practice OR JD year)`) plus recruiter-mobile structured filtering (`search AND` assigned recruiter/current status/single-practice with OR-matched assigned firms/preferred cities/JD years).
 
-The package uses `"main": "src/index.ts"` (no build step). Admin consumes it via `transpilePackages: ['@zenith/shared']` in `next.config.ts`. Mobile consumes it directly.
+The package uses `"main": "src/index.ts"` for source-first workspace imports. It also defines `npm run build -w @zenith/shared` to emit declarations to `packages/shared/dist` for CI/release verification. Admin consumes it via `transpilePackages: ['@zenith/shared']` in `next.config.ts`. Mobile consumes it directly.
 
 Staff candidate list flows (mobile `staff-candidates-screen` and admin `candidate-firm-manager`) now hydrate profile rows from `users_profile` with `candidate_preferences` (`cities`, `practice_areas`, `practice_area`) and apply the shared filter helper for consistent behavior across both surfaces, including JD graduation year filtering via `users_profile.jd_degree_date`.
 The same staff candidate profile surfaces render candidate identity details and `users_profile.jd_degree_date` for recruiter/admin visibility.
@@ -154,11 +154,11 @@ Refactored components using this pattern:
 
 ## Auth Flows
 
-- **Password**: unauthenticated candidates land on a single `Sign Up`/`Log In` menu screen. `Sign Up` is email-first: it calls `check_candidate_signup_email`, then routes available emails to intake signup completion. `register_candidate_password` creates the auth user + minimal candidate profile with `onboarding_complete = false`; `mobile_sign_in_with_identifier_password` signs in existing users.
+- **Password**: unauthenticated candidates land on a single `Sign Up`/`Log In` menu screen. `Sign Up` is email-first: it calls `check_candidate_signup_email`, then routes available emails to intake signup completion. `register_candidate_password` creates the auth user + minimal candidate profile with `onboarding_complete = false`. Current sign-in screens use Supabase password grant directly (web SDK path with native REST fallback).
 - **Signup completion**: candidates coming from email-first sign-up complete intake fields plus password/confirm-password on a `Finish your profile` screen variant with the email field locked to the prechecked value.
 - **Post-signup onboarding**: authenticated candidates with `users_profile.onboarding_complete = false` are routed to `IntakeScreen` in `finishProfile` mode. Submitting this flow calls `create_or_update_candidate_profile`, which sets `onboarding_complete = true` and unlocks candidate tabs.
-- **Magic link**: Supabase built-in email magic link (used for staff).
-- **SMS OTP**: Supabase built-in phone OTP.
+- **Magic link**: Supabase built-in email magic-link methods are available at the auth layer.
+- **SMS OTP**: Supabase built-in phone OTP methods exist in auth context plumbing (provider/config dependent).
 - **Session management**: Expo SecureStore (mobile) or localStorage (web) for token persistence. `autoRefreshToken: true` enabled. Client-side `ensureValidSession()` helper proactively refreshes tokens nearing expiry.
 - **Revoked/deleted session recovery**: Mobile auth bootstrap detects invalid/missing refresh tokens (for example after account deletion or server-side revocation), clears the persisted local session, and fails open to the sign-in screen instead of repeatedly retrying refresh on startup.
 - **Edge function errors**: Client uses `getFunctionErrorMessage()` to read the actual error from `FunctionsHttpError.context` (Response body); uses `Response.clone()` when available so the body is not consumed. Avoids generic "Edge Function returned a non-2xx status code" when the function returns JSON `{ error: "..." }`.
@@ -193,7 +193,7 @@ See `docs/release.md` for full environment strategy.
 
 ## Mobile Release Infrastructure (EAS / Stores)
 
-As of **2026-02-25**, the Expo mobile app has a production store-build baseline configured:
+As of **2026-02-25** (last externally verified), the Expo mobile app has a production store-build baseline configured:
 
 - **Expo/EAS project:** `@jeremykalfus/zenith-legal-mobile`
 - **EAS project ID:** `38f93994-daaa-4c85-a092-a70ac12f0c06`
