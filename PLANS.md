@@ -34,6 +34,8 @@
 - [x] Staff mobile per-candidate banner contact override controls (save + reset to global default)
 - [x] Recruiter mobile candidate ownership + Filter Search flow (`candidate_recruiter_assignments`, Assigned Recruiter editor, separate filter screen with Clear/Apply)
 - [x] Mobile icon/logo mark scaled +14% across app icon assets (`icon`, `adaptive-icon`, `splash-icon`, `favicon`)
+- [x] Candidate signup/profile JD year contract + wheel UX (`2000..current year - 1`) with DB date compatibility mapping (`YYYY` ↔ `YYYY-01-01`)
+- [x] Candidate dashboard status-update CTA removal + deletion of automated message draft plumbing in candidate messaging navigation/screens
 - [ ] Vendor credential wiring for end-to-end runtime (requires secrets)
 - [x] Device-level mobile release signing baseline (Apple App ID/App Store Connect app created; Expo EAS project linked; Android keystore + iOS dist cert/provisioning profile created)
 - [ ] Android `eas submit` / Play Console integration credential (Google Play service account)
