@@ -159,7 +159,7 @@ Deno.serve(
             onboarding_complete: false,
             email,
             mobile,
-            jd_degree_date: intake.jdDegreeDate ?? null,
+            jd_degree_date: intake.jdDegreeDate ? `${intake.jdDegreeDate}-01-01` : null,
           },
         });
 

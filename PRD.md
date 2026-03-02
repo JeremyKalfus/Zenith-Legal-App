@@ -18,7 +18,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ## User Roles
 
 ### Candidate (job-seeking lawyer)
-- Registers via email/password, completes an intake profile (name, email, mobile, JD degree date, preferred cities, practice areas, privacy/communication consents).
+- Registers via email/password, completes an intake profile (name, email, mobile, JD year, preferred cities, practice areas, privacy/communication consents).
 - Views a dashboard of law firms they have been assigned to by staff.
 - Authorizes or declines firm submissions (recruiter submitting their resume to a firm).
 - Messages the recruiter team via real-time chat.
@@ -48,7 +48,8 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Role-based routing: candidate tabs vs staff tabs after sign-in.
 
 ### Candidate Intake and Onboarding
-- Multi-field intake form: name, email, mobile, JD degree date, preferred cities (14 options + Other), practice areas (0–3 of 17 options + Other, including `Media/Ent`), privacy policy consent, communication consent.
+- Multi-field intake form: name, email, mobile, JD year, preferred cities (14 options + Other), practice areas (0–3 of 17 options + Other, including `Media/Ent`), privacy policy consent, communication consent.
+- Candidate signup completion and profile editing select JD year via a scrolling year wheel (`2000` through current year minus 1).
 - On password registration, candidate accounts are created with `onboarding_complete = false` and must finish intake before entering candidate tabs.
 - Intake data persisted via `create_or_update_candidate_profile` edge function.
 - Onboarding-complete flag gates access to main app screens.
@@ -77,6 +78,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Staff Messages tab is inbox-first and lists existing candidate DM channels (channels with at least one message); any staff member can reply in the shared candidate channel.
 - Admin staff inbox previews show candidate initials in avatars.
 - Staff mobile inbox uses a conversation-manager list layout (avatar, timestamp, preview, unread badge).
+- Candidate dashboard links to Messages without injecting automated "status update" draft text.
 - `chat_auth_bootstrap` edge function provisions Stream tokens and channel; requires an existing `users_profile` row (no auto-creation).
 - `process_chat_webhook` handles inbound webhook events from Stream.
 - Client calls `ensureValidSession()` before bootstrap; errors from the function are surfaced via `getFunctionErrorMessage` (response body extraction).
@@ -102,7 +104,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Real-time subscriptions update appointment sections across candidate mobile, staff mobile, and admin web.
 
 ### Profile Management
-- Candidates update email, password, and intake fields (including JD degree date).
+- Candidates update email, password, and intake fields (including JD year).
 - Profile data stored in `users_profile` and `candidate_preferences` tables.
 - Candidates can delete their account in-app from Profile (self-service deletion flow with confirmation).
 - Candidate and staff Profile tabs include a Calendar Sync settings card with provider status and connect actions.

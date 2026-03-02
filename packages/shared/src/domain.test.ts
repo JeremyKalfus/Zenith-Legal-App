@@ -8,7 +8,9 @@ import {
   candidateIntakeSchema,
   candidateRegistrationSchema,
   FIRM_STATUSES,
+  getLatestAllowedJdDegreeYear,
   PRACTICE_AREAS,
+  JD_DEGREE_YEAR_MIN,
   getJdDegreeDateLabel,
   getJdDegreeDayOptions,
   getJdDegreeYear,
@@ -111,23 +113,39 @@ describe('candidate intake schema', () => {
     }
   });
 
-  it('accepts a valid JD degree date', () => {
+  it('accepts a valid JD year', () => {
     const result = candidateIntakeSchema.parse({
       email: 'jane@example.com',
       preferredCities: [],
-      jdDegreeDate: '2025-05-15',
+      jdDegreeDate: '2015',
       acceptedPrivacyPolicy: true,
       acceptedCommunicationConsent: true,
     });
 
-    expect(result.jdDegreeDate).toBe('2025-05-15');
+    expect(result.jdDegreeDate).toBe('2015');
   });
 
-  it('rejects an invalid JD degree date', () => {
+  it('rejects an invalid JD year', () => {
+    const latestAllowedJdYear = getLatestAllowedJdDegreeYear();
     const result = candidateIntakeSchema.safeParse({
       email: 'jane@example.com',
       preferredCities: [],
-      jdDegreeDate: '2025-02-30',
+      jdDegreeDate: String(latestAllowedJdYear + 1),
+      acceptedPrivacyPolicy: true,
+      acceptedCommunicationConsent: true,
+    });
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.flatten().fieldErrors.jdDegreeDate).toBeTruthy();
+    }
+  });
+
+  it('rejects a JD year before the minimum', () => {
+    const result = candidateIntakeSchema.safeParse({
+      email: 'jane@example.com',
+      preferredCities: [],
+      jdDegreeDate: String(JD_DEGREE_YEAR_MIN - 1),
       acceptedPrivacyPolicy: true,
       acceptedCommunicationConsent: true,
     });
@@ -162,6 +180,8 @@ describe('candidate intake schema', () => {
   it('parses and rebuilds JD degree date parts', () => {
     const parts = parseJdDegreeDateParts('2026-05-15');
     expect(parts).toEqual({ year: '2026', month: '05', day: '15' });
+    const yearOnlyParts = parseJdDegreeDateParts('2026');
+    expect(yearOnlyParts).toEqual({ year: '2026', month: '01', day: '01' });
     expect(
       buildJdDegreeDateFromParts({
         year: '2026',
@@ -171,13 +191,15 @@ describe('candidate intake schema', () => {
     ).toBe('2026-05-15');
   });
 
-  it('formats JD degree date label from stored date value', () => {
-    expect(getJdDegreeDateLabel('2026-05-15')).toBe('May 15, 2026');
+  it('formats JD year label from stored values', () => {
+    expect(getJdDegreeDateLabel('2026-05-15')).toBe('2026');
+    expect(getJdDegreeDateLabel('2026')).toBe('2026');
     expect(getJdDegreeDateLabel(null)).toBe('Not provided');
   });
 
-  it('extracts JD degree year from stored date value', () => {
+  it('extracts JD degree year from stored date or year values', () => {
     expect(getJdDegreeYear('2026-05-15')).toBe('2026');
+    expect(getJdDegreeYear('2026')).toBe('2026');
     expect(getJdDegreeYear('invalid')).toBeUndefined();
     expect(getJdDegreeYear(null)).toBeUndefined();
   });

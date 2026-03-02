@@ -439,7 +439,7 @@ export function StaffCandidateFirmsScreen({
           <Text style={styles.subtitle}>{candidate.email}</Text>
           <Text style={styles.subtitle}>{candidate.mobile || 'No mobile on file'}</Text>
           <Text style={styles.subtitle}>
-            JD degree date: {getJdDegreeDateLabel(candidate.jdDegreeDate)}
+            JD year: {getJdDegreeDateLabel(candidate.jdDegreeDate)}
           </Text>
         </View>
       </View>

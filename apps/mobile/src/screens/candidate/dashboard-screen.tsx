@@ -76,9 +76,9 @@ const statusRank = Object.fromEntries(
 export function DashboardScreen({
   onOpenMessages,
 }: {
-  onOpenMessages: (initialDraftMessage?: string) => void;
+  onOpenMessages: () => void;
 }) {
-  const { session, profile } = useAuth();
+  const { session } = useAuth();
   const [assignments, setAssignments] = useState<CandidateFirmAssignment[]>([]);
   const [message, setMessage] = useState('');
   const [busyAssignmentId, setBusyAssignmentId] = useState<string | null>(null);
@@ -317,21 +317,6 @@ export function DashboardScreen({
                     </Pressable>
                   </View>
                 ) : null}
-                <Pressable
-                  style={interactivePressableStyle({
-                    base: styles.statusUpdateButton,
-                    hoverStyle: sharedPressableFeedback.hover,
-                    focusStyle: sharedPressableFeedback.focus,
-                    pressedStyle: sharedPressableFeedback.pressed,
-                  })}
-                  onPress={() => {
-                    const candidateName = profile?.name?.trim() || 'this candidate';
-                    const initialDraftMessage = `Automated message: any updates on the current status for ${candidateName}'s firm "${assignment.firms.name}"?`;
-                    onOpenMessages(initialDraftMessage);
-                  }}
-                >
-                  <Text style={styles.statusUpdateButtonText}>Ask for a status update</Text>
-                </Pressable>
             </View>
           );
         })
@@ -432,18 +417,5 @@ const styles = StyleSheet.create({
   statusBadgeText: {
     fontSize: 12,
     fontWeight: '700',
-  },
-  statusUpdateButton: {
-    alignItems: 'center',
-    backgroundColor: '#E5E7EB',
-    borderColor: uiColors.textPrimary,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginTop: 12,
-    paddingVertical: 8,
-  },
-  statusUpdateButtonText: {
-    color: uiColors.textPrimary,
-    fontWeight: '600',
   },
 });

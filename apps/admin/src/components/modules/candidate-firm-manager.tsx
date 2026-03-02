@@ -666,7 +666,7 @@ function CandidateListPanel({
                     <p className="truncate text-slate-600">{candidate.email}</p>
                     <p className="text-xs text-slate-500">{candidate.mobile || 'No mobile on file'}</p>
                     <p className="text-xs text-slate-500">
-                      JD degree date: {getJdDegreeDateLabel(candidate.jdDegreeDate)}
+                      JD year: {getJdDegreeDateLabel(candidate.jdDegreeDate)}
                     </p>
                   </div>
                 </div>
@@ -789,7 +789,7 @@ export function CandidateFirmManager() {
                 <CardTitle>{ctx.selectedCandidate?.name ?? 'Candidate details'}</CardTitle>
                 {ctx.selectedCandidate ? (
                   <p className="text-xs text-slate-500">
-                    JD degree date: {getJdDegreeDateLabel(ctx.selectedCandidate.jdDegreeDate)}
+                    JD year: {getJdDegreeDateLabel(ctx.selectedCandidate.jdDegreeDate)}
                   </p>
                 ) : null}
               </div>

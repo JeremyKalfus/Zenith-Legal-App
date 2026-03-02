@@ -261,7 +261,7 @@ export function StaffCandidatesScreen({
                 <Text style={styles.cardText}>{candidate.email}</Text>
                 <Text style={styles.cardSubtle}>{candidate.mobile || 'No mobile on file'}</Text>
                 <Text style={styles.cardSubtle}>
-                  JD degree date: {getJdDegreeDateLabel(candidate.jdDegreeDate)}
+                  JD year: {getJdDegreeDateLabel(candidate.jdDegreeDate)}
                 </Text>
                 <Text style={styles.cardSubtle}>Assigned recruiter: {formatAssignedRecruiter(candidate)}</Text>
               </View>

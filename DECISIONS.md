@@ -495,3 +495,16 @@
 - Admin/candidate upcoming cancel: `Scheduled appointment canceled.`
 - Admin incoming decline: `Appointment request declined.`
 - Admin modify upcoming: `Scheduled appointment modified.`
+
+### [2026-03-02] JD year app contract with DB date compatibility mapping
+
+**Decision:** Standardize candidate-facing JD input/output as year strings (`YYYY`) while preserving the existing database `users_profile.jd_degree_date` `date` column through server-side mapping (`YYYY` <-> `YYYY-01-01`).
+
+**Options considered:**
+1. Keep full date semantics end-to-end -- no mapping work, but does not match requested JD year UX.
+2. Migrate schema to a dedicated year column/type -- clean data model, but adds migration risk and broad contract churn.
+3. Use app/server year-string contracts with DB date compatibility mapping (chosen) -- requested UX with no migration.
+
+**Rationale:** Product requirements now use JD year selection via wheel controls and year-only presentation. Compatibility mapping avoids breaking existing schema, queries, and environments while allowing immediate UX/contract alignment.
+
+**Consequences:** Candidate intake/profile forms now send `jdDegreeDate` as a year string. Edge functions validate year range (`2000..currentYear-1`) and persist `jd_degree_date` as `YYYY-01-01`. Profile hydration converts stored date values back to year strings, and shared helpers render/filter correctly for both legacy date rows and year-only values.

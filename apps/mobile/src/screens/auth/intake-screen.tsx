@@ -3,16 +3,17 @@ import {
   CITY_OPTIONS,
   candidateIntakeSchema,
   candidateRegistrationSchema,
-  getJdDegreeDateLabel,
+  getJdDegreeYear,
+  getJdDegreeYearOptions,
   normalizePhoneNumber,
   sanitizePhoneInput,
   PRACTICE_AREAS,
 } from '@zenith/shared';
 import { z } from 'zod';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { PasswordInput } from '../../components/password-input';
@@ -24,33 +25,6 @@ import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/
 type CandidateRegistrationFormValues = z.input<typeof candidateRegistrationSchema>;
 type IntakeMode = 'registration' | 'finishProfile' | 'signupCompletion';
 const COLLAPSED_BUBBLE_ROWS_HEIGHT = 34;
-
-function toJdDegreeLocalDate(value: string | null | undefined): Date | null {
-  if (!value) {
-    return null;
-  }
-
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) {
-    return null;
-  }
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const date = new Date(year, month - 1, day);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-  return date;
-}
-
-function toJdDegreeIsoDate(value: Date): string {
-  const year = String(value.getFullYear());
-  const month = String(value.getMonth() + 1).padStart(2, '0');
-  const day = String(value.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 function MultiSelectOption({
   label,
@@ -96,7 +70,7 @@ export function IntakeScreen({
   } = useAuth();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const [showJdDatePicker, setShowJdDatePicker] = useState(false);
+  const [showJdYearPicker, setShowJdYearPicker] = useState(false);
   const [showAllCities, setShowAllCities] = useState(false);
   const [showAllPracticeAreas, setShowAllPracticeAreas] = useState(false);
   const {
@@ -128,26 +102,12 @@ export function IntakeScreen({
   const selectedCities = watch('preferredCities') ?? [];
   const selectedPracticeAreas = watch('practiceAreas') ?? [];
   const showGoToLoginCta = isSignupCompletion && message.toLowerCase().includes('already exists');
+  const jdYearOptions = useMemo(() => getJdDegreeYearOptions(), []);
+  const latestJdYear = jdYearOptions[0] ?? String(new Date().getUTCFullYear() - 1);
   const selectedJdDegreeDate = watch('jdDegreeDate') ?? '';
-  const selectedJdDegreeDateLabel = selectedJdDegreeDate
-    ? getJdDegreeDateLabel(selectedJdDegreeDate)
-    : 'Select JD degree date';
-  const selectedJdDegreeDateValue = toJdDegreeLocalDate(selectedJdDegreeDate) ?? new Date();
-  const handleJdDateChange = (event: DateTimePickerEvent, nextDate?: Date) => {
-    if (event.type === 'dismissed' || !nextDate) {
-      if (Platform.OS !== 'ios') {
-        setShowJdDatePicker(false);
-      }
-      return;
-    }
-
-    setValue('jdDegreeDate', toJdDegreeIsoDate(nextDate), {
-      shouldValidate: true,
-    });
-    if (Platform.OS !== 'ios') {
-      setShowJdDatePicker(false);
-    }
-  };
+  const selectedJdDegreeYear = getJdDegreeYear(selectedJdDegreeDate);
+  const selectedJdDegreeDateLabel = selectedJdDegreeYear ?? 'Select JD year';
+  const jdYearPickerValue = selectedJdDegreeYear ?? latestJdYear;
   const nextPracticeAreas = (
     currentValues: CandidateRegistrationFormValues['practiceAreas'],
     area: (typeof PRACTICE_AREAS)[number],
@@ -368,21 +328,27 @@ export function IntakeScreen({
             <Text style={styles.error}>{errors.otherCityText.message}</Text>
           ) : null}
 
-          <Text style={styles.label}>JD degree date (optional)</Text>
-          <Pressable style={styles.input} onPress={() => setShowJdDatePicker((value) => !value)}>
+          <Text style={styles.label}>JD year (optional)</Text>
+          <Pressable style={styles.input} onPress={() => setShowJdYearPicker((value) => !value)}>
             <Text style={selectedJdDegreeDate ? styles.valueText : styles.valueTextPlaceholder}>
               {selectedJdDegreeDateLabel}
             </Text>
           </Pressable>
-          {showJdDatePicker ? (
+          {showJdYearPicker ? (
             <View style={styles.pickerShell}>
-              <DateTimePicker
-                value={selectedJdDegreeDateValue}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                maximumDate={new Date()}
-                onChange={handleJdDateChange}
-              />
+              <Picker
+                selectedValue={jdYearPickerValue}
+                onValueChange={(value) =>
+                  setValue('jdDegreeDate', String(value), {
+                    shouldValidate: true,
+                  })
+                }
+                style={styles.pickerControl}
+              >
+                {jdYearOptions.map((year) => (
+                  <Picker.Item key={year} label={year} value={year} />
+                ))}
+              </Picker>
               <View style={styles.pickerActionRow}>
                 <Pressable
                   style={styles.pickerAction}
@@ -394,7 +360,7 @@ export function IntakeScreen({
                 >
                   <Text style={styles.pickerActionText}>Clear</Text>
                 </Pressable>
-                <Pressable style={styles.pickerAction} onPress={() => setShowJdDatePicker(false)}>
+                <Pressable style={styles.pickerAction} onPress={() => setShowJdYearPicker(false)}>
                   <Text style={styles.pickerActionText}>Done</Text>
                 </Pressable>
               </View>
@@ -699,6 +665,9 @@ const styles = StyleSheet.create({
   pickerActionText: {
     color: uiColors.primary,
     fontWeight: '600',
+  },
+  pickerControl: {
+    color: uiColors.textPrimary,
   },
   pickerShell: {
     backgroundColor: uiColors.surface,

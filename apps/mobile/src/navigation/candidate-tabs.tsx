@@ -1,6 +1,6 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useRef, useState, type ComponentProps } from 'react';
+import { type ComponentProps } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { DashboardScreen } from '../screens/candidate/dashboard-screen';
 import { MessagesScreen } from '../screens/candidate/messages-screen';
@@ -31,14 +31,6 @@ export function CandidateTabs() {
   const { hasAppointmentAttention, unreadMessagesCount } = useCandidateTabIndicators();
   const unreadBadgeLabel =
     unreadMessagesCount > 0 ? (unreadMessagesCount > 9 ? '9+' : String(unreadMessagesCount)) : null;
-  const [pendingMessagesDraft, setPendingMessagesDraft] = useState<{
-    id: number;
-    text: string;
-  } | null>(null);
-  const nextDraftIdRef = useRef(1);
-  const consumePendingMessagesDraft = useCallback((draftId: number) => {
-    setPendingMessagesDraft((current) => (current?.id === draftId ? null : current));
-  }, []);
 
   return (
     <Tab.Navigator
@@ -74,27 +66,13 @@ export function CandidateTabs() {
       <Tab.Screen name="Dashboard">
         {({ navigation }) => (
           <DashboardScreen
-            onOpenMessages={(initialDraftMessage) => {
-              if (initialDraftMessage?.trim()) {
-                setPendingMessagesDraft({
-                  id: nextDraftIdRef.current++,
-                  text: initialDraftMessage,
-                });
-              }
+            onOpenMessages={() => {
               navigation.navigate('Messages' as never);
             }}
           />
         )}
       </Tab.Screen>
-      <Tab.Screen name="Messages">
-        {() => (
-          <MessagesScreen
-            initialDraftMessage={pendingMessagesDraft?.text}
-            initialDraftMessageId={pendingMessagesDraft?.id}
-            onConsumeInitialDraftMessage={consumePendingMessagesDraft}
-          />
-        )}
-      </Tab.Screen>
+      <Tab.Screen name="Messages" component={MessagesScreen} />
       <Tab.Screen name="Appointments" component={AppointmentsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>

@@ -3,16 +3,17 @@ import {
   CITY_OPTIONS,
   type CityOption,
   candidateIntakeSchema,
-  getJdDegreeDateLabel,
+  getJdDegreeYear,
+  getJdDegreeYearOptions,
   normalizePhoneNumber,
   PRACTICE_AREAS,
   sanitizePhoneInput,
 } from '@zenith/shared';
 import { z } from 'zod';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { Alert, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Picker } from '@react-native-picker/picker';
 import { CalendarSyncCard } from '../../components/calendar-sync-card';
 import { CandidatePageTitle } from '../../components/candidate-page-title';
 import { PasswordInput } from '../../components/password-input';
@@ -26,33 +27,6 @@ type CandidateProfileFormValues = z.input<typeof candidateIntakeSchema>;
 const COLLAPSED_BUBBLE_ROWS_HEIGHT = 34;
 const EMPTY_SELECTED_CITIES: CityOption[] = [];
 const EMPTY_SELECTED_PRACTICE_AREAS: (typeof PRACTICE_AREAS)[number][] = [];
-
-function toJdDegreeLocalDate(value: string | null | undefined): Date | null {
-  if (!value) {
-    return null;
-  }
-
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) {
-    return null;
-  }
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const date = new Date(year, month - 1, day);
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-  return date;
-}
-
-function toJdDegreeIsoDate(value: Date): string {
-  const year = String(value.getFullYear());
-  const month = String(value.getMonth() + 1).padStart(2, '0');
-  const day = String(value.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 function MultiSelectOption({
   label,
@@ -106,7 +80,7 @@ function useProfileScreen() {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState('');
   const [showDeleteAccountFlow, setShowDeleteAccountFlow] = useState(false);
-  const [showJdDatePicker, setShowJdDatePicker] = useState(false);
+  const [showJdYearPicker, setShowJdYearPicker] = useState(false);
 
   const {
     control,
@@ -160,34 +134,17 @@ function useProfileScreen() {
     setDeleteConfirmText('');
     setDeleteMessage('');
     setShowDeleteAccountFlow(false);
-    setShowJdDatePicker(false);
+    setShowJdYearPicker(false);
   }, [profile, reset]);
 
   const selectedCities = watch('preferredCities') ?? EMPTY_SELECTED_CITIES;
   const selectedPracticeAreas = watch('practiceAreas') ?? EMPTY_SELECTED_PRACTICE_AREAS;
+  const jdYearOptions = useMemo(() => getJdDegreeYearOptions(), []);
+  const latestJdYear = jdYearOptions[0] ?? String(new Date().getUTCFullYear() - 1);
   const selectedJdDegreeDate = watch('jdDegreeDate') ?? '';
-  const selectedJdDegreeDateLabel = selectedJdDegreeDate
-    ? getJdDegreeDateLabel(selectedJdDegreeDate)
-    : 'Select JD degree date';
-  const selectedJdDegreeDateValue = toJdDegreeLocalDate(selectedJdDegreeDate) ?? new Date();
-  const onJdDateChange = useCallback(
-    (event: DateTimePickerEvent, nextDate?: Date) => {
-      if (event.type === 'dismissed' || !nextDate) {
-        if (Platform.OS !== 'ios') {
-          setShowJdDatePicker(false);
-        }
-        return;
-      }
-
-      setValue('jdDegreeDate', toJdDegreeIsoDate(nextDate), {
-        shouldValidate: true,
-      });
-      if (Platform.OS !== 'ios') {
-        setShowJdDatePicker(false);
-      }
-    },
-    [setValue],
-  );
+  const selectedJdDegreeYear = getJdDegreeYear(selectedJdDegreeDate);
+  const selectedJdDegreeDateLabel = selectedJdDegreeYear ?? 'Select JD year';
+  const jdYearPickerValue = selectedJdDegreeYear ?? latestJdYear;
 
   const confirmDeletePrompt = useCallback(async (): Promise<boolean> => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -409,9 +366,9 @@ function useProfileScreen() {
     selectedCities,
     selectedJdDegreeDate,
     selectedJdDegreeDateLabel,
-    selectedJdDegreeDateValue,
+    jdYearOptions,
+    jdYearPickerValue,
     selectedPracticeAreas,
-    onJdDateChange,
     setConfirmNewPassword,
     setConfirmNewEmailDraft,
     setCurrentEmailDraft,
@@ -419,10 +376,10 @@ function useProfileScreen() {
     setDeleteConfirmText,
     setNewEmailDraft,
     setNewPassword,
-    setShowJdDatePicker,
+    setShowJdYearPicker,
     setValue,
     showDeleteAccountFlow,
-    showJdDatePicker,
+    showJdYearPicker,
     showAllCities,
     showAllPracticeAreas,
     toggleShowAllCities,
@@ -605,21 +562,27 @@ function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
       ) : null}
       {h.errors.otherCityText ? <Text style={styles.error}>{h.errors.otherCityText.message}</Text> : null}
 
-      <Text style={styles.label}>JD degree date (optional)</Text>
-      <Pressable style={styles.input} onPress={() => h.setShowJdDatePicker((value) => !value)}>
+      <Text style={styles.label}>JD year (optional)</Text>
+      <Pressable style={styles.input} onPress={() => h.setShowJdYearPicker((value) => !value)}>
         <Text style={h.selectedJdDegreeDate ? styles.valueText : styles.valueTextPlaceholder}>
           {h.selectedJdDegreeDateLabel}
         </Text>
       </Pressable>
-      {h.showJdDatePicker ? (
+      {h.showJdYearPicker ? (
         <View style={styles.pickerShell}>
-          <DateTimePicker
-            value={h.selectedJdDegreeDateValue}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'inline' : 'default'}
-            maximumDate={new Date()}
-            onChange={h.onJdDateChange}
-          />
+          <Picker
+            selectedValue={h.jdYearPickerValue}
+            onValueChange={(value) =>
+              h.setValue('jdDegreeDate', String(value), {
+                shouldValidate: true,
+              })
+            }
+            style={styles.pickerControl}
+          >
+            {h.jdYearOptions.map((year) => (
+              <Picker.Item key={year} label={year} value={year} />
+            ))}
+          </Picker>
           <View style={styles.pickerActionRow}>
             <Pressable
               style={styles.pickerAction}
@@ -631,7 +594,7 @@ function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
             >
               <Text style={styles.pickerActionText}>Clear</Text>
             </Pressable>
-            <Pressable style={styles.pickerAction} onPress={() => h.setShowJdDatePicker(false)}>
+            <Pressable style={styles.pickerAction} onPress={() => h.setShowJdYearPicker(false)}>
               <Text style={styles.pickerActionText}>Done</Text>
             </Pressable>
           </View>
@@ -1006,6 +969,9 @@ const styles = StyleSheet.create({
   pickerActionText: {
     color: uiColors.primary,
     fontWeight: '600',
+  },
+  pickerControl: {
+    color: uiColors.textPrimary,
   },
   pickerShell: {
     backgroundColor: uiColors.surface,

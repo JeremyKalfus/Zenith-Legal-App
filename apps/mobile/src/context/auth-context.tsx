@@ -1,4 +1,5 @@
 import {
+  getJdDegreeYear,
   normalizePhoneNumber,
   PHONE_VALIDATION_MESSAGES,
   PRACTICE_AREAS,
@@ -635,7 +636,9 @@ async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
         name: profileRow.name,
         email: profileRow.email,
         mobile: profileRow.mobile,
-        jd_degree_date: profileIncludesOptionalColumns ? (profileRow.jd_degree_date ?? null) : null,
+        jd_degree_date: profileIncludesOptionalColumns
+          ? (getJdDegreeYear(profileRow.jd_degree_date ?? null) ?? null)
+          : null,
         onboarding_complete: profileRow.onboarding_complete ?? true,
         preferredCities: Array.isArray(preferences?.cities) ? preferences.cities : [],
         otherCityText: preferences?.other_city_text ?? null,

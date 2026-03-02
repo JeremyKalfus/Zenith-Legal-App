@@ -43,6 +43,60 @@ export const practiceAreas = [
   'Other',
 ] as const;
 
+const JD_DEGREE_YEAR_MIN = 2000;
+
+function getLatestAllowedJdDegreeYear(referenceDate = new Date()): number {
+  return referenceDate.getUTCFullYear() - 1;
+}
+
+function isIsoDateString(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    return false;
+  }
+  return parsed.toISOString().slice(0, 10) === value;
+}
+
+function isFourDigitYearString(value: string): boolean {
+  return /^\d{4}$/.test(value);
+}
+
+function normalizeJdDegreeYear(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  if (isFourDigitYearString(trimmed)) {
+    return trimmed;
+  }
+
+  if (isIsoDateString(trimmed)) {
+    return trimmed.slice(0, 4);
+  }
+
+  return undefined;
+}
+
+function isAllowedJdDegreeYear(value: string): boolean {
+  if (!isFourDigitYearString(value)) {
+    return false;
+  }
+
+  const year = Number(value);
+  return year >= JD_DEGREE_YEAR_MIN && year <= getLatestAllowedJdDegreeYear();
+}
+
+function mapJdDegreeYearToStoredDate(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  return `${value}-01-01`;
+}
+
 function optionalTrimmedString(max: number) {
   return z
     .string()
@@ -57,7 +111,7 @@ function optionalTrimmedString(max: number) {
     });
 }
 
-function optionalIsoDateString() {
+function optionalJdDegreeYearString() {
   return z
     .string()
     .optional()
@@ -65,22 +119,14 @@ function optionalIsoDateString() {
       if (typeof input !== 'string') {
         return undefined;
       }
-      const trimmed = input.trim();
-      return trimmed.length > 0 ? trimmed : undefined;
+      return normalizeJdDegreeYear(input);
     })
     .refine((value) => {
       if (!value) {
         return true;
       }
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-        return false;
-      }
-      const parsed = new Date(`${value}T00:00:00.000Z`);
-      if (Number.isNaN(parsed.getTime())) {
-        return false;
-      }
-      return parsed.toISOString().slice(0, 10) === value;
-    }, 'jdDegreeDate must be a valid date in YYYY-MM-DD format');
+      return isAllowedJdDegreeYear(value);
+    }, `jdDegreeDate must be a valid year between ${JD_DEGREE_YEAR_MIN} and ${getLatestAllowedJdDegreeYear()}`);
 }
 
 const optionalMobileInputSchema = z
@@ -104,7 +150,7 @@ export const candidateIntakeSchema = z
     otherCityText: optionalTrimmedString(120),
     practiceAreas: z.array(z.enum(practiceAreas)).max(3).default([]),
     otherPracticeText: optionalTrimmedString(120),
-    jdDegreeDate: optionalIsoDateString(),
+    jdDegreeDate: optionalJdDegreeYearString(),
     acceptedPrivacyPolicy: z.boolean(),
     acceptedCommunicationConsent: z.boolean(),
   })
@@ -191,7 +237,7 @@ export async function persistCandidateIntakeData({
     name: intake.name ?? null,
     email: intake.email,
     mobile: intake.mobile ?? null,
-    jd_degree_date: intake.jdDegreeDate ?? null,
+    jd_degree_date: mapJdDegreeYearToStoredDate(intake.jdDegreeDate),
     onboarding_complete: onboardingComplete,
   };
   const legacyProfilePayload = {

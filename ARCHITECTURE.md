@@ -78,7 +78,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 23 migrations in `supabase/migrations/`. Key tables:
 
 - `users_profile` -- User identity and role (candidate/staff)
-- `users_profile` includes candidate profile metadata used across mobile/admin surfaces (`jd_degree_date`)
+- `users_profile` includes candidate profile metadata used across mobile/admin surfaces (`jd_degree_date`, persisted as a `date` for compatibility while app contracts use JD year strings)
 - `candidate_preferences` -- Cities, practice_areas (array, max 3), optional practice_area (legacy)
 - `candidate_consents` -- Privacy and communication consents with versioning
 - `firms` -- Law firm directory
@@ -116,8 +116,14 @@ The shared package (`packages/shared/`) exports modules consumed by both admin a
 The package uses `"main": "src/index.ts"` for source-first workspace imports. It also defines `npm run build -w @zenith/shared` to emit declarations to `packages/shared/dist` for CI/release verification. Admin consumes it via `transpilePackages: ['@zenith/shared']` in `next.config.ts`. Mobile consumes it directly.
 
 Staff candidate list flows (mobile `staff-candidates-screen` and admin `candidate-firm-manager`) now hydrate profile rows from `users_profile` with `candidate_preferences` (`cities`, `practice_areas`, `practice_area`) and apply the shared filter helper for consistent behavior across both surfaces, including JD graduation year filtering via `users_profile.jd_degree_date`.
-The same staff candidate profile surfaces render candidate identity details and `users_profile.jd_degree_date` for recruiter/admin visibility.
+The same staff candidate profile surfaces render candidate identity details and JD year for recruiter/admin visibility (derived from `users_profile.jd_degree_date`).
 Recruiter mobile candidate flows also hydrate assignment aggregates (`candidate_firm_assignments`) and recruiter ownership (`candidate_recruiter_assignments`) to support current-status filtering, assigned-firm filtering, and recruiter assignment/set-to-none actions.
+
+JD year contract details:
+- Mobile/auth/shared app contracts validate and transmit JD values as `YYYY` strings (`2000..currentYear-1`).
+- Edge functions map year input to DB-compatible `jd_degree_date` values (`YYYY-01-01`) on writes.
+- Mobile profile hydration maps stored `jd_degree_date` back to `YYYY` before binding form state.
+- Shared label/filter helpers support legacy `YYYY-MM-DD` rows and year-only strings during transition.
 
 ## Mobile Theme System
 

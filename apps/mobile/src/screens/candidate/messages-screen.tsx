@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import {
   ActivityIndicator,
@@ -19,7 +19,6 @@ import {
   MessageList,
   type MessageAvatarProps,
   OverlayProvider,
-  useMessageComposer,
 } from 'stream-chat-expo';
 import { getChatClient } from '../../lib/chat';
 import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
@@ -71,51 +70,12 @@ function MessageAvatar(props: MessageAvatarProps) {
   return <StreamMessageAvatar {...props} />;
 }
 
-function ApplyInitialDraftMessage({
-  message,
-  messageId,
-  onApplied,
-}: {
-  message?: string | null;
-  messageId?: number;
-  onApplied?: (messageId: number) => void;
-}) {
-  const messageComposer = useMessageComposer();
-  const lastAppliedMessageIdRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const normalized = message?.trim();
-    if (!normalized || typeof messageId !== 'number') {
-      return;
-    }
-    if (lastAppliedMessageIdRef.current === messageId) {
-      return;
-    }
-
-    messageComposer.textComposer.setText(normalized);
-    messageComposer.textComposer.setSelection({
-      start: normalized.length,
-      end: normalized.length,
-    });
-    lastAppliedMessageIdRef.current = messageId;
-    onApplied?.(messageId);
-  }, [message, messageComposer, messageId, onApplied]);
-
-  return null;
-}
-
 export function MessagesScreen({
   showRecruiterBanner = true,
   candidateUserId,
-  initialDraftMessage,
-  initialDraftMessageId,
-  onConsumeInitialDraftMessage,
 }: {
   showRecruiterBanner?: boolean;
   candidateUserId?: string;
-  initialDraftMessage?: string | null;
-  initialDraftMessageId?: number;
-  onConsumeInitialDraftMessage?: (messageId: number) => void;
 }) {
   const { channel, errorMessage, isLoading } = useResolvedCandidateChatChannel(candidateUserId);
   const isFocused = useIsFocused();
@@ -197,11 +157,6 @@ export function MessagesScreen({
               keyboardVerticalOffset={Platform.OS === 'ios' ? 120 : 0}
               MessageAvatar={MessageAvatar}
             >
-              <ApplyInitialDraftMessage
-                message={initialDraftMessage}
-                messageId={initialDraftMessageId}
-                onApplied={onConsumeInitialDraftMessage}
-              />
               <MessageList
                 additionalFlatListProps={{
                   keyboardDismissMode: 'interactive',

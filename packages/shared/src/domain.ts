@@ -69,12 +69,31 @@ const JD_DEGREE_MONTH_OPTIONS: readonly JdDegreeMonthOption[] = [
   { label: 'December', value: '12' },
 ] as const;
 
+export const JD_DEGREE_YEAR_MIN = 2000;
+
+export function getLatestAllowedJdDegreeYear(referenceDate = new Date()): number {
+  return referenceDate.getUTCFullYear() - 1;
+}
+
 function isIsoDateString(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false;
   }
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function isFourDigitYearString(value: string): boolean {
+  return /^\d{4}$/.test(value);
+}
+
+function isAllowedJdDegreeYearString(value: string): boolean {
+  if (!isFourDigitYearString(value)) {
+    return false;
+  }
+
+  const year = Number(value);
+  return year >= JD_DEGREE_YEAR_MIN && year <= getLatestAllowedJdDegreeYear();
 }
 
 export type JdDegreeDateParts = {
@@ -91,9 +110,12 @@ export function getJdDegreeYearOptions(params?: {
   fromYear?: number;
   toYear?: number;
 }): string[] {
-  const currentYear = new Date().getUTCFullYear();
-  const fromYear = params?.fromYear ?? currentYear - 50;
-  const toYear = params?.toYear ?? currentYear + 1;
+  const fromYear = params?.fromYear ?? JD_DEGREE_YEAR_MIN;
+  const toYear = params?.toYear ?? getLatestAllowedJdDegreeYear();
+
+  if (!Number.isInteger(fromYear) || !Number.isInteger(toYear) || toYear < fromYear) {
+    return [];
+  }
 
   const options: string[] = [];
   for (let year = toYear; year >= fromYear; year -= 1) {
@@ -123,12 +145,24 @@ export function getJdDegreeDayOptions(params: {
 export function parseJdDegreeDateParts(
   value: string | null | undefined,
 ): JdDegreeDateParts | undefined {
-  if (!value || !isIsoDateString(value)) {
+  if (!value) {
     return undefined;
   }
 
-  const [year, month, day] = value.split('-');
-  return { year, month, day };
+  if (isIsoDateString(value)) {
+    const [year, month, day] = value.split('-');
+    return { year, month, day };
+  }
+
+  if (isFourDigitYearString(value)) {
+    return {
+      year: value,
+      month: '01',
+      day: '01',
+    };
+  }
+
+  return undefined;
 }
 
 export function getJdDegreeYear(value: string | null | undefined): string | undefined {
@@ -154,13 +188,10 @@ export function getJdDegreeDateLabel(value: string | null | undefined): string {
   if (!value) {
     return 'Not provided';
   }
-  if (isIsoDateString(value)) {
-    return new Date(`${value}T00:00:00.000Z`).toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-      timeZone: 'UTC',
-    });
+
+  const jdYear = getJdDegreeYear(value);
+  if (jdYear) {
+    return jdYear;
   }
 
   return value;
@@ -188,7 +219,7 @@ function optionalTrimmedString(max: number) {
     .transform((value) => value ?? undefined);
 }
 
-function optionalIsoDateString() {
+function optionalJdDegreeYearString() {
   return z
     .string()
     .trim()
@@ -199,15 +230,8 @@ function optionalIsoDateString() {
       if (!value) {
         return true;
       }
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-        return false;
-      }
-      const parsed = new Date(`${value}T00:00:00.000Z`);
-      if (Number.isNaN(parsed.getTime())) {
-        return false;
-      }
-      return parsed.toISOString().slice(0, 10) === value;
-    }, 'Enter a valid date as YYYY-MM-DD');
+      return isAllowedJdDegreeYearString(value);
+    }, `Enter a valid JD year between ${JD_DEGREE_YEAR_MIN} and ${getLatestAllowedJdDegreeYear()}`);
 }
 
 const optionalMobileInputSchema = z
@@ -242,7 +266,7 @@ export const candidateIntakeSchema = z
     otherCityText: optionalTrimmedString(120),
     practiceAreas: z.array(practiceAreaSchema).max(3, 'Choose up to 3 practice areas').default([]),
     otherPracticeText: optionalTrimmedString(120),
-    jdDegreeDate: optionalIsoDateString(),
+    jdDegreeDate: optionalJdDegreeYearString(),
     acceptedPrivacyPolicy: z.boolean().refine((value) => value, {
       message: 'Privacy policy acceptance is required',
     }),
