@@ -229,6 +229,7 @@ Build / submission snapshot (2026-02-25):
 - iOS EAS submission scheduled to App Store Connect: `25b4cdb9-7d8a-4b4a-af49-8dcf53994ff0` (processing status depends on Apple)
 - EAS submit scheduling did not result in an Apple-visible build for this run; manual Transporter upload of the IPA was used as fallback and succeeded
 - App Store Connect / TestFlight now shows iOS build `1.0.0 (2)` upload complete and processed (`Ready to Submit`), but app sign-in fails because the build was compiled with placeholder Supabase config (missing EAS production env vars)
+- 2026-03-03 local release run: iOS production build `df944362-c6d6-4f92-826d-12126e8253e2` finished for commit `8ea2e6deb4a6086ca1fef913d7c17c487a5a687c`; IPA artifact URL: `https://expo.dev/artifacts/eas/tBi2294fFb2jrRuJLK8Ceq.ipa`
 
 ## CI/CD
 

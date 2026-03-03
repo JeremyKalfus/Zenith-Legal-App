@@ -91,6 +91,7 @@
 - [x] iOS EAS submission scheduled to App Store Connect/TestFlight.
 - [x] Manual Transporter upload fallback used successfully after EAS submit scheduling did not surface a build in App Store Connect.
 - [x] App Store Connect/TestFlight shows iOS build `1.0.0 (2)` processed.
+- [x] 2026-03-03 iOS production build `df944362-c6d6-4f92-826d-12126e8253e2` finished from commit `8ea2e6deb4a6086ca1fef913d7c17c487a5a687c` and IPA downloaded locally.
 - [ ] TestFlight runtime sign-in validated (current `1.0.0 (2)` build fails with placeholder Supabase config due missing EAS production env vars).
 - [ ] App Store Connect / Play Console metadata and compliance forms completed.
 

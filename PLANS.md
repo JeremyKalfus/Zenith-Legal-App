@@ -83,6 +83,10 @@
   - Transporter upload delivered IPA to App Store Connect successfully (build upload `1.0.0 (2)` now processed in TestFlight)
 - Runtime validation finding:
   - TestFlight sign-in fails with `Supabase config is still using placeholder values.` because EAS production `EXPO_PUBLIC_*` vars were not configured before the build
+- 2026-03-03 local release run:
+  - iOS production build `df944362-c6d6-4f92-826d-12126e8253e2` finished for commit `8ea2e6deb4a6086ca1fef913d7c17c487a5a687c`
+  - IPA artifact URL: `https://expo.dev/artifacts/eas/tBi2294fFb2jrRuJLK8Ceq.ipa`
+  - Local IPA download: `/Users/jeremykalfus/CodingProjects/Zenith Legal App/artifacts/zenith-legal-ios-df944362-c6d6-4f92-826d-12126e8253e2.ipa`
 - Remaining release operations before store submissions:
   - Configure EAS production mobile runtime env vars and rebuild iOS (and later Android) for real sign-in / backend connectivity
   - Configure Google Play service account for `eas submit` (or use manual Android upload)
