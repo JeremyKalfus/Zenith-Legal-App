@@ -153,8 +153,8 @@ Deno.serve(
       const candidateName = candidateProfile?.name?.trim() || 'Candidate';
       const firmName = firm?.name?.trim() || 'Firm';
       const statusChangeText = normalizedNewStatus === waitingStatus
-        ? `Canidate ${candidateName}'s status for firm "${firmName}" has been updated from "${before.status_enum}" to "Waiting on your authorization to contact/submit". Check the dashboard tab to authorize or cancel submission`
-        : `Canidate ${candidateName}'s status for firm "${firmName}" has been updated from "${before.status_enum}" to "${normalizedNewStatus}". Message the Zenith team here if you have any questions.`;
+        ? `Candidate ${candidateName}'s status for firm "${firmName}" has been updated from "${before.status_enum}" to "Waiting on your authorization to contact/submit". Check the dashboard tab to authorize or cancel submission`
+        : `Candidate ${candidateName}'s status for firm "${firmName}" has been updated from "${before.status_enum}" to "${normalizedNewStatus}". Message the Zenith team here if you have any questions.`;
 
       await sendCandidateRecruiterChannelMessage({
         serviceClient,

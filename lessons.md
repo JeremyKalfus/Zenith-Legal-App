@@ -153,3 +153,13 @@ Append a new entry immediately after incidents and after post-fix verification i
 - **Fix applied:** Updated intake/profile JD handlers to reject only `dismissed` events and accept any event carrying `nextDate`, then persist `jdDegreeDate`.
 - **Prevention rule:** For cross-platform picker handlers, gate by payload validity (`nextDate`) and explicit dismiss states, not a single success event literal.
 - **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after the fix.
+
+### 2026-03-03 — Automated Firm-Status Message Shipped with Candidate Typo
+
+- **Date:** 2026-03-03
+- **Context:** Staff-triggered firm status update messages in the candidate/recruiter chat stream contained a misspelling (`Canidate`).
+- **Error:** User-facing automated copy in `supabase/functions/staff_update_assignment_status/index.ts` used `Canidate` in both status message templates.
+- **Why it happened:** Message template text was changed without a targeted typo scan on user-facing automated strings before shipping.
+- **Fix applied:** Replaced both `Canidate` instances with `Candidate` and re-scanned known misspelling patterns across `supabase/functions`, `apps`, and `packages`.
+- **Prevention rule:** Before pushing edge-function copy changes, run a targeted typo scan on all user-facing automated message templates and verify exact rendered template strings.
+- **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after the fix.
