@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import {
@@ -8,6 +8,7 @@ import {
 import { ScreenShell } from '../../components/screen-shell';
 import { CandidatePageTitle } from '../../components/candidate-page-title';
 import { useAuth } from '../../context/auth-context';
+import { getSupabaseClientConfigError } from '../../config/env';
 import { supabase, ensureValidSession } from '../../lib/supabase';
 import { getFunctionErrorMessage } from '../../lib/function-error';
 import {
@@ -39,6 +40,18 @@ type AppointmentAction = 'ignore_overdue' | 'cancel_upcoming';
 
 type CardTone = 'overdue' | 'outgoing' | 'upcoming';
 
+function getReadableErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error;
+  }
+
+  return fallback;
+}
+
 function formatAppointmentDateHeader(iso: string, timezoneLabel: string): string {
   const date = new Date(iso);
   return date.toLocaleDateString(undefined, {
@@ -54,29 +67,55 @@ function useAppointmentsScreen() {
   const [appointments, setAppointments] = useState<AppointmentRecord[]>([]);
   const [serverMessage, setServerMessage] = useState('');
   const [actingAppointmentId, setActingAppointmentId] = useState<string | null>(null);
+  const appointmentsLoadInFlightRef = useRef(false);
   const calendarSyncEnabled = useCalendarSyncEnabled(session?.user.id);
 
   const loadAppointments = useCallback(async () => {
+    if (appointmentsLoadInFlightRef.current) {
+      return;
+    }
+
     if (!session?.user?.id) {
       setAppointments([]);
       return;
     }
 
-    const { data, error } = await supabase
-      .from('appointments')
-      .select(
-        'id,title,description,start_at_utc,end_at_utc,modality,location_text,video_url,status,timezone_label,candidate_user_id,created_by_user_id',
-      )
-      .eq('candidate_user_id', session.user.id)
-      .order('start_at_utc', { ascending: true });
-
-    if (error) {
-      setServerMessage(error.message);
+    const configError = getSupabaseClientConfigError();
+    if (configError) {
+      setAppointments([]);
+      setServerMessage(configError);
       return;
     }
 
-    const mapped = (data as AppointmentRecord[]) ?? [];
-    setAppointments(mapped);
+    appointmentsLoadInFlightRef.current = true;
+    try {
+      await ensureValidSession();
+
+      const { data, error } = await supabase
+        .from('appointments')
+        .select(
+          'id,title,description,start_at_utc,end_at_utc,modality,location_text,video_url,status,timezone_label,candidate_user_id,created_by_user_id',
+        )
+        .eq('candidate_user_id', session.user.id)
+        .order('start_at_utc', { ascending: true });
+
+      if (error) {
+        setServerMessage(error.message);
+        return;
+      }
+
+      const mapped = (data as AppointmentRecord[]) ?? [];
+      setAppointments(mapped);
+    } catch (error) {
+      setServerMessage(
+        getReadableErrorMessage(
+          error,
+          'Unable to load appointments right now. Check your connection and try again.',
+        ),
+      );
+    } finally {
+      appointmentsLoadInFlightRef.current = false;
+    }
   }, [session?.user?.id]);
 
   useEffect(() => {

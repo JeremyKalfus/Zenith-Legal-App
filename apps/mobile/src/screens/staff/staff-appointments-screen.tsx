@@ -16,6 +16,7 @@ import { bucketStaffAppointments, type AppointmentStatus } from '@zenith/shared'
 import { ScreenShell } from '../../components/screen-shell';
 import { StaffPageTitle } from '../../components/staff-page-title';
 import { useAuth } from '../../context/auth-context';
+import { getSupabaseClientConfigError } from '../../config/env';
 import { ensureValidSession, supabase } from '../../lib/supabase';
 import {
   mapToDeviceCalendarAppointment,
@@ -52,6 +53,18 @@ type CandidateOption = {
 };
 
 type AppointmentAction = 'ignore_overdue' | 'cancel_outgoing_request' | 'cancel_upcoming';
+
+function getReadableErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error;
+  }
+
+  return fallback;
+}
 
 function useStaffAppointmentsScreen() {
   const { session } = useAuth();
@@ -92,8 +105,17 @@ function useStaffAppointmentsScreen() {
       return;
     }
 
+    const configError = getSupabaseClientConfigError();
+    if (configError) {
+      setAppointments([]);
+      setStatusMessage(configError);
+      return;
+    }
+
     appointmentsLoadInFlightRef.current = true;
     try {
+      await ensureValidSession();
+
       const { data, error } = await supabase
         .from('appointments')
         .select(
@@ -129,6 +151,13 @@ function useStaffAppointmentsScreen() {
 
       setAppointments(mapped);
       setStatusMessage('');
+    } catch (error) {
+      setStatusMessage(
+        getReadableErrorMessage(
+          error,
+          'Unable to load appointments right now. Check your connection and try again.',
+        ),
+      );
     } finally {
       appointmentsLoadInFlightRef.current = false;
     }
@@ -139,8 +168,17 @@ function useStaffAppointmentsScreen() {
       return;
     }
 
+    const configError = getSupabaseClientConfigError();
+    if (configError) {
+      setCandidates([]);
+      setStatusMessage(configError);
+      return;
+    }
+
     candidatesLoadInFlightRef.current = true;
     try {
+      await ensureValidSession();
+
       const { data, error } = await supabase
         .from('users_profile')
         .select('id,name')
@@ -155,6 +193,13 @@ function useStaffAppointmentsScreen() {
       const mapped = (data ?? []) as CandidateOption[];
       setCandidates(mapped);
       setSelectedCandidateId((current) => current || mapped[0]?.id || '');
+    } catch (error) {
+      setStatusMessage(
+        getReadableErrorMessage(
+          error,
+          'Unable to load candidates right now. Check your connection and try again.',
+        ),
+      );
     } finally {
       candidatesLoadInFlightRef.current = false;
     }

@@ -163,3 +163,13 @@ Append a new entry immediately after incidents and after post-fix verification i
 - **Fix applied:** Replaced both `Canidate` instances with `Candidate` and re-scanned known misspelling patterns across `supabase/functions`, `apps`, and `packages`.
 - **Prevention rule:** Before pushing edge-function copy changes, run a targeted typo scan on all user-facing automated message templates and verify exact rendered template strings.
 - **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after the fix.
+
+### 2026-03-03 — Appointments Tab Needed Throw-Safe Supabase Fetch Guards
+
+- **Date:** 2026-03-03
+- **Context:** Candidate appointments tab surfaced `TypeError: Network request failed` during background/focus-driven data refresh.
+- **Error:** Appointments and calendar-connection fetch paths relied on Supabase query error returns but did not catch thrown transport exceptions, leading to unhandled promise rejections in React Native.
+- **Why it happened:** Reload callbacks (`loadAppointments`, `useCalendarSyncEnabled`) were invoked from effects/intervals with `void` and lacked local `try/catch`, so thrown fetch failures bypassed UI error handling.
+- **Fix applied:** Added config/session guards (`getSupabaseClientConfigError`, `ensureValidSession`), in-flight gating, and throw-safe `try/catch/finally` handling for candidate/staff appointments loaders and calendar sync enabled lookup.
+- **Prevention rule:** Any Supabase fetch used in effect/interval/focus callbacks must handle both returned query errors and thrown transport exceptions locally.
+- **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after hardening.
