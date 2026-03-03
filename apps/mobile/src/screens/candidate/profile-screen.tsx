@@ -74,8 +74,8 @@ function useProfileScreen() {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState('');
-  const [showAllCities, setShowAllCities] = useState(false);
-  const [showAllPracticeAreas, setShowAllPracticeAreas] = useState(false);
+  const [showAllCities, setShowAllCities] = useState(true);
+  const [showAllPracticeAreas, setShowAllPracticeAreas] = useState(true);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState('');

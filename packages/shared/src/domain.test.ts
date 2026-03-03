@@ -83,10 +83,10 @@ describe('candidate intake schema', () => {
       'NYC',
       'Boston',
       'Chicago',
-      'Houston',
-      'LA / Southern Cal',
-      'SF / Northern Cal',
       'Miami',
+      'Houston',
+      'Dallas',
+      'LA / Southern Cal',
     ]);
   });
 
