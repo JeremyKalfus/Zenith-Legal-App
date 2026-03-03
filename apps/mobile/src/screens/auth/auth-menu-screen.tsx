@@ -51,7 +51,7 @@ export function AuthMenuScreen({
   const queuedScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isSignup = tab === 'signup';
-  const logoSize = 211;
+  const logoSize = 211 * 0.8;
   const normalizedEmail = email.trim().toLowerCase();
   const ctaDisabled = isSignup ? busy || !normalizedEmail : busy || !normalizedEmail || !password;
 

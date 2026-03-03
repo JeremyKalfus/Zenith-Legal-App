@@ -54,7 +54,7 @@
 
 3. **Observability wiring** -- Sentry DSN and PostHog key integration points are defined but not connected.
 4. **Admin README** -- Replace default Next.js boilerplate README with project-specific documentation.
-5. **Store submission configuration + metadata** -- Finish Android submit setup (Google Play service account), document manual Transporter fallback for iOS uploads, and complete App Store Connect / Play Console metadata/compliance forms.
+5. **Store submission configuration + metadata** -- Finish Android submit setup (Google Play service account), run iOS releases via `release:ios` (EAS auto-submit default), and complete App Store Connect / Play Console metadata/compliance forms.
 
 ## Blockers and Dependencies
 
@@ -62,13 +62,17 @@
 - **Google Play service account required** for: automated Android `eas submit` uploads. (iOS APNs + App Store Connect API key are configured.)
 - **Staging Supabase project** needed before promoting beyond dev.
 
-## Mobile Release Prep Snapshot (2026-02-25, last externally verified)
+## Mobile Release Prep Snapshot (2026-03-03)
 
 - Apple Developer App ID created: `com.zenithlegal.app` (Push Notifications enabled).
 - App Store Connect app created: `Zenith Legal` (bundle ID `com.zenithlegal.app`, SKU `zenith-legal-ios-prod`).
 - Expo EAS project linked: `@jeremykalfus/zenith-legal-mobile` (project ID `38f93994-daaa-4c85-a092-a70ac12f0c06`).
 - EAS config updates applied: remote app version source, production auto-increment retained, push setup prompt disabled after deferral.
 - EAS submit config update applied: `submit.production.ios.ascAppId = "6759677619"` to bypass App Store Connect app auto-lookup in `eas submit`.
+- iOS release workflow scripts added in `apps/mobile/package.json`:
+  - `release:ios` (build + auto-submit)
+  - `release:ios:status` (latest build + link to EAS submissions page)
+  - `release:ios:submit-latest` (manual submit fallback)
 - EAS credentials created:
   - Android production keystore (package `com.zenithlegal.app`)
   - iOS Distribution Certificate + Provisioning Profile (bundle ID `com.zenithlegal.app`)
@@ -87,6 +91,9 @@
   - iOS production build `df944362-c6d6-4f92-826d-12126e8253e2` finished for commit `8ea2e6deb4a6086ca1fef913d7c17c487a5a687c`
   - IPA artifact URL: `https://expo.dev/artifacts/eas/tBi2294fFb2jrRuJLK8Ceq.ipa`
   - Local IPA download: `/Users/jeremykalfus/CodingProjects/Zenith Legal App/artifacts/zenith-legal-ios-df944362-c6d6-4f92-826d-12126e8253e2.ipa`
+- 2026-03-03 active run:
+  - iOS production build `72d675a2-6ca6-49c8-b10e-473de6c0012c` finished in EAS (`1.0.0 (11)`)
+  - iOS submission `d140f9be-d8a4-482e-8839-a964b55c928e` scheduled successfully to App Store Connect/TestFlight
 - Remaining release operations before store submissions:
   - Configure EAS production mobile runtime env vars and rebuild iOS (and later Android) for real sign-in / backend connectivity
   - Configure Google Play service account for `eas submit` (or use manual Android upload)

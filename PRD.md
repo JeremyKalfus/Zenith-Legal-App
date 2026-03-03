@@ -4,15 +4,17 @@
 
 Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (candidates) with law firms through a recruiter-mediated workflow. The platform consists of a mobile app for candidates and staff, and a web admin dashboard for recruiter operations.
 
-### Distribution Readiness (Store/Ops Snapshot: 2026-02-25, last externally verified)
+### Distribution Readiness (Store/Ops Snapshot: 2026-03-03)
 
 - Mobile production identifiers are set to `com.zenithlegal.app` for both iOS and Android.
 - Apple Developer App ID and App Store Connect app record (`Zenith Legal`) are created for the production iOS app.
 - Expo EAS project is linked for standalone store builds (`@jeremykalfus/zenith-legal-mobile`).
 - EAS-managed Android signing keystore, iOS distribution certificate/provisioning profile, iOS APNs key, and iOS App Store Connect submit API key are configured.
+- Default iOS release path is EAS cloud build + auto-submit (`npm run release:ios -w @zenith/mobile`) with `release:ios:status` and `release:ios:submit-latest` scripts for operations/fallback.
 - Initial production EAS builds have completed for iOS/TestFlight and Android/Play internal testing artifacts (IPA + AAB).
 - Manual Transporter upload delivered the iOS IPA to App Store Connect after EAS submit scheduling did not surface a build in App Store Connect.
 - App Store Connect/TestFlight now shows iOS build `1.0.0 (2)` processed, but runtime sign-in currently fails because EAS production `EXPO_PUBLIC_*` vars were not configured before the build.
+- Latest iOS release run: build `72d675a2-6ca6-49c8-b10e-473de6c0012c` (`1.0.0 (11)`) finished and submitted to App Store Connect via EAS (`d140f9be-d8a4-482e-8839-a964b55c928e`).
 - Google Play submit credential setup remains pending.
 
 ## User Roles

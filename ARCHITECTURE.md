@@ -198,7 +198,7 @@ See `docs/release.md` for full environment strategy.
 
 ## Mobile Release Infrastructure (EAS / Stores)
 
-As of **2026-02-25** (last externally verified), the Expo mobile app has a production store-build baseline configured:
+As of **2026-03-03**, the Expo mobile app has a production store-build baseline configured:
 
 - **Expo/EAS project:** `@jeremykalfus/zenith-legal-mobile`
 - **EAS project ID:** `38f93994-daaa-4c85-a092-a70ac12f0c06`
@@ -212,6 +212,10 @@ Version/build configuration:
 - `apps/mobile/eas.json` production profile uses `autoIncrement: true`
 - `apps/mobile/eas.json` submit profile includes `ios.ascAppId = "6759677619"` to bypass EAS App Store Connect app auto-lookup during submit
 - `apps/mobile/app.json` includes iOS export-compliance flag `ITSAppUsesNonExemptEncryption = false`
+- `apps/mobile/package.json` includes iOS release scripts:
+  - `release:ios` -> `npx eas-cli build -p ios --profile production --auto-submit --non-interactive`
+  - `release:ios:status` -> latest iOS build output + EAS submissions page link
+  - `release:ios:submit-latest` -> `npx eas-cli submit -p ios --profile production --latest --non-interactive`
 
 Credential state (EAS-managed):
 
@@ -222,7 +226,7 @@ Credential state (EAS-managed):
 - **Android submit API credentials:** pending (Google Play service account not configured yet)
 - **EAS production runtime env vars (`EXPO_PUBLIC_*`):** pending (first TestFlight build was created without these and used placeholder config values)
 
-Build / submission snapshot (2026-02-25):
+Build / submission snapshot (2026-03-03):
 
 - iOS production build finished: `36ca22cc-f921-431c-a24b-5adfd6d7871c` (IPA artifact generated)
 - Android production build finished: `3c84ffe0-aa34-444e-8f52-cc43bef37bd4` (AAB artifact generated)
@@ -230,6 +234,7 @@ Build / submission snapshot (2026-02-25):
 - EAS submit scheduling did not result in an Apple-visible build for this run; manual Transporter upload of the IPA was used as fallback and succeeded
 - App Store Connect / TestFlight now shows iOS build `1.0.0 (2)` upload complete and processed (`Ready to Submit`), but app sign-in fails because the build was compiled with placeholder Supabase config (missing EAS production env vars)
 - 2026-03-03 local release run: iOS production build `df944362-c6d6-4f92-826d-12126e8253e2` finished for commit `8ea2e6deb4a6086ca1fef913d7c17c487a5a687c`; IPA artifact URL: `https://expo.dev/artifacts/eas/tBi2294fFb2jrRuJLK8Ceq.ipa`
+- 2026-03-03 production run: iOS build `72d675a2-6ca6-49c8-b10e-473de6c0012c` finished (`1.0.0 (11)`) and was submitted via EAS submit (`d140f9be-d8a4-482e-8839-a964b55c928e`)
 
 ## CI/CD
 
@@ -242,4 +247,4 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on push to `main` and all PRs:
 5. Build shared package
 6. Build admin app
 
-Mobile store builds/submissions are run manually via Expo EAS from `apps/mobile/` and are not part of GitHub Actions CI.
+Mobile store builds/submissions are run manually via Expo EAS from `apps/mobile/` and are not part of GitHub Actions CI. Default iOS operational path is `npm run release:ios -w @zenith/mobile`; Transporter is fallback-only.

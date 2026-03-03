@@ -248,6 +248,19 @@
 
 **Consequences:** A new iOS build is required after configuring EAS production env vars; the current `1.0.0 (2)` build remains useful only for verifying signing/upload/TestFlight plumbing. Release checklists and plans now explicitly track EAS production runtime env var configuration.
 
+### [2026-03-03] Default iOS release path uses EAS auto-submit (Transporter fallback only)
+
+**Decision:** Standardize iOS releases on a single EAS command that builds and auto-submits to App Store Connect/TestFlight, with Transporter used only when EAS submit transport fails.
+
+**Options considered:**
+1. EAS cloud build + EAS auto-submit (chosen) -- one command, consistent, no routine manual upload step
+2. EAS cloud build + manual Transporter upload -- reliable fallback but slower/manual for every release
+3. Local iOS build + Transporter -- potentially faster queue bypass, but requires local native build toolchain and manual upload every time
+
+**Rationale:** The project already has working EAS submit credentials and pinned `ascAppId`. Auto-submit eliminates repeated manual Transporter uploads and keeps release flow deterministic from CI-like commands.
+
+**Consequences:** iOS releases should use `npm run release:ios -w @zenith/mobile` by default. If submission does not reach App Store Connect, fallback to `npm run release:ios:submit-latest -w @zenith/mobile` (and only then Transporter if needed).
+
 ### [2026-02-26] Consolidate staff-messaging into shared package
 
 **Decision:** Move `staff-messaging.ts` (types, channel parsing, inbox mapping, timestamp formatting) from duplicate implementations in `apps/admin/src/features/` and `apps/mobile/src/features/` into `packages/shared/src/staff-messaging.ts`.

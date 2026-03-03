@@ -9,7 +9,10 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "release:ios": "npx eas-cli build -p ios --profile production --auto-submit --non-interactive",
+    "release:ios:status": "npx eas-cli build:list --platform ios --limit 1 --non-interactive && echo \"EAS submissions: https://expo.dev/accounts/jeremykalfus/projects/zenith-legal-mobile/submissions\"",
+    "release:ios:submit-latest": "npx eas-cli submit -p ios --profile production --latest --non-interactive"
   },
   "dependencies": {
     "@braintree/sanitize-url": "^6.0.4",

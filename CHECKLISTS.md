@@ -64,6 +64,7 @@
 - [ ] iOS Distribution Certificate + Provisioning Profile exist in EAS credentials for the production bundle ID.
 - [ ] iOS APNs key configured in EAS credentials if standalone/TestFlight push notifications are required.
 - [ ] Store submission path decided/tested: EAS submit credentials configured (App Store Connect API key, Google Play service account) or manual upload procedure documented.
+- [ ] iOS release command path validated from repo scripts (`npm run release:ios -w @zenith/mobile`, `npm run release:ios:status -w @zenith/mobile`).
 - [ ] EAS production mobile runtime vars configured (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_STREAM_API_KEY`) and verified in a store build.
 - [ ] App Store Connect export compliance + app privacy questionnaires completed and consistent with runtime behavior.
 - [ ] Google Play Data safety / content rating / app content declarations completed and consistent with runtime behavior.
@@ -76,7 +77,7 @@
 - [ ] No console errors or unhandled promise rejections.
 - [ ] Environment-specific secrets configured (not committed).
 
-### Release Snapshot (2026-02-25, last externally verified)
+### Release Snapshot (2026-03-03)
 
 - [x] Production app identifiers set to `com.zenithlegal.app` in `apps/mobile/app.json`.
 - [x] Apple Developer App ID created (`com.zenithlegal.app`) with Push Notifications enabled.
@@ -86,12 +87,15 @@
 - [x] iOS EAS Distribution Certificate + Provisioning Profile created for production signing.
 - [x] iOS APNs key configured in EAS credentials.
 - [x] App Store Connect API key configured for `eas submit`.
+- [x] iOS default release scripts added in `apps/mobile/package.json` (`release:ios`, `release:ios:status`, `release:ios:submit-latest`).
 - [ ] Google Play service account configured for `eas submit`.
 - [x] EAS production build artifacts generated (iOS IPA + Android AAB).
 - [x] iOS EAS submission scheduled to App Store Connect/TestFlight.
 - [x] Manual Transporter upload fallback used successfully after EAS submit scheduling did not surface a build in App Store Connect.
+- [x] Default iOS release path switched to EAS build + auto-submit; Transporter retained as contingency only.
 - [x] App Store Connect/TestFlight shows iOS build `1.0.0 (2)` processed.
 - [x] 2026-03-03 iOS production build `df944362-c6d6-4f92-826d-12126e8253e2` finished from commit `8ea2e6deb4a6086ca1fef913d7c17c487a5a687c` and IPA downloaded locally.
+- [x] 2026-03-03 iOS production build `72d675a2-6ca6-49c8-b10e-473de6c0012c` (`1.0.0 (11)`) finished and submitted via EAS (`d140f9be-d8a4-482e-8839-a964b55c928e`).
 - [ ] TestFlight runtime sign-in validated (current `1.0.0 (2)` build fails with placeholder Supabase config due missing EAS production env vars).
 - [ ] App Store Connect / Play Console metadata and compliance forms completed.
 
