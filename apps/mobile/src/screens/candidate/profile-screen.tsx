@@ -12,13 +12,14 @@ import {
 import { z } from 'zod';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Alert, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { CalendarSyncCard } from '../../components/calendar-sync-card';
 import { CandidatePageTitle } from '../../components/candidate-page-title';
 import { PasswordInput } from '../../components/password-input';
 import { ScreenShell } from '../../components/screen-shell';
 import { SignOutButton } from '../../components/sign-out-button';
+import { PRIVACY_POLICY_URL } from '../../config/legal';
 import { useAuth } from '../../context/auth-context';
 import { uiColors } from '../../theme/colors';
 import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
@@ -27,6 +28,9 @@ type CandidateProfileFormValues = z.input<typeof candidateIntakeSchema>;
 const COLLAPSED_BUBBLE_ROWS_HEIGHT = 70;
 const EMPTY_SELECTED_CITIES: CityOption[] = [];
 const EMPTY_SELECTED_PRACTICE_AREAS: (typeof PRACTICE_AREAS)[number][] = [];
+const openPrivacyPolicy = () => {
+  void Linking.openURL(PRIVACY_POLICY_URL);
+};
 
 function MultiSelectOption({
   label,
@@ -679,11 +683,22 @@ function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
         control={h.control}
         name="acceptedPrivacyPolicy"
         render={({ field }) => (
-          <Pressable onPress={() => field.onChange(!field.value)}>
+          <View style={styles.checkboxRow}>
+            <Pressable style={styles.checkboxToggle} onPress={() => field.onChange(!field.value)}>
+              <Text style={styles.checkbox}>{field.value ? '☑' : '☐'}</Text>
+            </Pressable>
             <Text style={styles.checkbox}>
-              {field.value ? '☑' : '☐'} I accept the Privacy Policy (required)
+              I accept the{' '}
+              <Text
+                accessibilityRole="link"
+                onPress={openPrivacyPolicy}
+                style={styles.checkboxLink}
+              >
+                Privacy Policy
+              </Text>{' '}
+              (required)
             </Text>
-          </Pressable>
+          </View>
         )}
       />
       {h.errors.acceptedPrivacyPolicy ? (
@@ -950,6 +965,19 @@ const styles = StyleSheet.create({
   checkbox: {
     color: uiColors.textPrimary,
     fontSize: 14,
+  },
+  checkboxLink: {
+    color: uiColors.link,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  checkboxRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  checkboxToggle: {
+    marginRight: 4,
   },
   error: {
     color: uiColors.error,

@@ -2,7 +2,7 @@
 
 ## Product Overview
 
-Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (candidates) with law firms through a recruiter-mediated workflow. The platform consists of a mobile app for candidates and staff, and a web admin dashboard for recruiter operations.
+Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (candidates) with law firms through a recruiter-mediated workflow. The platform consists of a mobile app for candidates and staff, a web admin dashboard for recruiter operations, and a public privacy policy webpage for compliance and user reference.
 
 ### Distribution Readiness (Store/Ops Snapshot: 2026-03-03)
 
@@ -16,6 +16,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - App Store Connect/TestFlight now shows iOS build `1.0.0 (2)` processed, but runtime sign-in currently fails because EAS production `EXPO_PUBLIC_*` vars were not configured before the build.
 - Latest iOS release run: build `72d675a2-6ca6-49c8-b10e-473de6c0012c` (`1.0.0 (11)`) finished and submitted to App Store Connect via EAS (`d140f9be-d8a4-482e-8839-a964b55c928e`).
 - Google Play submit credential setup remains pending.
+- Public privacy policy website source now lives at `apps/privacy-policy` as an English-only static page ready for Vercel deployment and store-listing policy URL usage.
 
 ## User Roles
 

@@ -12,11 +12,12 @@ import {
 import { z } from 'zod';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { PasswordInput } from '../../components/password-input';
+import { PRIVACY_POLICY_URL } from '../../config/legal';
 import { useAuth } from '../../context/auth-context';
 import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
 import { uiColors } from '../../theme/colors';
@@ -25,6 +26,9 @@ import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/
 type CandidateRegistrationFormValues = z.input<typeof candidateRegistrationSchema>;
 type IntakeMode = 'registration' | 'finishProfile' | 'signupCompletion';
 const COLLAPSED_BUBBLE_ROWS_HEIGHT = 70;
+const openPrivacyPolicy = () => {
+  void Linking.openURL(PRIVACY_POLICY_URL);
+};
 
 function MultiSelectOption({
   label,
@@ -438,11 +442,21 @@ export function IntakeScreen({
                 control={control}
                 name="acceptedPrivacyPolicy"
                 render={({ field }) => (
-                  <Pressable onPress={() => field.onChange(!field.value)}>
+                  <View style={styles.checkboxRow}>
+                    <Pressable style={styles.checkboxToggle} onPress={() => field.onChange(!field.value)}>
+                      <Text style={styles.checkbox}>{field.value ? '☑' : '☐'}</Text>
+                    </Pressable>
                     <Text style={styles.checkbox}>
-                      {field.value ? '☑' : '☐'} I accept the Privacy Policy
+                      I accept the{' '}
+                      <Text
+                        accessibilityRole="link"
+                        onPress={openPrivacyPolicy}
+                        style={styles.checkboxLink}
+                      >
+                        Privacy Policy
+                      </Text>
                     </Text>
-                  </Pressable>
+                  </View>
                 )}
               />
               {errors.acceptedPrivacyPolicy ? (
@@ -534,6 +548,19 @@ const styles = StyleSheet.create({
   checkbox: {
     color: uiColors.textPrimary,
     fontSize: 14,
+  },
+  checkboxLink: {
+    color: uiColors.link,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  checkboxRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  checkboxToggle: {
+    marginRight: 4,
   },
   container: {
     gap: 10,

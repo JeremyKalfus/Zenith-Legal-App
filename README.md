@@ -6,6 +6,7 @@ Production-oriented monorepo for Zenith Legal mobile + admin platform (candidate
 
 - `apps/mobile`: Expo React Native app (candidate + staff role UX)
 - `apps/admin`: Next.js recruiter dashboard (staff operations)
+- `apps/privacy-policy`: static public privacy policy website (Vercel-ready)
 - `packages/shared`: shared domain types, validation schemas, phone utilities, and staff-messaging helpers
 - `supabase`: database migrations, RLS policies, edge functions
 - `docs`: architecture, release, and operations notes

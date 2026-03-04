@@ -41,6 +41,7 @@
 |---|---|---|---|
 | Mobile | `apps/mobile/` | Expo SDK 54, React Native 0.81, React Navigation, react-hook-form, Zod, expo-auth-session, expo-web-browser, stream-chat-expo (native), stream-chat-react (web) | Candidate and staff mobile app; web build via Expo web |
 | Admin | `apps/admin/` | Next.js 16, React 19, Tailwind 4, shadcn primitives, Zod | Recruiter web dashboard |
+| Privacy Policy Web | `apps/privacy-policy/` | Static HTML/CSS, Vercel config | Public, English-only privacy policy page for app-store compliance and external policy linking |
 | Shared | `packages/shared/` | TypeScript, Zod | Domain types, validation schemas, phone utilities, staff-messaging helpers, candidate filter/normalization helpers |
 | Backend | `supabase/` | PostgreSQL 15, Deno edge functions, `@supabase/supabase-js@2.57.4` | Database, auth, serverless API |
 
@@ -178,7 +179,7 @@ See `docs/secrets.md` for the full inventory. Secrets are provided via:
 - `.env` files locally (excluded from git via `.gitignore`)
 - GitHub Actions secrets for CI
 - EAS secrets for mobile builds
-- Vercel environment variables for admin deploys
+- Vercel environment variables for admin deploys (privacy policy static site does not require runtime env vars)
 - Supabase dashboard for edge function environment variables
 
 Required environment variables (placeholders):
