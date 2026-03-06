@@ -500,9 +500,6 @@ export function IntakeScreen({
                   </View>
                 )}
               />
-              <Text style={styles.helper}>
-                On iPhone and Android, turning this on will ask your device for notification permission.
-              </Text>
             </>
           ) : null}
 

@@ -752,10 +752,6 @@ function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
           </View>
         )}
       />
-      <Text style={styles.helper}>
-        On iPhone and Android, turning this on will ask your device for notification permission.
-      </Text>
-
           <Pressable
             style={interactivePressableStyle({
               base: styles.primaryButton,
