@@ -69,33 +69,107 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 | `staff_update_user_role` | Staff JWT | Promote candidate accounts to staff from admin workflow (`candidate -> staff`) |
 | `bulk_paste_ingest_firms` | Staff JWT | Bulk firm data import |
 | `staff_handle_data_request` | Staff JWT | Process support/data requests |
-| `staff_send_job_opportunity_notification` | Staff JWT | Queue a manually composed recruiter push notification for the currently targeted candidate set after server-side consent and deliverability revalidation |
+| `staff_send_job_opportunity_notification` | Staff JWT | Queue a manually composed recruiter push notification for the currently targeted candidate set after server-side consent and deliverability revalidation. Implemented in repo and configured in `supabase/config.toml`; deployment to linked hosted project is still pending as of 2026-03-06. |
 | `dispatch_notifications` | Internal | Dual-mode notification function: enqueue events into `notification_deliveries` or process due queued push deliveries (`send_after_utc <= now`) via Expo Push API (email provider integration pending). Supports `appointment.reminder` events for 15-minute pre-meeting pushes. Internal helpers: `fetchTokensByUser`, `processSingleDelivery`, `revokeStaleTokens`, `claimQueuedPushDelivery`, `markDeliveryStatus` |
 | `process_chat_webhook` | Webhook signature | Handle Stream Chat events |
 
 **JWT handling:** All functions set `verify_jwt = false` in `supabase/config.toml` to bypass gateway-level JWT verification (required due to the project's JWT signing key format). Auth is enforced internally via `getCurrentUserId()` which extracts the Bearer token and calls `getUser(token)`.
 
+Hosted Supabase deployment snapshot (linked project `njxgoypivrxyrukpouxb`, checked 2026-03-06):
+- Migration parity is clean: local and hosted both include every migration through `20260306130500`.
+- Edge-function inventory is not fully in parity: 21 function directories exist locally (excluding `_shared`), while 20 are active remotely.
+- Missing remotely: `staff_send_job_opportunity_notification` (local-only until deployed).
+
 ## Database Schema
 
-25 migrations in `supabase/migrations/`. Key tables:
+Source of truth is 25 SQL migrations in `supabase/migrations/` with hosted schema parity confirmed via `supabase migration list` (local = remote through `20260306130500` on linked project ref `njxgoypivrxyrukpouxb` as of 2026-03-06).
 
-- `users_profile` -- User identity and role (candidate/staff)
-- `users_profile` includes candidate profile metadata used across mobile/admin surfaces (`jd_degree_date`, persisted as a `date` for compatibility while app contracts use JD year strings)
-- `candidate_preferences` -- Cities, practice_areas (array, max 3), optional practice_area (legacy)
-- `candidate_consents` -- Privacy, communication, and job-opportunity push consents with versioning and acceptance timestamps
-- `firms` -- Law firm directory
-- `candidate_firm_assignments` -- Staff-managed candidate-to-firm assignments
-- `candidate_authorizations` -- Candidate decisions on firm submissions
-- `appointments` / `appointment_participants` -- Scheduling with scheduled-overlap constraints and explicit participant tracking for candidate/staff reminders + calendar sync
-- `calendar_connections` / `calendar_event_links` -- Calendar provider connection and sync tracking, keyed per appointment+provider+user
-- `notification_preferences` / `push_tokens` / `notification_deliveries` -- Notification pipeline with delayed delivery support via `send_after_utc`
-- `audit_events` -- Immutable audit log
-- `support_data_requests` -- Candidate support requests
-- `recruiter_contact_config` -- Configurable recruiter phone/email for mobile banner
-- `candidate_recruiter_contact_overrides` -- Per-candidate recruiter banner phone/email overrides managed by staff
-- `candidate_recruiter_assignments` -- Per-candidate recruiter ownership assignment (`candidate_user_id -> recruiter_user_id`, nullable for unassigned)
+Current enum state (post-migrations):
+- `public.user_role`: `candidate`, `staff`
+- `public.firm_status`: includes `Authorized, will submit soon` in addition to waiting/submitted/interview/rejected/offer states
+- `public.appointment_status`: `scheduled`, `cancelled`, `pending`, `accepted`, `declined` (runtime app contract normalizes to `pending|scheduled|declined|cancelled`)
+- `public.calendar_provider`: `apple`, `microsoft` (Google removed by migration)
+- `public.notification_channel`: `push`, `email`
+- `public.support_request_type`: `export`, `delete`
+- `public.support_request_status`: `open`, `in_progress`, `completed`, `rejected`
 
-All tables enforce Row Level Security. Staff-only mutations are routed through edge functions that call `assertStaff()`.
+Key tables and constraints:
+- `users_profile`
+  - PK `id` (`auth.users.id`, `on delete cascade`)
+  - Columns: `role`, `name`, `email`, `mobile`, `jd_degree_date`, `onboarding_complete`, timestamps
+  - Unique indexes: `users_profile_mobile_unique_idx` (`mobile`), `users_profile_email_lower_unique_idx` (`lower(email)`)
+- `candidate_preferences`
+  - PK/FK `user_id -> users_profile.id`
+  - Columns: `cities[]`, `other_city_text`, `practice_area` (legacy enum), `practice_areas[]` (current multi-select), `other_practice_text`, timestamps
+  - Constraints: max 3 practice areas; value whitelist enforced at DB constraint level
+- `candidate_consents`
+  - PK/FK `user_id -> users_profile.id`
+  - Privacy/communication consent booleans + accepted-at + version fields
+  - DB checks enforce that privacy/communication acceptance metadata must be null when the corresponding boolean is `false`
+  - Recruiter push consent columns (2026-03-06 migration):
+    - `job_opportunity_push_accepted boolean not null default false`
+    - `job_opportunity_push_accepted_at timestamptz`
+    - `job_opportunity_push_version text`
+  - Push-consent metadata columns currently do not have an equivalent SQL check constraint; enforcement is in edge-function write logic
+  - `source` records write origin (`mobile_app` default)
+- `firms`
+  - PK `id`, unique `normalized_name`, JSON metadata field, active flag
+  - Select policy restricted to assigned candidate or staff (`firms_assigned_or_staff_select`)
+- `candidate_firm_assignments`
+  - PK `id`, unique (`candidate_user_id`, `firm_id`)
+  - Tracks current `status_enum`, `status_updated_at`, assignment actor and timestamps
+- `candidate_authorizations`
+  - PK `id`, unique (`assignment_id`)
+  - Stores candidate decision + timestamp with self-owned update policy checks
+- `appointments`
+  - PK `id`; candidate + creator FKs to `users_profile`
+  - Stores modality, location/video fields, UTC start/end, timezone label, status
+  - `created_by_user_id` is declared `not null` with FK `on delete set null`; application deletion flows reassign creator ownership before deleting staff users to avoid FK/null conflicts
+  - Exclusion constraint `appointments_no_overlapping_scheduled_per_candidate` prevents overlapping `scheduled` windows per candidate
+  - Insert policy allows candidate self-create and staff create (`appointments_create_self_or_staff`)
+- `appointment_participants`
+  - PK `id`, unique (`appointment_id`, `user_id`)
+  - Tracks candidate/staff appointment participants
+- `calendar_connections`
+  - PK `id`, unique (`user_id`, `provider`)
+  - Stores encrypted OAuth payload + sync state blob
+- `calendar_event_links`
+  - PK `id`, unique (`appointment_id`, `provider`, `user_id`)
+  - Includes provider event ID, sync hash, provider event URL, user ownership
+- `notification_preferences`
+  - PK/FK `user_id -> users_profile.id`
+  - `push_enabled`, `email_enabled`, per-category toggles JSON
+- `push_tokens`
+  - PK `id`, unique (`user_id`, `expo_push_token`)
+  - Tracks platform, `last_seen_at`, and soft revocation (`revoked_at`)
+- `notification_deliveries`
+  - PK `id`
+  - Queue fields: `user_id`, `channel`, `event_type`, `payload`, `status`, `created_at`
+  - Delayed send support: `send_after_utc` + dispatch index `idx_notification_deliveries_dispatch_queue`
+- `recruiter_contact_config`
+  - Global recruiter phone/email banner source with `is_active` and updater tracking
+- `candidate_recruiter_contact_overrides`
+  - PK/FK `candidate_user_id -> users_profile.id`
+  - Candidate-specific recruiter phone/email overrides + updater tracking
+- `candidate_recruiter_assignments`
+  - PK/FK `candidate_user_id -> users_profile.id`
+  - Nullable `recruiter_user_id` (`on delete set null`) supports explicit unassigned state
+  - Staff-only RLS select/write policies
+- `audit_events`
+  - Immutable operational ledger (`actor_user_id`, action/entity tuple, before/after JSON, timestamp)
+- `support_data_requests`
+  - Data export/delete workflow queue with staff handler fields and status progression
+
+Triggers and helper functions:
+- `public.set_updated_at()` updates `updated_at` columns across profile/preferences/firms/assignments/appointments/calendar connections/notification preferences/support requests, plus recruiter override/assignment tables added in later migrations.
+- `public.audit_trigger()` writes insert/update/delete snapshots to `audit_events`; later migrations extended non-`id` PK support (`user_id`, `candidate_user_id`).
+- `public.is_staff()` is the primary RLS helper and is reused by table policies and edge-function assumptions.
+
+RLS model:
+- Every application table in `public` is RLS-enabled.
+- Candidate-owned tables allow `self` access and staff override via `public.is_staff()`.
+- Staff-only write paths are enforced by RLS + edge-function `assertStaff()` checks.
+- Policy changes for feature work are migration-managed (for example firms visibility narrowing, staff appointment insert policy, calendar event link ownership scoping, and staff-only recruiter assignment/override tables).
 
 ## Calendar Connection UX (Mobile)
 
@@ -181,8 +255,10 @@ Refactored components using this pattern:
 - **SMS OTP**: Supabase built-in phone OTP methods exist in auth context plumbing (provider/config dependent).
 - **Session management**: Expo SecureStore (mobile) or localStorage (web) for token persistence. `autoRefreshToken: true` enabled. Client-side `ensureValidSession()` helper proactively refreshes tokens nearing expiry.
 - **Staff chat bootstrap hardening**: Admin web staff dashboard/message flows and mobile staff tab indicators call `ensureValidSession()` before invoking `chat_auth_bootstrap`, preventing stale-session auth failures after backgrounding or idle time.
+- **Thread readiness hardening**: Candidate/staff message thread surfaces now wait for `channel.watch()` completion before rendering `Channel`/`MessageList`, avoiding false "unable to load messages" errors when channel state is not hydrated yet.
 - **Revoked/deleted session recovery**: Mobile auth bootstrap detects invalid/missing refresh tokens (for example after account deletion or server-side revocation), clears the persisted local session, and fails open to the sign-in screen instead of repeatedly retrying refresh on startup.
 - **Edge function errors**: Client uses `getFunctionErrorMessage()` to read the actual error from `FunctionsHttpError.context` (Response body); uses `Response.clone()` when available so the body is not consumed. Avoids generic "Edge Function returned a non-2xx status code" when the function returns JSON `{ error: "..." }`.
+- **Profile write validation semantics**: Intake/profile submitters send required consent booleans explicitly, and `create_or_update_candidate_profile` responds with combined form-level + field-level validation messages (422) rather than generic payload failures.
 - **Chat bootstrap modes**: `chat_auth_bootstrap` supports (1) candidate self-bootstrap, (2) staff bootstrap for a specific candidate channel via `user_id`, and (3) staff token-only bootstrap for inbox channel listing when `user_id` is omitted.
 - **Admin web staff messaging**: Admin dashboard staff users use the same `chat_auth_bootstrap` token-only inbox bootstrap + candidate-channel bootstrap flow as the main app, powered by Stream Chat (`NEXT_PUBLIC_STREAM_API_KEY` on admin web).
 - **Admin web staff account deletion**: `/dashboard/staff-accounts` lists recruiter users from `users_profile`, invokes `staff_delete_user`, blocks self-delete in the UI and server contract, and preserves scheduled appointment records by reassigning deleted-staff `created_by_user_id` values to the appointment candidate before auth deletion.

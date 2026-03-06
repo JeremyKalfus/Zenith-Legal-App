@@ -33,7 +33,11 @@
 - [x] Admin candidate manager role promotion flow (`candidate -> staff`) via audited `staff_update_user_role` edge function
 - [x] Staff mobile per-candidate banner contact override controls (save + reset to global default)
 - [x] Recruiter mobile candidate ownership + Filter Search flow (`candidate_recruiter_assignments`, Assigned Recruiter editor, separate filter screen with Clear/Apply)
-- [x] Recruiter job-opportunity push consent + bulk notification workflow (candidate opt-in persistence, explicit native prompt gating, staff Filter Search consent filter, manual recruiter push send, backend queue revalidation)
+- [x] Recruiter job-opportunity push consent + bulk notification workflow in repo (candidate opt-in persistence, explicit native prompt gating, staff Filter Search consent filter, manual recruiter push send, backend queue revalidation)
+- [ ] Hosted Supabase deployment parity for recruiter bulk-send (`staff_send_job_opportunity_notification` is local/configured but not active in linked project function list as of 2026-03-06)
+- [x] Staff messages auth hardening on admin/mobile bootstrap paths (`ensureValidSession()` before staff chat bootstrap)
+- [x] Stream channel readiness gating on candidate/staff thread screens (`channel.watch()` required before render)
+- [x] Candidate profile/intake payload hardening (explicit required consent booleans + field-level validation error surfacing)
 - [x] Mobile icon/logo mark scaled +14% across app icon assets (`icon`, `adaptive-icon`, `splash-icon`, `favicon`)
 - [x] Candidate signup/profile JD year contract + wheel UX (`2000..current year - 1`) with DB date compatibility mapping (`YYYY` ↔ `YYYY-01-01`)
 - [x] Candidate dashboard status-update CTA removal + deletion of automated message draft plumbing in candidate messaging navigation/screens
@@ -48,19 +52,21 @@
 
 ### High Priority
 
-1. **Notification dispatch implementation (email provider + processor automation)** -- Push queue processing and delayed reminder support are implemented; email delivery provider integration and production scheduler automation still need completion.
-2. **Calendar sync hardening** -- Apple sync wiring is implemented; production credential rollout and Apple pathway confirmation (ICS vs CalDAV) still need completion.
+1. **Deploy missing hosted edge function for recruiter push send** -- `staff_send_job_opportunity_notification` is implemented locally and referenced by mobile recruiter UI, but not yet active in the linked hosted Supabase function inventory.
+2. **Notification dispatch implementation (email provider + processor automation)** -- Push queue processing and delayed reminder support are implemented; email delivery provider integration and production scheduler automation still need completion.
+3. **Calendar sync hardening** -- Apple sync wiring is implemented; production credential rollout and Apple pathway confirmation (ICS vs CalDAV) still need completion.
 
 ### Medium Priority
 
-3. **Observability wiring** -- Sentry DSN and PostHog key integration points are defined but not connected.
-4. **Admin README** -- Replace default Next.js boilerplate README with project-specific documentation.
-5. **Store submission configuration + metadata** -- Finish Android submit setup (Google Play service account), run iOS releases via `release:ios` (EAS auto-submit default), and complete App Store Connect / Play Console metadata/compliance forms.
+4. **Observability wiring** -- Sentry DSN and PostHog key integration points are defined but not connected.
+5. **Admin README** -- Replace default Next.js boilerplate README with project-specific documentation.
+6. **Store submission configuration + metadata** -- Finish Android submit setup (Google Play service account), run iOS releases via `release:ios` (EAS auto-submit default), and complete App Store Connect / Play Console metadata/compliance forms.
 
 ## Blockers and Dependencies
 
 - **Vendor secrets required** for: notification dispatch email provider (push via Expo Push API does not require a provider secret), Apple calendar provider credentials (if Apple path evolves beyond current ICS mode), Sentry, PostHog. Stream Chat (`STREAM_API_KEY`, `STREAM_API_SECRET`) are set in Supabase edge function secrets for messaging.
 - **Google Play service account required** for: automated Android `eas submit` uploads. (iOS APNs + App Store Connect API key are configured.)
+- **Supabase function deployment parity required** for recruiter push campaigns: deploy `staff_send_job_opportunity_notification` to linked hosted project `njxgoypivrxyrukpouxb`.
 - **Staging Supabase project** needed before promoting beyond dev.
 
 ## Mobile Release Prep Snapshot (2026-03-03)
@@ -102,7 +108,17 @@
 
 ## Next 6 Tasks
 
-### 1. Finish notification dispatch (email provider + processor automation)
+### 1. Deploy hosted recruiter push-send function parity
+
+**Scope:** Deploy `staff_send_job_opportunity_notification` to linked hosted Supabase, verify invocation succeeds from staff mobile `Filter Search`, and confirm queue inserts + audit events are created in hosted DB.
+
+**Verification:**
+- `supabase functions list` includes `staff_send_job_opportunity_notification`.
+- Staff mobile composer returns queued/skipped summary instead of function-not-found errors.
+- Hosted `notification_deliveries` rows are created with `event_type = 'job_opportunity.match'`.
+- Hosted `audit_events.action = 'staff_send_job_opportunity_notification'` rows are present.
+
+### 2. Finish notification dispatch (email provider + processor automation)
 
 **Scope:** Complete notification dispatch by adding email delivery provider integration and wiring a scheduler/automation to invoke `dispatch_notifications` in processor mode regularly. Push queue processing via Expo Push API is implemented.
 
@@ -112,7 +128,7 @@
 - `notification_deliveries.status` updated to `'sent'` or `'failed'`.
 - Processor invocation is automated on a schedule (not manual-only).
 
-### 2. Harden calendar sync rollout
+### 3. Harden calendar sync rollout
 
 **Scope:** Complete production credential rollout and provider-path hardening for the implemented calendar sync foundation (`connect_calendar_provider`, per-user event links, Apple ICS-link path).
 
@@ -121,7 +137,7 @@
 - Scheduled appointments appear in connected calendars for candidate + staff participants.
 - `npm run verify` passes.
 
-### 3. Observability wiring
+### 4. Observability wiring
 
 **Scope:** Connect Sentry DSN and PostHog key integration points in mobile/admin so errors and key product events are captured in production environments.
 
@@ -130,7 +146,7 @@
 - Core onboarding/appointment/messaging events are tracked in PostHog.
 - `npm run verify` passes.
 
-### 4. Configure EAS production env vars + rebuild mobile store builds
+### 5. Configure EAS production env vars + rebuild mobile store builds
 
 **Scope:** Add production EAS `EXPO_PUBLIC_*` variables (Supabase URL/anon key, Stream API key, and support contact values), rebuild iOS for TestFlight (and Android when ready), and verify sign-in works against the real backend.
 
@@ -139,7 +155,7 @@
 - New TestFlight build installs and signs in successfully (no placeholder Supabase config error).
 - Android store build generated with the same production runtime config values.
 
-### 5. Complete store submission + push credential setup
+### 6. Complete store submission + push credential setup
 
 **Scope:** Finish the remaining mobile release operational work after signing/build baseline setup: configure Android `eas submit` credentials (or document a manual Android upload path), monitor iOS TestFlight processing, and complete App Store Connect / Play Console metadata/compliance configuration.
 
@@ -148,12 +164,3 @@
 - `eas submit -p android --profile production` uploads to Play Internal Testing (or AAB manually uploaded successfully).
 - Standalone/TestFlight iOS push notifications tested after APNs key setup (now configured).
 - Store metadata/compliance forms complete in both store consoles.
-
-### 6. Improve test health for candidate operations flows
-
-**Scope:** Increase automated coverage in admin/mobile candidate operations paths (assignment status updates, staff banner override save/reset behavior, and candidate banner resolution precedence) to improve the current low test-health dimension.
-
-**Verification:**
-- Candidate operations regressions are covered by unit/integration tests.
-- Test health score improves without increasing wontfix debt.
-- `npm run verify` passes.

@@ -23,12 +23,14 @@
 - [ ] HTTP status codes: 401 auth, 403 forbidden, 404 not found, 400/422 validation, 500 server error.
 - [ ] `supabase/config.toml` updated if a new function is added (set `verify_jwt = false`).
 - [ ] Edge functions deployed to hosted Supabase: `supabase functions deploy`.
+- [ ] Local-vs-hosted function parity checked (`supabase functions list` includes the new/updated function slug in the linked project).
 - [ ] Audit events written for privileged operations via `writeAuditEvent()`.
 
 ## Data / Schema Change
 
 - [ ] All items from Feature Change checklist.
 - [ ] New migration file created in `supabase/migrations/` with timestamp prefix.
+- [ ] `supabase migration list` confirms local/hosted migration parity after applying.
 - [ ] RLS policies defined for any new tables.
 - [ ] RLS policies reviewed: candidates cannot access other candidates' data; staff-only tables reject non-staff.
 - [ ] Migration tested locally: `supabase db reset` runs cleanly.
@@ -69,6 +71,7 @@
 - [ ] App Store Connect export compliance + app privacy questionnaires completed and consistent with runtime behavior.
 - [ ] Google Play Data safety / content rating / app content declarations completed and consistent with runtime behavior.
 - [ ] All edge functions deployed to target environment.
+- [ ] Local-vs-hosted function inventory parity checked (no missing deployed slugs).
 - [ ] Database migrations applied to target Supabase project.
 - [ ] Mobile smoke test on iOS and Android.
 - [ ] Chat send/receive tested (web: Messages tab with stream-chat-react; native: Stream Chat SDK).
@@ -98,6 +101,13 @@
 - [x] 2026-03-03 iOS production build `72d675a2-6ca6-49c8-b10e-473de6c0012c` (`1.0.0 (11)`) finished and submitted via EAS (`d140f9be-d8a4-482e-8839-a964b55c928e`).
 - [ ] TestFlight runtime sign-in validated (current `1.0.0 (2)` build fails with placeholder Supabase config due missing EAS production env vars).
 - [ ] App Store Connect / Play Console metadata and compliance forms completed.
+
+### Supabase Backend Parity Snapshot (2026-03-06)
+
+- [x] Linked hosted project: `njxgoypivrxyrukpouxb` (`ZL App`, West US/Oregon).
+- [x] Local/hosted migration parity confirmed through `20260306130500` (`supabase migration list`).
+- [x] `supabase/config.toml` contains `verify_jwt = false` block for `staff_send_job_opportunity_notification`.
+- [ ] Hosted function parity complete (`staff_send_job_opportunity_notification` is present locally but missing from `supabase functions list` as of 2026-03-06).
 
 ## Code Quality (desloppify)
 
@@ -154,9 +164,9 @@ python3 -m desloppify fix unused-imports
 python3 -m desloppify review --run-batches --runner codex --parallel --scan-after-import
 ```
 
-### Score Tracking (as of 2026-03-02)
+### Score Tracking (as of 2026-03-06)
 
-- Overall: 68.1/100 (lenient), 61.3/100 (strict)
-- Objective score: 95.0/100
-- Open findings (in-scope): 232
-- Key dimensions: File health 97.2%, Code quality 98.8%, Duplication 94.1%, Test health 85.7% (strict 11.7%), Security 98.6%
+- Overall: 67.7/100 (lenient), 61.3/100 (strict)
+- Objective score: 94.0/100
+- Open findings (in-scope): 284
+- Key dimensions: File health 97.3%, Code quality 98.2%, Duplication 92.8%, Test health 82.1% (strict 10.6%), Security 98.8%

@@ -4,7 +4,7 @@
 
 Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (candidates) with law firms through a recruiter-mediated workflow. The platform consists of a mobile app for candidates and staff, a web admin dashboard for recruiter operations, and a public privacy policy webpage for compliance and user reference.
 
-### Distribution Readiness (Store/Ops Snapshot: 2026-03-03)
+### Distribution Readiness (Store/Ops Snapshot: 2026-03-06)
 
 - Mobile production identifiers are set to `com.zenithlegal.app` for both iOS and Android.
 - Apple Developer App ID and App Store Connect app record (`Zenith Legal`) are created for the production iOS app.
@@ -17,6 +17,8 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Latest iOS release run: build `72d675a2-6ca6-49c8-b10e-473de6c0012c` (`1.0.0 (11)`) finished and submitted to App Store Connect via EAS (`d140f9be-d8a4-482e-8839-a964b55c928e`).
 - Google Play submit credential setup remains pending.
 - Public privacy policy website source now lives at `apps/privacy-policy` as an English-only static page ready for Vercel deployment and store-listing policy URL usage.
+- Supabase migration parity is current in the linked hosted project (`njxgoypivrxyrukpouxb`) through `20260306130500`.
+- Supabase edge-function parity is not fully complete yet: `staff_send_job_opportunity_notification` exists in repo/config but is not active in the linked hosted function list as of 2026-03-06.
 
 ## User Roles
 
@@ -33,7 +35,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Manages candidate-firm assignments: assigns firms to candidates, updates assignment statuses, unassigns firms.
 - Assigns one recruiter (or none) per candidate in the recruiter mobile candidate detail flow.
 - Filters recruiter mobile candidate lists via a dedicated `Filter Search` screen with: assigned recruiter, current status, practice, assigned firms, preferred cities, JD years, and job-opportunity push consent (with `Any` defaults and `Clear`/`Apply` actions), plus free-text search on the list page.
-- Sends manually composed job-opportunity push notifications from the recruiter mobile `Filter Search` screen to the currently filtered set of consented candidates.
+- Sends manually composed job-opportunity push notifications from the recruiter mobile `Filter Search` screen to the currently filtered set of consented candidates (feature is implemented in app/backend code; linked hosted project still needs the new function deployment).
 - Reviews appointment requests (accept/decline).
 - Messages candidates via real-time chat.
 - Ingests firm data in bulk (paste-based).
@@ -87,6 +89,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - `chat_auth_bootstrap` edge function provisions Stream tokens and channel; requires an existing `users_profile` row (no auto-creation).
 - `process_chat_webhook` handles inbound webhook events from Stream.
 - Client calls `ensureValidSession()` before bootstrap; errors from the function are surfaced via `getFunctionErrorMessage` (response body extraction).
+- Candidate/staff thread screens now wait for `channel.watch()` readiness before rendering message lists to avoid false channel-load failures.
 
 ### Appointments
 - Candidates request appointments with Date, Time, modality (virtual/in-person), optional video URL/location, and optional note.
@@ -114,6 +117,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Candidate Profile settings are organized into collapsible sections: `Change Profile Details`, `Calendar Sync`, and `Change Email or Password`.
 - Candidates and staff can delete their own account in-app from Profile (self-service deletion flow with confirmation).
 - Candidate and staff Profile tabs include a Calendar Sync settings card with provider status and connect actions.
+- Profile/intake validation failures now return field-level messages (422) from `create_or_update_candidate_profile` instead of only a generic `Invalid payload`.
 
 ### Notifications
 - Push token registration.
@@ -122,8 +126,10 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Staff-scheduled appointments enqueue immediate push notifications and 15-minute pre-meeting push reminders.
 - Candidate job-opportunity push consent is tracked separately from global push enablement; recruiter bulk-send uses consent-filtered recipients and server-side revalidation before queueing.
 - Native push permission prompts no longer run automatically on authenticated app load; the OS prompt is requested only when a candidate explicitly enables the job-opportunity push opt-in.
+- `staff_send_job_opportunity_notification` revalidates candidate role, recruiter push consent, global push preference, and non-revoked push token presence before insert into `notification_deliveries`.
 - Automatic recurring processor scheduling is not fully wired yet (queued deliveries require processor invocation until scheduler/automation is added).
 - Notification events: appointment created/updated/reminder, assignment status change, message received, recruiter job-opportunity match.
+- Linked hosted Supabase currently lacks the deployed `staff_send_job_opportunity_notification` function even though the app invokes it; deployment parity is required for production recruiter send.
 - Standalone/TestFlight iOS push notification credential setup (Apple APNs key in EAS) is configured as of 2026-02-25; runtime validation on a TestFlight build is still pending.
 - Current TestFlight runtime issue: authentication fails with placeholder Supabase config until EAS production env vars are configured and a new build is shipped.
 

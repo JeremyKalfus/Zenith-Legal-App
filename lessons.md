@@ -223,3 +223,13 @@ Append a new entry immediately after incidents and after post-fix verification i
 - **Fix applied:** Sent `acceptedCommunicationConsent: true` explicitly from the mobile intake/profile submit paths and updated `supabase/functions/create_or_update_candidate_profile/index.ts` to include field-level validation messages in the error response.
 - **Prevention rule:** If a backend contract requires hidden/defaulted fields, include them explicitly in submit payloads and surface both form-level and field-level validation errors from edge functions.
 - **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after the payload/error-message fix.
+
+### 2026-03-06 — Schema Parity Alone Is Not Backend Parity
+
+- **Date:** 2026-03-06
+- **Context:** Root-doc reconciliation initially treated Supabase migration parity as equivalent to full backend parity.
+- **Error:** Local and hosted schema versions matched, but edge-function inventory did not (`staff_send_job_opportunity_notification` existed locally yet was absent from hosted `supabase functions list`).
+- **Why it happened:** Verification steps focused on `supabase migration list` and did not include a local-vs-hosted function slug comparison.
+- **Fix applied:** Added explicit function-inventory parity checks to root process docs and updated planning/architecture docs to call out the missing deployment instead of assuming full parity.
+- **Prevention rule:** Backend parity sign-off requires both migration parity and function inventory parity; never mark a backend feature "deployed" from schema parity alone.
+- **Follow-up checks:** `supabase migration list` and `supabase functions list` were run and documented in root docs.

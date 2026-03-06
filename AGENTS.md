@@ -28,8 +28,9 @@ Every task must follow this sequence:
 2. **Plan** -- Break the work into micro-steps. Write out what will change and why before making edits.
 3. **Implement** -- Execute each micro-step. Make the smallest viable change per step.
 4. **Verify** -- After each micro-step, run verification commands (`npm run lint`, `npm run typecheck`, `npm run test`). Fix any issues before proceeding to the next step.
-5. **Update docs** -- After all steps pass, update the relevant root documentation files (see Doc Update Policy below).
-6. **Pre-push scan** -- Before each `git push`, run `python3 -m desloppify scan --path .` and address any score regressions/findings before pushing.
+5. **Supabase parity check (when backend touched)** -- Run `supabase migration list` and `supabase functions list`; confirm local schema and edge-function inventory match the linked hosted project, or document any drift explicitly.
+6. **Update docs** -- After all steps pass, update the relevant root documentation files (see Doc Update Policy below).
+7. **Pre-push scan** -- Before each `git push`, run `python3 -m desloppify scan --path .` and address any score regressions/findings before pushing.
 
 ## Lessons Log
 
@@ -69,6 +70,7 @@ Agents must append this checklist (filled in) to their output after completing a
 - [ ] No secrets or credentials committed
 - [ ] Root docs updated (list which ones, or "N/A")
 - [ ] Edge functions deployed if backend changed (Y/N/N/A)
+- [ ] Supabase migration/function parity checked and documented if backend changed (Y/N/N/A)
 - [ ] Commit message is scoped and descriptive
 - [ ] `python3 -m desloppify scan --path .` shows no score regression (optional)
 ```
@@ -299,4 +301,3 @@ This is the canonical Codex overlay used by the README install command.
 
 <!-- desloppify-overlay: codex -->
 <!-- desloppify-end -->
-

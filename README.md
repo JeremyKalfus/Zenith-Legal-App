@@ -7,7 +7,7 @@ Production-oriented monorepo for Zenith Legal mobile + admin platform (candidate
 - `apps/mobile`: Expo React Native app (candidate + staff role UX)
 - `apps/admin`: Next.js recruiter dashboard (staff operations)
 - `apps/privacy-policy`: static public privacy policy website (Vercel-ready)
-- `packages/shared`: shared domain types, validation schemas, phone utilities, and staff-messaging helpers
+- `packages/shared`: shared domain types, validation schemas, phone utilities, staff-messaging helpers, and candidate filtering helpers
 - `supabase`: database migrations, RLS policies, edge functions
 - `docs`: architecture, release, and operations notes
 
@@ -56,6 +56,20 @@ npm run verify
 - `npm run test`: runs tests across all workspaces
 - `npm run verify`: runs `lint`, `typecheck`, and `test` in sequence
 
+## Supabase Reality Check (2026-03-06)
+
+- Linked project: `njxgoypivrxyrukpouxb` (`ZL App`, West US/Oregon).
+- Migration parity is clean: local and hosted include all migrations through `20260306130500`.
+- Function parity is not yet clean: local has 21 function directories (excluding `_shared`), hosted has 20 active functions.
+- Missing hosted function slug: `staff_send_job_opportunity_notification`.
+
+Recommended parity commands:
+
+```bash
+supabase migration list
+supabase functions list
+```
+
 5. Run code quality scan (optional)
 
 ```bash
@@ -83,8 +97,11 @@ python3 -m desloppify plan
 - [x] Candidate firm authorization workflow (decline-delete for waiting assignments; cancel for authorized assignments)
 - [x] Candidate/staff and admin account deletion flows (mobile self-service + admin candidate/staff delete with self/last-staff safeguards)
 - [x] Push notification queue processing via Expo Push API (`dispatch_notifications` processor mode)
+- [x] Candidate job-opportunity push opt-in + recruiter mobile bulk-send flow in code/schema
+- [x] Staff messaging auth hardening and channel-watch readiness fixes (admin + mobile)
 - [x] Code quality pass: consolidated duplicates into shared package, centralized mobile theme, extracted custom hooks, refactored edge functions
 - [ ] Vendor credential wiring for end-to-end runtime (requires secrets)
+- [ ] Hosted Supabase function parity (`staff_send_job_opportunity_notification` deployment)
 - [ ] Notification email provider + scheduled dispatch automation (push processor is implemented; automation still pending)
 - [x] Device-level release signing baseline (EAS Android keystore + iOS distribution certificate/provisioning profile + iOS APNs/App Store Connect API key)
 - [ ] Android `eas submit` credential setup (Google Play service account)

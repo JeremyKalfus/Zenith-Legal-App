@@ -587,3 +587,42 @@ Superseded in part by the 2026-03-06 staff-account deletion decision below.
 **Rationale:** The intermittent staff-side Messages auth error was caused by paths that reused persisted session state without proactively refreshing near-expiry tokens. Staff messaging is a high-frequency, privileged workflow, so an explicit refresh before bootstrap is the safer contract.
 
 **Consequences:** Admin dashboard guard, admin staff messages dashboard, and mobile staff tab indicators now refresh the session before chat bootstrap. Future staff-only edge-function bootstraps should follow the same pattern.
+
+### [2026-03-06] Require Stream channel watch readiness before rendering thread UI
+
+**Decision:** Require candidate/staff thread surfaces to await `channel.watch()` success before mounting `Channel`/`MessageList` components.
+
+**Options considered:**
+1. Render threads immediately from channel ID and rely on lazy state hydration -- smallest code path, but can surface false channel-load errors.
+2. Retry after render-time failure only -- less startup gating, but user still sees avoidable first-load error flashes.
+3. Add explicit watch/readiness gate with loading + error fallback before render (chosen) -- deterministic channel state before UI mount.
+
+**Rationale:** Stream thread components require channel state to be hydrated. Constructing a channel object from ID is not enough when state has not been watched yet, which caused `Error loading messages for this channel` despite valid auth/bootstrap.
+
+**Consequences:** `useResolvedCandidateChatChannel` and staff thread screen logic now gate rendering on `watch()` completion and surface a dedicated retryable error state only when watch truly fails.
+
+### [2026-03-06] Enforce explicit consent booleans in profile writes and return field-level validation messages
+
+**Decision:** Keep server-side candidate intake/profile validation strict, but ensure mobile submit paths always send required consent booleans and ensure the edge function returns combined form + field validation errors.
+
+**Options considered:**
+1. Loosen server validation so missing booleans are auto-assumed true -- fewer client failures, but weakens contract and consent integrity.
+2. Keep strict validation and only return form-level errors -- preserves correctness, but leaves users with unhelpful `Invalid payload`.
+3. Keep strict validation, send hidden required booleans explicitly from clients, and return full field-level errors from the edge function (chosen).
+
+**Rationale:** Consent fields are contractual and should not be silently inferred server-side. The right fix is payload completeness plus better validation error surfacing so users and developers can identify the actual invalid field.
+
+**Consequences:** Intake/profile submissions now explicitly include required consent booleans (including non-editable defaults), and `create_or_update_candidate_profile` returns 422 messages that include field-level failures.
+
+### [2026-03-06] Treat local-vs-hosted edge-function inventory parity as a release gate
+
+**Decision:** Track Supabase function inventory parity (`supabase/functions/*` vs `supabase functions list`) as an explicit release/doc gate, not only schema migration parity.
+
+**Options considered:**
+1. Validate only migrations -- easy and common, but runtime can still break if new functions are not deployed.
+2. Validate only functions -- catches invocation gaps, but can miss schema drift.
+3. Validate both migrations and function inventory before declaring backend parity (chosen).
+
+**Rationale:** The recruiter push-send feature showed that schema parity alone is insufficient: code and config can reference a function that is absent remotely. Users then hit runtime function-not-found failures despite green migration state.
+
+**Consequences:** Operational readiness and docs now call out migration parity and function parity separately. Any backend feature touching edge functions should include `supabase functions list` comparison before close-out.
