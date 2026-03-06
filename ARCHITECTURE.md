@@ -69,6 +69,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 | `staff_update_user_role` | Staff JWT | Promote candidate accounts to staff from admin workflow (`candidate -> staff`) |
 | `bulk_paste_ingest_firms` | Staff JWT | Bulk firm data import |
 | `staff_handle_data_request` | Staff JWT | Process support/data requests |
+| `staff_send_job_opportunity_notification` | Staff JWT | Queue a manually composed recruiter push notification for the currently targeted candidate set after server-side consent and deliverability revalidation |
 | `dispatch_notifications` | Internal | Dual-mode notification function: enqueue events into `notification_deliveries` or process due queued push deliveries (`send_after_utc <= now`) via Expo Push API (email provider integration pending). Supports `appointment.reminder` events for 15-minute pre-meeting pushes. Internal helpers: `fetchTokensByUser`, `processSingleDelivery`, `revokeStaleTokens`, `claimQueuedPushDelivery`, `markDeliveryStatus` |
 | `process_chat_webhook` | Webhook signature | Handle Stream Chat events |
 
@@ -76,12 +77,12 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 
 ## Database Schema
 
-24 migrations in `supabase/migrations/`. Key tables:
+25 migrations in `supabase/migrations/`. Key tables:
 
 - `users_profile` -- User identity and role (candidate/staff)
 - `users_profile` includes candidate profile metadata used across mobile/admin surfaces (`jd_degree_date`, persisted as a `date` for compatibility while app contracts use JD year strings)
 - `candidate_preferences` -- Cities, practice_areas (array, max 3), optional practice_area (legacy)
-- `candidate_consents` -- Privacy and communication consents with versioning
+- `candidate_consents` -- Privacy, communication, and job-opportunity push consents with versioning and acceptance timestamps
 - `firms` -- Law firm directory
 - `candidate_firm_assignments` -- Staff-managed candidate-to-firm assignments
 - `candidate_authorizations` -- Candidate decisions on firm submissions
@@ -118,6 +119,7 @@ The package uses `"main": "src/index.ts"` for source-first workspace imports. It
 Staff candidate list flows (mobile `staff-candidates-screen` and admin `candidate-firm-manager`) now hydrate profile rows from `users_profile` with `candidate_preferences` (`cities`, `practice_areas`, `practice_area`) and apply the shared filter helper for consistent behavior across both surfaces, including JD graduation year filtering via `users_profile.jd_degree_date`.
 The same staff candidate profile surfaces render candidate identity details and JD year for recruiter/admin visibility (derived from `users_profile.jd_degree_date`).
 Recruiter mobile candidate flows also hydrate assignment aggregates (`candidate_firm_assignments`) and recruiter ownership (`candidate_recruiter_assignments`) to support current-status filtering, assigned-firm filtering, and recruiter assignment/set-to-none actions.
+The same mobile recruiter candidate loading path also hydrates `candidate_consents.job_opportunity_push_accepted` so the shared filter model can evaluate recruiter send eligibility client-side before the server performs a second validation pass.
 
 JD year contract details:
 - Mobile/auth/shared app contracts validate and transmit JD values as `YYYY` strings (`2000..currentYear-1`).
@@ -140,9 +142,20 @@ Firm status badges in mobile listings use semantic `uiColors` status tokens for 
 ## Recruiter Candidate Filter Search (Mobile)
 
 - `staff-candidates-screen` keeps free-text search and launches a dedicated `staff-candidate-filters-screen` for structured filters.
-- Filter state supports `assigned recruiter` (`any|none|staff-user-id`), `current status`, `practice`, `assigned firms[]`, `preferred cities[]`, and `jd years[]`.
+- Filter state supports `assigned recruiter` (`any|none|staff-user-id`), `current status`, `practice`, `assigned firms[]`, `preferred cities[]`, `jd years[]`, and `job opportunity push consent` (`any|accepted|not_accepted`).
 - `Clear` resets all filters to `Any`; `Apply` navigates back to the candidate list with params and applies filters immediately.
 - Filter evaluation is centralized in `@zenith/shared` (`filterStaffCandidates`) for deterministic UI behavior.
+- The same filter surface includes a manual `Send Notification` flow that opens a recruiter composer (`title` + `message`), summarizes the current filtered/consented audience, and invokes `staff_send_job_opportunity_notification`.
+
+## Job-Opportunity Push Consent and Delivery
+
+- Source of truth for recruiter job-opportunity push consent is `candidate_consents.job_opportunity_push_accepted`; timestamp/version companions are persisted alongside it.
+- Global notification suppression remains `notification_preferences.push_enabled`; queue-time delivery checks require both recruiter-specific consent and global push enablement, plus at least one non-revoked Expo push token.
+- Mobile notification registration is split into:
+  - silent sync when native notification permission is already granted (`syncPushTokenIfPermitted`)
+  - explicit permission prompt + registration only when the candidate enables the recruiter job-opportunity consent (`requestPushPermissionAndRegister`)
+- Web renders the opt-in control but does not attempt browser push registration.
+- `dispatch_notifications` now has a dedicated `job_opportunity.match` payload path so recruiter-composed `title` and `body` are preserved in the outgoing push instead of falling back to generic copy.
 
 ## Component Pattern: Custom Hook Extraction
 
@@ -167,6 +180,7 @@ Refactored components using this pattern:
 - **Magic link**: Supabase built-in email magic-link methods are available at the auth layer.
 - **SMS OTP**: Supabase built-in phone OTP methods exist in auth context plumbing (provider/config dependent).
 - **Session management**: Expo SecureStore (mobile) or localStorage (web) for token persistence. `autoRefreshToken: true` enabled. Client-side `ensureValidSession()` helper proactively refreshes tokens nearing expiry.
+- **Staff chat bootstrap hardening**: Admin web staff dashboard/message flows and mobile staff tab indicators call `ensureValidSession()` before invoking `chat_auth_bootstrap`, preventing stale-session auth failures after backgrounding or idle time.
 - **Revoked/deleted session recovery**: Mobile auth bootstrap detects invalid/missing refresh tokens (for example after account deletion or server-side revocation), clears the persisted local session, and fails open to the sign-in screen instead of repeatedly retrying refresh on startup.
 - **Edge function errors**: Client uses `getFunctionErrorMessage()` to read the actual error from `FunctionsHttpError.context` (Response body); uses `Response.clone()` when available so the body is not consumed. Avoids generic "Edge Function returned a non-2xx status code" when the function returns JSON `{ error: "..." }`.
 - **Chat bootstrap modes**: `chat_auth_bootstrap` supports (1) candidate self-bootstrap, (2) staff bootstrap for a specific candidate channel via `user_id`, and (3) staff token-only bootstrap for inbox channel listing when `user_id` is omitted.

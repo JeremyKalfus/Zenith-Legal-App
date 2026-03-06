@@ -2,7 +2,7 @@ import { bucketStaffAppointments, mapChannelsToStaffInboxItems, type Appointment
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/auth-context';
 import { ensureChatUserConnected, getChatClient } from './chat';
-import { supabase } from './supabase';
+import { ensureValidSession, supabase } from './supabase';
 
 const LIVE_CHAT_EVENT_TYPES = new Set([
   'message.new',
@@ -78,6 +78,7 @@ export function useStaffTabIndicators(): {
     }
 
     try {
+      await ensureValidSession();
       const { data, error } = await supabase.functions.invoke('chat_auth_bootstrap', {
         body: {},
       });

@@ -14,6 +14,7 @@ export type CandidateProfile = {
   otherPracticeText: string | null;
   acceptedPrivacyPolicy: boolean;
   acceptedCommunicationConsent: boolean;
+  acceptedJobOpportunityPushNotifications: boolean;
 };
 
 export type CandidateFirmAssignment = {

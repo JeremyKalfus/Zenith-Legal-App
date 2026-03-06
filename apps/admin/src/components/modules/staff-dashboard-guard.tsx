@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabaseClient } from '@/lib/supabase-client';
+import { ensureValidSession, supabaseClient } from '@/lib/supabase-client';
 
 type GuardState = 'checking' | 'allowed' | 'denied';
 
@@ -18,15 +18,20 @@ export function StaffDashboardGuard({
     let mounted = true;
 
     const checkAccess = async () => {
-      const { data: sessionData, error: sessionError } = await supabaseClient.auth.getSession();
-
-      if (!mounted) {
+      let sessionData;
+      try {
+        const session = await ensureValidSession();
+        sessionData = { session };
+      } catch {
+        if (!mounted) {
+          return;
+        }
+        setState('denied');
+        router.replace('/');
         return;
       }
 
-      if (sessionError || !sessionData.session) {
-        setState('denied');
-        router.replace('/');
+      if (!mounted) {
         return;
       }
 

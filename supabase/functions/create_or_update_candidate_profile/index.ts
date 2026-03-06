@@ -4,6 +4,7 @@ import { writeAuditEvent } from '../_shared/audit.ts';
 import {
   candidateIntakeSchema,
   COMMUNICATION_CONSENT_VERSION,
+  JOB_OPPORTUNITY_PUSH_CONSENT_VERSION,
   persistCandidateIntakeData,
   PRIVACY_POLICY_VERSION,
 } from '../_shared/candidate-intake.ts';
@@ -69,6 +70,7 @@ Deno.serve(
           consent_versions: {
             privacy_policy_version: PRIVACY_POLICY_VERSION,
             communication_consent_version: COMMUNICATION_CONSENT_VERSION,
+            job_opportunity_push_version: JOB_OPPORTUNITY_PUSH_CONSENT_VERSION,
           },
         },
       });

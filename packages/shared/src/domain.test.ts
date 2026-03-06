@@ -31,6 +31,18 @@ describe('candidate intake schema', () => {
     expect(result.name).toBeUndefined();
     expect(result.mobile).toBeUndefined();
     expect(result.practiceAreas).toEqual([]);
+    expect(result.acceptedJobOpportunityPushNotifications).toBe(false);
+  });
+
+  it('defaults job opportunity push consent to false when omitted', () => {
+    const result = candidateIntakeSchema.parse({
+      email: 'jane@example.com',
+      preferredCities: [],
+      acceptedPrivacyPolicy: true,
+      acceptedCommunicationConsent: true,
+    });
+
+    expect(result.acceptedJobOpportunityPushNotifications).toBe(false);
   });
 
   it('requires text when city Other is selected', () => {

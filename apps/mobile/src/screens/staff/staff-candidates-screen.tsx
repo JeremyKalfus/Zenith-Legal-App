@@ -21,11 +21,11 @@ import {
   listStaffCandidates,
 } from '../../features/staff-candidate-management';
 import { supabase } from '../../lib/supabase';
-import type { StaffCandidatesStackParamList } from '../../navigation/staff-candidates-stack';
+import type { StaffCandidatesStackParamList } from '../../navigation/staff-candidates-types';
 import {
   DEFAULT_STAFF_CANDIDATE_FILTERS,
   type StaffCandidateFilters,
-} from './staff-candidate-filters-screen';
+} from './staff-candidate-filtering';
 import { uiColors } from '../../theme/colors';
 
 function countActiveFilters(filters: StaffCandidateFilters): number {
@@ -34,6 +34,9 @@ function countActiveFilters(filters: StaffCandidateFilters): number {
     count += 1;
   }
   if (filters.currentStatus !== 'any') {
+    count += 1;
+  }
+  if (filters.jobOpportunityPushConsent !== 'any') {
     count += 1;
   }
   if (filters.practices.length > 0) {
@@ -193,6 +196,7 @@ export function StaffCandidatesScreen({
       query,
       assignedRecruiter: appliedFilters.assignedRecruiter,
       currentStatus: appliedFilters.currentStatus,
+      jobOpportunityPushConsent: appliedFilters.jobOpportunityPushConsent,
       practices: appliedFilters.practices,
       assignedFirmIds: appliedFilters.assignedFirmIds,
       preferredCities: appliedFilters.preferredCities,
@@ -224,6 +228,8 @@ export function StaffCandidatesScreen({
               onOpenFilterSearch({
                 initialFilters: appliedFilters,
                 options: filterOptions,
+                candidates,
+                query,
               });
             }}
           >

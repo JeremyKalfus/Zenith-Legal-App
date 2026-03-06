@@ -21,6 +21,7 @@ import { ScreenShell } from '../../components/screen-shell';
 import { SignOutButton } from '../../components/sign-out-button';
 import { PRIVACY_POLICY_URL } from '../../config/legal';
 import { useAuth } from '../../context/auth-context';
+import { requestPushPermissionAndRegister } from '../../lib/notifications';
 import { uiColors } from '../../theme/colors';
 import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 
@@ -59,6 +60,7 @@ function useProfileScreen() {
     profile,
     profileLoadError,
     refreshProfile,
+    session,
     signOut,
     deleteAccount,
     updateEmail,
@@ -106,6 +108,7 @@ function useProfileScreen() {
       jdDegreeDate: '',
       acceptedPrivacyPolicy: false,
       acceptedCommunicationConsent: true,
+      acceptedJobOpportunityPushNotifications: false,
     },
   });
 
@@ -125,6 +128,7 @@ function useProfileScreen() {
       jdDegreeDate: profile.jd_degree_date ?? '',
       acceptedPrivacyPolicy: profile.acceptedPrivacyPolicy,
       acceptedCommunicationConsent: true,
+      acceptedJobOpportunityPushNotifications: profile.acceptedJobOpportunityPushNotifications,
     });
     setMessage('');
     setCurrentEmailDraft(profile.email);
@@ -225,7 +229,18 @@ function useProfileScreen() {
     try {
       const parsed = candidateIntakeSchema.parse(values);
       await updateCandidateProfileIntake(parsed);
-      setMessage('Profile updated.');
+      let nextMessage = 'Profile updated.';
+      const shouldRequestPushPermission =
+        parsed.acceptedJobOpportunityPushNotifications &&
+        profile?.acceptedJobOpportunityPushNotifications !== true;
+      if (shouldRequestPushPermission && session?.user.id) {
+        const registrationResult = await requestPushPermissionAndRegister(session.user.id);
+        if (registrationResult === 'denied') {
+          nextMessage =
+            'Profile updated. Push notifications are still disabled on this device. Enable them in Settings to receive job alerts.';
+        }
+      }
+      setMessage(nextMessage);
     } catch (error) {
       setMessage((error as Error).message);
     } finally {
@@ -367,6 +382,7 @@ function useProfileScreen() {
     passwordMessage,
     profile,
     profileLoadError,
+    session,
     selectedCities,
     selectedJdDegreeDate,
     selectedJdDegreeDateLabel,
@@ -704,6 +720,24 @@ function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
       {h.errors.acceptedPrivacyPolicy ? (
         <Text style={styles.error}>{h.errors.acceptedPrivacyPolicy.message}</Text>
       ) : null}
+
+      <Controller
+        control={h.control}
+        name="acceptedJobOpportunityPushNotifications"
+        render={({ field }) => (
+          <View style={styles.checkboxRow}>
+            <Pressable style={styles.checkboxToggle} onPress={() => field.onChange(!field.value)}>
+              <Text style={styles.checkbox}>{field.value ? '☑' : '☐'}</Text>
+            </Pressable>
+            <Text style={styles.checkbox}>
+              Accept push notifications about new job opportunities
+            </Text>
+          </View>
+        )}
+      />
+      <Text style={styles.helper}>
+        On iPhone and Android, turning this on will ask your device for notification permission.
+      </Text>
 
           <Pressable
             style={interactivePressableStyle({

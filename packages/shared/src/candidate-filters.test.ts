@@ -189,6 +189,7 @@ describe('filterStaffCandidates', () => {
       assignedRecruiterUserId: 'r1',
       currentStatuses: ['Submitted, waiting to hear from firm'] as const,
       assignedFirmIds: ['f1'] as const,
+      acceptedJobOpportunityPushNotifications: true,
     },
     {
       id: '2',
@@ -201,6 +202,7 @@ describe('filterStaffCandidates', () => {
       assignedRecruiterUserId: null,
       currentStatuses: ['Interview Stage'] as const,
       assignedFirmIds: ['f2', 'f3'] as const,
+      acceptedJobOpportunityPushNotifications: false,
     },
     {
       id: '3',
@@ -213,6 +215,7 @@ describe('filterStaffCandidates', () => {
       assignedRecruiterUserId: 'r2',
       currentStatuses: [] as const,
       assignedFirmIds: [] as const,
+      acceptedJobOpportunityPushNotifications: true,
     },
   ];
 
@@ -221,6 +224,7 @@ describe('filterStaffCandidates', () => {
       query: 'alice',
       assignedRecruiter: 'any',
       currentStatus: 'any',
+      jobOpportunityPushConsent: 'any',
       practices: [],
       assignedFirmIds: [],
       preferredCities: [],
@@ -235,6 +239,7 @@ describe('filterStaffCandidates', () => {
       query: '',
       assignedRecruiter: 'none',
       currentStatus: 'any',
+      jobOpportunityPushConsent: 'any',
       practices: [],
       assignedFirmIds: [],
       preferredCities: [],
@@ -249,6 +254,7 @@ describe('filterStaffCandidates', () => {
       query: '',
       assignedRecruiter: 'r2',
       currentStatus: 'any',
+      jobOpportunityPushConsent: 'any',
       practices: [],
       assignedFirmIds: [],
       preferredCities: [],
@@ -263,6 +269,7 @@ describe('filterStaffCandidates', () => {
       query: '',
       assignedRecruiter: 'any',
       currentStatus: 'Interview Stage',
+      jobOpportunityPushConsent: 'any',
       practices: [],
       assignedFirmIds: [],
       preferredCities: [],
@@ -277,6 +284,7 @@ describe('filterStaffCandidates', () => {
       query: '',
       assignedRecruiter: 'any',
       currentStatus: 'any',
+      jobOpportunityPushConsent: 'any',
       practices: ['Tax & Benefits'],
       assignedFirmIds: [],
       preferredCities: [],
@@ -291,6 +299,7 @@ describe('filterStaffCandidates', () => {
       query: '',
       assignedRecruiter: 'any',
       currentStatus: 'any',
+      jobOpportunityPushConsent: 'any',
       practices: ['Litigation', 'Tax & Benefits'],
       assignedFirmIds: [],
       preferredCities: [],
@@ -305,6 +314,7 @@ describe('filterStaffCandidates', () => {
       query: '',
       assignedRecruiter: 'any',
       currentStatus: 'any',
+      jobOpportunityPushConsent: 'any',
       practices: [],
       assignedFirmIds: ['f1', 'f3'],
       preferredCities: [],
@@ -319,6 +329,7 @@ describe('filterStaffCandidates', () => {
       query: '',
       assignedRecruiter: 'any',
       currentStatus: 'any',
+      jobOpportunityPushConsent: 'any',
       practices: [],
       assignedFirmIds: [],
       preferredCities: ['NYC', 'DC'],
@@ -333,6 +344,7 @@ describe('filterStaffCandidates', () => {
       query: '',
       assignedRecruiter: 'any',
       currentStatus: 'any',
+      jobOpportunityPushConsent: 'any',
       practices: [],
       assignedFirmIds: [],
       preferredCities: [],
@@ -347,6 +359,7 @@ describe('filterStaffCandidates', () => {
       query: 'carol',
       assignedRecruiter: 'r2',
       currentStatus: 'any',
+      jobOpportunityPushConsent: 'any',
       practices: ['Tax & Benefits'],
       assignedFirmIds: [],
       preferredCities: ['DC'],
@@ -354,5 +367,35 @@ describe('filterStaffCandidates', () => {
     });
 
     expect(result.map((candidate) => candidate.id)).toEqual(['3']);
+  });
+
+  it('filters by accepted push-opportunity consent', () => {
+    const result = filterStaffCandidates(candidates, {
+      query: '',
+      assignedRecruiter: 'any',
+      currentStatus: 'any',
+      jobOpportunityPushConsent: 'accepted',
+      practices: [],
+      assignedFirmIds: [],
+      preferredCities: [],
+      jdYears: [],
+    });
+
+    expect(result.map((candidate) => candidate.id)).toEqual(['1', '3']);
+  });
+
+  it('filters by not accepted push-opportunity consent', () => {
+    const result = filterStaffCandidates(candidates, {
+      query: '',
+      assignedRecruiter: 'any',
+      currentStatus: 'any',
+      jobOpportunityPushConsent: 'not_accepted',
+      practices: [],
+      assignedFirmIds: [],
+      preferredCities: [],
+      jdYears: [],
+    });
+
+    expect(result.map((candidate) => candidate.id)).toEqual(['2']);
   });
 });
