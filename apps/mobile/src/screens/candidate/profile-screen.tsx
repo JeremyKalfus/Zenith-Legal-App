@@ -1021,12 +1021,16 @@ const styles = StyleSheet.create({
   },
   checkboxSymbol: {
     color: uiColors.textPrimary,
-    fontSize: 15,
+    fontSize: 32,
     includeFontPadding: false,
-    lineHeight: 15,
+    lineHeight: 32,
   },
   checkboxToggle: {
-    marginRight: 4,
+    alignItems: 'center',
+    height: 32,
+    justifyContent: 'center',
+    marginRight: 6,
+    width: 32,
   },
   error: {
     color: uiColors.error,
