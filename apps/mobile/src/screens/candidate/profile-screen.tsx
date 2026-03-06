@@ -224,7 +224,10 @@ function useProfileScreen() {
     clearAuthNotice();
     try {
       const parsed = candidateIntakeSchema.parse(values);
-      await updateCandidateProfileIntake(parsed);
+      await updateCandidateProfileIntake({
+        ...parsed,
+        acceptedCommunicationConsent: true,
+      });
       setMessage('Profile updated.');
     } catch (error) {
       setMessage((error as Error).message);

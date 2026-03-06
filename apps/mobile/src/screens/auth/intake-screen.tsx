@@ -483,7 +483,10 @@ export function IntakeScreen({
               try {
                 if (isFinishProfile) {
                   const parsed = candidateIntakeSchema.parse(values);
-                  await updateCandidateProfileIntake(parsed);
+                  await updateCandidateProfileIntake({
+                    ...parsed,
+                    acceptedCommunicationConsent: true,
+                  });
                   setMessage('Profile saved.');
                 } else {
                   const parsed = candidateRegistrationSchema.parse(values);

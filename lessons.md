@@ -193,3 +193,23 @@ Append a new entry immediately after incidents and after post-fix verification i
 - **Fix applied:** Extended `delete_my_account` to support staff self-delete with last-staff protection and added the delete-confirmation UI to `apps/mobile/src/screens/staff/staff-profile-screen.tsx`.
 - **Prevention rule:** For account-setting requests, verify whether the expected entry point is self-service profile UI, admin management UI, or both before stopping at the first valid implementation.
 - **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after the profile deletion flow was added.
+
+### 2026-03-06 — Stream Thread Screens Must Watch Channels Before Rendering
+
+- **Date:** 2026-03-06
+- **Context:** Opening Messages could show `Error loading messages for this channel` even when chat bootstrap and Stream connection had already succeeded.
+- **Error:** Candidate and staff thread screens constructed `client.channel(...)` and rendered the `Channel` component before the channel had been `watch()`ed and fully initialized.
+- **Why it happened:** The code assumed a channel ID alone was sufficient for immediate thread rendering, but Stream’s thread UI expects channel state to be loaded first.
+- **Fix applied:** Added explicit `channel.watch()` readiness handling in `apps/mobile/src/lib/use-resolved-candidate-chat-channel.ts` and `apps/mobile/src/screens/staff/staff-message-thread-screen.tsx`, with loading/error states before rendering the thread UI.
+- **Prevention rule:** Any Stream thread surface must wait for `watch()` (or an equivalent stateful channel query) before rendering `Channel`/`MessageList`.
+- **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after the thread bootstrap fix.
+
+### 2026-03-06 — Candidate Profile Save Needs Explicit Consent Booleans and Field-Level Validation Errors
+
+- **Date:** 2026-03-06
+- **Context:** Editing candidate profile data returned the generic server error `Invalid payload`.
+- **Error:** The profile/intake submit paths relied on implicit form state for required consent booleans, while the server only returned `formErrors`, hiding field-level validation failures behind a generic payload error.
+- **Why it happened:** Required booleans that were not directly user-edited were treated as “obviously present,” and server validation formatting ignored `fieldErrors`.
+- **Fix applied:** Sent `acceptedCommunicationConsent: true` explicitly from the mobile intake/profile submit paths and updated `supabase/functions/create_or_update_candidate_profile/index.ts` to include field-level validation messages in the error response.
+- **Prevention rule:** If a backend contract requires hidden/defaulted fields, include them explicitly in submit payloads and surface both form-level and field-level validation errors from edge functions.
+- **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after the payload/error-message fix.
