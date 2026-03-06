@@ -15,26 +15,13 @@ if (Platform.OS !== 'web') {
   });
 }
 
-export async function registerPushToken(userId: string): Promise<void> {
-  if (Platform.OS === 'web') {
-    return;
-  }
+export type PushRegistrationResult =
+  | 'registered'
+  | 'denied'
+  | 'unsupported'
+  | 'unavailable';
 
-  if (!Device.isDevice) {
-    return;
-  }
-
-  const { status: existingStatus } = await Notifications.getPermissionsAsync();
-  let finalStatus = existingStatus;
-  if (existingStatus !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  if (finalStatus !== 'granted') {
-    return;
-  }
-
+async function upsertPushToken(userId: string): Promise<void> {
   const projectId =
     Constants?.expoConfig?.extra?.eas?.projectId ??
     Constants?.easConfig?.projectId;
@@ -51,4 +38,48 @@ export async function registerPushToken(userId: string): Promise<void> {
     },
     { onConflict: 'user_id,expo_push_token' },
   );
+}
+
+export async function syncPushTokenIfPermitted(userId: string): Promise<PushRegistrationResult> {
+  if (Platform.OS === 'web') {
+    return 'unsupported';
+  }
+
+  if (!Device.isDevice) {
+    return 'unavailable';
+  }
+
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  if (existingStatus !== 'granted') {
+    return 'denied';
+  }
+
+  await upsertPushToken(userId);
+  return 'registered';
+}
+
+export async function requestPushPermissionAndRegister(
+  userId: string,
+): Promise<PushRegistrationResult> {
+  if (Platform.OS === 'web') {
+    return 'unsupported';
+  }
+
+  if (!Device.isDevice) {
+    return 'unavailable';
+  }
+
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
+  if (existingStatus !== 'granted') {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
+  }
+
+  if (finalStatus !== 'granted') {
+    return 'denied';
+  }
+
+  await upsertPushToken(userId);
+  return 'registered';
 }

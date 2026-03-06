@@ -1,25 +1,8 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StaffCandidatesScreen } from '../screens/staff/staff-candidates-screen';
 import { StaffCandidateFirmsScreen } from '../screens/staff/staff-candidate-firms-screen';
-import type { StaffCandidateListItem } from '../features/staff-candidate-management';
-import {
-  StaffCandidateFiltersScreen,
-  type StaffCandidateFilters,
-  type StaffCandidateFilterOptions,
-} from '../screens/staff/staff-candidate-filters-screen';
-
-export type StaffCandidatesStackParamList = {
-  StaffCandidatesList: {
-    appliedFilters?: StaffCandidateFilters;
-  } | undefined;
-  StaffCandidateFirms: {
-    candidate: StaffCandidateListItem;
-  };
-  StaffCandidateFilters: {
-    initialFilters: StaffCandidateFilters;
-    options: StaffCandidateFilterOptions;
-  };
-};
+import { StaffCandidateFiltersScreen } from '../screens/staff/staff-candidate-filters-screen';
+import type { StaffCandidatesStackParamList } from './staff-candidates-types';
 
 const Stack = createNativeStackNavigator<StaffCandidatesStackParamList>();
 

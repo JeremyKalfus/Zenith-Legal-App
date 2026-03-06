@@ -108,6 +108,14 @@ function buildPushMessage(eventType: string, payload: Record<string, unknown> | 
         title: 'New message from Zenith Legal',
         body: 'Open the app to read your new message.',
       };
+    case 'job_opportunity.match': {
+      const title = payload && typeof payload.title === 'string' ? payload.title.trim() : '';
+      const body = payload && typeof payload.body === 'string' ? payload.body.trim() : '';
+      return {
+        title: title || 'New job opportunity',
+        body: body || 'A new opportunity matches your preferences.',
+      };
+    }
     default: {
       if (eventType.startsWith('message.')) {
         return {

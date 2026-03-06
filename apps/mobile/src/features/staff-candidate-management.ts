@@ -16,6 +16,7 @@ export type StaffCandidateListItem = {
   jdDegreeDate: string | null;
   preferredCities: CityOption[];
   practiceAreas: PracticeArea[];
+  acceptedJobOpportunityPushNotifications: boolean;
   assignedRecruiterUserId: string | null;
   assignedRecruiterDisplayName: string | null;
   currentStatuses: FirmStatus[];
@@ -51,6 +52,17 @@ export type StaffCandidateAssignmentRow = {
 type FunctionSuccess<T> = {
   success: true;
 } & T;
+
+export type JobOpportunityNotificationSendResult = FunctionSuccess<{
+  campaign_id: string;
+  queued_count: number;
+  skipped_count: number;
+  queued_candidate_ids: string[];
+  skipped_candidates: {
+    candidate_id: string;
+    reason: 'not_candidate' | 'missing_push_consent' | 'push_disabled' | 'missing_push_token';
+  }[];
+}>;
 
 type CandidateFirmAssignmentLookupRow = {
   candidate_user_id: string;
@@ -151,10 +163,14 @@ export async function listStaffCandidates(): Promise<StaffCandidateListItem[]> {
   }
 
   const candidateIds = candidateRows.map((row) => row.id);
-  const [preferencesResult, assignmentLookupResult, recruiterAssignmentResult] = await Promise.all([
+  const [preferencesResult, consentResult, assignmentLookupResult, recruiterAssignmentResult] = await Promise.all([
     supabase
       .from('candidate_preferences')
       .select('user_id,cities,practice_areas,practice_area')
+      .in('user_id', candidateIds),
+    supabase
+      .from('candidate_consents')
+      .select('user_id,job_opportunity_push_accepted')
       .in('user_id', candidateIds),
     supabase
       .from('candidate_firm_assignments')
@@ -168,6 +184,9 @@ export async function listStaffCandidates(): Promise<StaffCandidateListItem[]> {
 
   if (preferencesResult.error) {
     throw new Error(preferencesResult.error.message);
+  }
+  if (consentResult.error) {
+    throw new Error(consentResult.error.message);
   }
 
   if (assignmentLookupResult.error) {
@@ -188,6 +207,17 @@ export async function listStaffCandidates(): Promise<StaffCandidateListItem[]> {
       continue;
     }
     preferenceByUserId.set(userId, normalizeCandidatePreferences(row));
+  }
+
+  const jobOpportunityPushConsentByUserId = new Map<string, boolean>();
+  for (const row of (consentResult.data ?? []) as {
+    user_id: string;
+    job_opportunity_push_accepted: boolean;
+  }[]) {
+    jobOpportunityPushConsentByUserId.set(
+      row.user_id,
+      row.job_opportunity_push_accepted === true,
+    );
   }
 
   const assignmentAggregateByCandidateId = new Map<
@@ -258,6 +288,8 @@ export async function listStaffCandidates(): Promise<StaffCandidateListItem[]> {
       jdDegreeDate: candidate.jd_degree_date ?? null,
       preferredCities: normalizedPreferences.preferredCities,
       practiceAreas: normalizedPreferences.practiceAreas,
+      acceptedJobOpportunityPushNotifications:
+        jobOpportunityPushConsentByUserId.get(candidate.id) ?? false,
       assignedRecruiterUserId,
       assignedRecruiterDisplayName: assignedRecruiterUserId
         ? recruiterDisplayNameByUserId.get(assignedRecruiterUserId) ?? null
@@ -397,4 +429,26 @@ export async function unassignFirmFromCandidate(
   }
 
   return data as FunctionSuccess<{ deleted_assignment_id: string }>;
+}
+
+export async function sendJobOpportunityNotificationToCandidates(params: {
+  candidateIds: string[];
+  title: string;
+  body: string;
+  filterSnapshot: Record<string, unknown>;
+}): Promise<JobOpportunityNotificationSendResult> {
+  const { data, error } = await supabase.functions.invoke('staff_send_job_opportunity_notification', {
+    body: {
+      candidate_ids: params.candidateIds,
+      title: params.title,
+      body: params.body,
+      filter_snapshot: params.filterSnapshot,
+    },
+  });
+
+  if (error) {
+    throw new Error(await getFunctionErrorMessage(error));
+  }
+
+  return data as JobOpportunityNotificationSendResult;
 }

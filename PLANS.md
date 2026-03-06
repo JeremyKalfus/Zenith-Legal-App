@@ -33,6 +33,7 @@
 - [x] Admin candidate manager role promotion flow (`candidate -> staff`) via audited `staff_update_user_role` edge function
 - [x] Staff mobile per-candidate banner contact override controls (save + reset to global default)
 - [x] Recruiter mobile candidate ownership + Filter Search flow (`candidate_recruiter_assignments`, Assigned Recruiter editor, separate filter screen with Clear/Apply)
+- [x] Recruiter job-opportunity push consent + bulk notification workflow (candidate opt-in persistence, explicit native prompt gating, staff Filter Search consent filter, manual recruiter push send, backend queue revalidation)
 - [x] Mobile icon/logo mark scaled +14% across app icon assets (`icon`, `adaptive-icon`, `splash-icon`, `favicon`)
 - [x] Candidate signup/profile JD year contract + wheel UX (`2000..current year - 1`) with DB date compatibility mapping (`YYYY` ↔ `YYYY-01-01`)
 - [x] Candidate dashboard status-update CTA removal + deletion of automated message draft plumbing in candidate messaging navigation/screens

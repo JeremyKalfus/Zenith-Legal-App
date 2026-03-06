@@ -193,3 +193,13 @@ Append a new entry immediately after incidents and after post-fix verification i
 - **Fix applied:** Extended `delete_my_account` to support staff self-delete with last-staff protection and added the delete-confirmation UI to `apps/mobile/src/screens/staff/staff-profile-screen.tsx`.
 - **Prevention rule:** For account-setting requests, verify whether the expected entry point is self-service profile UI, admin management UI, or both before stopping at the first valid implementation.
 - **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after the profile deletion flow was added.
+
+### 2026-03-06 — Staff Messages Bootstrap Must Refresh Session First
+
+- **Date:** 2026-03-06
+- **Context:** Staff users intermittently saw auth errors when opening Messages after the app/web session had been idle or backgrounded.
+- **Error:** Some staff chat bootstrap paths invoked `chat_auth_bootstrap` using the stored session from `auth.getSession()` without forcing a near-expiry refresh first.
+- **Why it happened:** The code assumed Supabase auto-refresh would always keep access tokens current, but that assumption breaks after backgrounding/suspension and on idle admin tabs.
+- **Fix applied:** Added and reused `ensureValidSession()` before staff chat bootstrap in the admin dashboard guard, admin staff messages dashboard, and mobile staff tab indicators.
+- **Prevention rule:** Any privileged or user-visible edge-function bootstrap path must explicitly refresh/validate the session before invoking the backend; do not rely only on background auto-refresh timers.
+- **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after the auth hardening changes.

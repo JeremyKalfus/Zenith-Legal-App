@@ -22,7 +22,7 @@ import {
 } from '../lib/supabase';
 import { env, getSupabaseClientConfigError } from '../config/env';
 import type { CandidateProfile, IntakeDraft } from '../types/domain';
-import { registerPushToken } from '../lib/notifications';
+import { syncPushTokenIfPermitted } from '../lib/notifications';
 
 type AuthMethods = {
   emailOtpEnabled: boolean;
@@ -505,6 +505,7 @@ type CandidatePreferencesRow = {
 type CandidateConsentsRow = {
   privacy_policy_accepted: boolean;
   communication_consent_accepted: boolean;
+  job_opportunity_push_accepted: boolean;
 };
 
 function isPracticeArea(value: string): value is PracticeArea {
@@ -579,7 +580,7 @@ async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
           .maybeSingle(),
         supabase
           .from('candidate_consents')
-          .select('privacy_policy_accepted, communication_consent_accepted')
+          .select('privacy_policy_accepted, communication_consent_accepted, job_opportunity_push_accepted')
           .eq('user_id', userId)
           .maybeSingle(),
       ]),
@@ -652,6 +653,7 @@ async function fetchProfile(userId: string): Promise<ProfileFetchResult> {
         otherPracticeText: preferences?.other_practice_text ?? null,
         acceptedPrivacyPolicy: consents?.privacy_policy_accepted ?? false,
         acceptedCommunicationConsent: consents?.communication_consent_accepted ?? false,
+        acceptedJobOpportunityPushNotifications: consents?.job_opportunity_push_accepted ?? false,
       },
     };
   } catch (error) {
@@ -962,7 +964,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     void hydrateProfileForSession(nextSession, transitionSeq);
-    void registerPushToken(nextUserId).catch(() => {
+    void syncPushTokenIfPermitted(nextUserId).catch(() => {
       // Non-blocking by design.
     });
   }, [
