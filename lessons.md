@@ -173,3 +173,23 @@ Append a new entry immediately after incidents and after post-fix verification i
 - **Fix applied:** Added config/session guards (`getSupabaseClientConfigError`, `ensureValidSession`), in-flight gating, and throw-safe `try/catch/finally` handling for candidate/staff appointments loaders and calendar sync enabled lookup.
 - **Prevention rule:** Any Supabase fetch used in effect/interval/focus callbacks must handle both returned query errors and thrown transport exceptions locally.
 - **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after hardening.
+
+### 2026-03-06 — Staff Deletion Needed Appointment-Creator Reassignment
+
+- **Date:** 2026-03-06
+- **Context:** Admin-side staff account deletion needed to work for recruiter users who had previously scheduled candidate appointments.
+- **Error:** Deleting a staff auth user would leave `appointments.created_by_user_id` pointing at that user, which breaks the delete path because those rows are still retained for candidates.
+- **Why it happened:** The schema keeps appointment history but still stores the creator as a required foreign-key reference, and staff deletion had previously been scoped away from this case.
+- **Fix applied:** Expanded `staff_delete_user` to support staff targets, added a last-staff guard, and reassigned deleted-staff appointment creators to the appointment candidate before auth deletion.
+- **Prevention rule:** Before broadening account-deletion scope to a new role, audit every non-cascading foreign-key reference for that role and either null, reassign, or cascade it intentionally.
+- **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after the deletion-flow update.
+
+### 2026-03-06 — Admin-Only Staff Deletion Missed the Actual Staff Profile UX
+
+- **Date:** 2026-03-06
+- **Context:** The initial staff-account deletion work added admin deletion controls, but the visible staff profile in the mobile app still had no delete option.
+- **Error:** The feature scope was implemented at the admin-management layer only, which did not satisfy the user-facing expectation of “delete my staff account from the staff account screen.”
+- **Why it happened:** The original request was interpreted as account-management capability for staff users rather than as a self-service affordance on the staff profile surface.
+- **Fix applied:** Extended `delete_my_account` to support staff self-delete with last-staff protection and added the delete-confirmation UI to `apps/mobile/src/screens/staff/staff-profile-screen.tsx`.
+- **Prevention rule:** For account-setting requests, verify whether the expected entry point is self-service profile UI, admin management UI, or both before stopping at the first valid implementation.
+- **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after the profile deletion flow was added.

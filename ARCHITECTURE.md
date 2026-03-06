@@ -55,7 +55,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 | `register_candidate_password` | Public | Candidate account creation from auth menu sign-up (email/password) with initial `onboarding_complete = false` |
 | `mobile_sign_in_with_identifier_password` | Public | Optional identifier/password sign-in endpoint (present in backend contract; current mobile flow signs in directly via Supabase Auth password grant) |
 | `create_or_update_candidate_profile` | User JWT | Intake profile upsert |
-| `delete_my_account` | User JWT | Candidate self-service account deletion (hard delete auth user + cascaded app data; non-cascading refs nulled first) |
+| `delete_my_account` | User JWT | Candidate/staff self-service account deletion; staff self-delete is blocked for the last remaining staff account, and deleted-staff appointment ownership is reassigned before auth deletion |
 | `schedule_or_update_appointment` | User JWT | Appointment create/update for candidates and staff; accepts Date/Time + note style payloads (with internal 30-minute end-time normalization), enqueues notifications/reminders/calendar sync, posts `Appointment request sent and waiting for admin approval...` on candidate pending submit, posts `Appointment scheduled...` on staff direct scheduled creates, and posts `Scheduled appointment modified...` on staff updates |
 | `manage_appointment_lifecycle` | User JWT | Appointment lifecycle action endpoint: `ignore_overdue` (hard delete scheduled-overdue), `cancel_outgoing_request` (hard delete candidate-created pending request), and `cancel_upcoming` (chat + notification + calendar unsync side-effects, then hard delete) |
 | `authorize_firm_submission` | User JWT | Candidate authorizes/declines firm |
@@ -65,7 +65,7 @@ All edge functions live under `supabase/functions/` and share utilities from `_s
 | `assign_firm_to_candidate` | Staff JWT | Assign firm to candidate and post candidate-channel chat updates |
 | `staff_update_assignment_status` | Staff JWT | Update assignment status |
 | `staff_unassign_firm_from_candidate` | Staff JWT | Remove firm assignment |
-| `staff_delete_user` | Staff JWT | Hard-delete candidate user accounts from admin workflow (candidate-only scope) |
+| `staff_delete_user` | Staff JWT | Hard-delete candidate or staff user accounts from admin workflow; rejects self-delete, protects the last remaining staff account, reassigns staff-created appointment ownership, and clears non-cascading refs before auth deletion |
 | `staff_update_user_role` | Staff JWT | Promote candidate accounts to staff from admin workflow (`candidate -> staff`) |
 | `bulk_paste_ingest_firms` | Staff JWT | Bulk firm data import |
 | `staff_handle_data_request` | Staff JWT | Process support/data requests |
@@ -152,6 +152,7 @@ Refactored components using this pattern:
 - `apps/admin/src/components/modules/staff-messages-dashboard.tsx` → `useStaffMessagesDashboard`
 - `apps/admin/src/components/modules/candidate-firm-manager.tsx` → `useCandidateFirmManager`
 - `apps/admin/src/components/modules/operations-dashboard.tsx` → `useOperationsDashboard`
+- `apps/admin/src/components/modules/staff-account-manager.tsx` → `useStaffAccountManager`
 - `apps/mobile/src/screens/candidate/profile-screen.tsx` → `useProfileScreen`
 - `apps/mobile/src/screens/candidate/appointments-screen.tsx` → `useAppointmentsScreen`
 - `apps/mobile/src/screens/staff/staff-appointments-screen.tsx` → `useStaffAppointmentsScreen`
@@ -170,6 +171,7 @@ Refactored components using this pattern:
 - **Edge function errors**: Client uses `getFunctionErrorMessage()` to read the actual error from `FunctionsHttpError.context` (Response body); uses `Response.clone()` when available so the body is not consumed. Avoids generic "Edge Function returned a non-2xx status code" when the function returns JSON `{ error: "..." }`.
 - **Chat bootstrap modes**: `chat_auth_bootstrap` supports (1) candidate self-bootstrap, (2) staff bootstrap for a specific candidate channel via `user_id`, and (3) staff token-only bootstrap for inbox channel listing when `user_id` is omitted.
 - **Admin web staff messaging**: Admin dashboard staff users use the same `chat_auth_bootstrap` token-only inbox bootstrap + candidate-channel bootstrap flow as the main app, powered by Stream Chat (`NEXT_PUBLIC_STREAM_API_KEY` on admin web).
+- **Admin web staff account deletion**: `/dashboard/staff-accounts` lists recruiter users from `users_profile`, invokes `staff_delete_user`, blocks self-delete in the UI and server contract, and preserves scheduled appointment records by reassigning deleted-staff `created_by_user_id` values to the appointment candidate before auth deletion.
 - **Chat profile sync**: `chat_auth_bootstrap` upserts candidate Stream users with profile name metadata, and admin inbox previews enrich channel rows from `users_profile` so recruiter conversation previews show candidate names/initials.
 
 ## Secrets and Configuration

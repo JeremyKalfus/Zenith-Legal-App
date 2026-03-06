@@ -81,7 +81,7 @@ python3 -m desloppify plan
 - [x] Admin operations dashboard skeleton
 - [x] Staff/candidate messaging (Stream Chat; inbox-first staff flows on mobile + admin web)
 - [x] Candidate firm authorization workflow (decline-delete for waiting assignments; cancel for authorized assignments)
-- [x] Candidate and admin account deletion flows (candidate self-service + staff candidate-only delete)
+- [x] Candidate/staff and admin account deletion flows (mobile self-service + admin candidate/staff delete with self/last-staff safeguards)
 - [x] Push notification queue processing via Expo Push API (`dispatch_notifications` processor mode)
 - [x] Code quality pass: consolidated duplicates into shared package, centralized mobile theme, extracted custom hooks, refactored edge functions
 - [ ] Vendor credential wiring for end-to-end runtime (requires secrets)

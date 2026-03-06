@@ -7,6 +7,7 @@ export default function CandidateManagementPage() {
       title="Candidate Firm Manager"
       description="Staff-only candidate firm assignments and status controls."
       actions={[
+        { href: '/dashboard/staff-accounts', label: 'Open Staff Accounts' },
         { href: '/dashboard/messages', label: 'Open Messages' },
         { href: '/dashboard', label: 'Back to dashboard' },
       ]}

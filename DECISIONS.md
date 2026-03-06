@@ -146,6 +146,8 @@
 
 ### [2026-02-24] Candidate waiting-status decline deletes assignment; admin user deletion is candidate-only
 
+Superseded in part by the 2026-03-06 staff-account deletion decision below.
+
 **Decision:** A candidate declining a firm while the assignment is in `Waiting on your authorization to contact/submit` deletes the assignment row instead of keeping a declined placeholder. Admin web user deletion is limited to candidate accounts (hard delete via Supabase auth admin API).
 
 **Options considered:**
@@ -463,6 +465,31 @@
 **Rationale:** Product requires explicit sections and action-specific behavior where cancelled requests and cancelled upcoming appointments disappear from active views on both candidate and staff/admin surfaces.
 
 **Consequences:** Added `manage_appointment_lifecycle` edge function, shared appointment section bucketing helpers in `@zenith/shared`, and sectioned render paths in candidate mobile, staff mobile, and admin web. Cancellation and staff modification flows now emit candidate-channel chat updates with appointment summaries; cancellation also queues `appointment.cancelled` notifications before hard-delete completion.
+
+### [2026-03-06] Expand admin deletion workflow to other staff accounts with safety rails
+
+**Decision:** Extend `staff_delete_user` and the admin dashboard so staff users can delete other staff accounts in addition to candidate accounts, while still blocking self-delete and deletion of the last remaining staff account.
+
+**Options considered:**
+1. Keep candidate-only deletion and require direct database/auth console cleanup for staff removals -- lowest code change, but leaves promoted staff accounts unmanaged in-product.
+2. Allow unrestricted staff deletion, including self-delete -- simpler implementation, but risks accidental lockout and unmanaged privileged cleanup.
+3. Add staff-account deletion with self-delete and last-staff guards, plus cleanup for staff-owned appointment references (chosen) -- closes the product gap without creating an admin lockout path.
+
+**Rationale:** The product already supports `candidate -> staff` promotion, so staff accounts need a corresponding removal path inside the admin surface. Guarding self-delete and the final remaining staff account preserves operational access, and appointment creator references must be rewritten before auth deletion to avoid foreign-key failures on staff-created scheduled appointments.
+
+**Consequences:** Admin web now exposes a dedicated Staff Account Manager page. `staff_delete_user` can delete both candidate and staff roles, writes role-specific audit actions, rejects self-delete, rejects deletion when only one staff account remains, and reassigns `appointments.created_by_user_id` to the appointment candidate before deleting a staff auth user.
+
+### [2026-03-06] Allow staff self-service account deletion from mobile profile with last-staff guard
+
+**Decision:** Extend `delete_my_account` and the staff mobile Profile screen so recruiter users can delete their own account in-app, while still blocking deletion of the final remaining staff account.
+
+**Options considered:**
+1. Keep staff deletion admin-only and leave no delete affordance on staff mobile profile -- simplest consistency with the original implementation, but leaves the visible user account without a matching in-app deletion path.
+2. Add a mobile staff delete affordance backed by the same guarded cleanup logic used for staff deletes (chosen) -- aligns the UX with user expectation while preserving the operational safety rail.
+
+**Rationale:** Once staff users can authenticate and manage their own profile from the app, the absence of any deletion affordance is a product gap. Reusing the guarded cleanup path avoids split semantics between admin deletion and self-service deletion.
+
+**Consequences:** `delete_my_account` now accepts `staff` profiles, reassigns staff-created appointment ownership before auth deletion, and returns a last-staff error when only one recruiter remains. `apps/mobile/src/screens/staff/staff-profile-screen.tsx` now renders the same `type DELETE` confirmation pattern used by candidate profile deletion.
 
 ### [2026-03-01] Adopt start-only appointment input format with hard-delete cancellation semantics
 

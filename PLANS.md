@@ -16,7 +16,7 @@
 - [x] Stream messaging on web (stream-chat-react, CDN CSS, `chat_auth_bootstrap` secrets; no users_profile fallback)
 - [x] Practice areas multi-select (0–3; `practice_areas` column, shared schema and edge functions updated)
 - [x] Staff mobile messaging (shared candidate channels, staff inbox-first navigation, web + native)
-- [x] Candidate self-service in-app account deletion flow (Profile screen + `delete_my_account` edge function)
+- [x] Candidate/staff self-service in-app account deletion flow (Profile screen + `delete_my_account` edge function, with last-staff safeguard)
 - [x] Push notification dispatch queue processor (Expo Push API send + queued delivery status updates)
 - [x] Staff-created appointment scheduling for candidate accounts (mobile + admin)
 - [x] Appointment reminder queue timing support (`notification_deliveries.send_after_utc`, 15-minute push reminders)
@@ -24,7 +24,7 @@
 - [x] Sectioned appointment lifecycle UX across candidate mobile + staff mobile + admin web (`overdue`, `incoming/outgoing`, `upcoming` with ignore/cancel/modify actions and sync)
 - [x] Appointment format overhaul across candidate/staff/admin (Date+Time start-only input, note-first cards with inline expansion, standardized field-based chat templates, and hard-delete upcoming cancellations)
 - [x] Appointment chat intro alignment across all triggers (candidate submit pending, admin accept incoming, admin direct schedule, admin/candidate cancel, admin decline, admin modify)
-- [x] Admin web staff messaging inbox + candidate deletion workflow (candidate-only hard delete)
+- [x] Admin web staff messaging inbox + account deletion workflow (candidate delete + staff delete with self/last-staff safeguards)
 - [x] Candidate dashboard authorization UX semantics (waiting decline deletes assignment; authorized decline labeled cancel)
 - [x] Code quality pass: duplicate consolidation, theme centralization, hook extraction, edge function refactoring (desloppify strict 85.7 → 86.2)
 - [x] Semantic firm-status badge palette across candidate/staff/admin listing surfaces

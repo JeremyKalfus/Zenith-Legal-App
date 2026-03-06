@@ -2,7 +2,10 @@ import { z } from 'npm:zod@4.3.6';
 import { errorResponse, jsonResponse } from '../_shared/http.ts';
 import { createServiceClient } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
-import { clearNonCascadingUserReferences } from '../_shared/user-cleanup.ts';
+import {
+  clearNonCascadingUserReferences,
+  reassignAppointmentsCreatedByUser,
+} from '../_shared/user-cleanup.ts';
 import { createEdgeHandler } from '../_shared/edge-handler.ts';
 
 const deleteUserSchema = z.object({
@@ -39,12 +42,33 @@ Deno.serve(
         return errorResponse('User not found.', 404, 'user_not_found');
       }
 
-      if (targetProfile.role !== 'candidate') {
+      if (targetProfile.role !== 'candidate' && targetProfile.role !== 'staff') {
         return errorResponse(
-          'Only candidate accounts can be deleted from this admin workflow.',
+          'Only candidate and staff accounts can be deleted from this admin workflow.',
           403,
           'delete_role_forbidden',
         );
+      }
+
+      if (targetProfile.role === 'staff') {
+        const { count: remainingStaffCount, error: countError } = await serviceClient
+          .from('users_profile')
+          .select('id', { count: 'exact', head: true })
+          .eq('role', 'staff');
+
+        if (countError) {
+          return errorResponse(countError.message, 400, 'staff_count_failed');
+        }
+
+        if ((remainingStaffCount ?? 0) <= 1) {
+          return errorResponse(
+            'The last remaining staff account cannot be deleted.',
+            403,
+            'last_staff_delete_forbidden',
+          );
+        }
+
+        await reassignAppointmentsCreatedByUser(serviceClient, payload.user_id);
       }
 
       await clearNonCascadingUserReferences(serviceClient, payload.user_id);
@@ -57,7 +81,7 @@ Deno.serve(
       await writeAuditEvent({
         client: serviceClient,
         actorUserId,
-        action: 'staff_delete_candidate_user',
+        action: targetProfile.role === 'staff' ? 'staff_delete_staff_user' : 'staff_delete_candidate_user',
         entityType: 'users_profile',
         entityId: payload.user_id,
         beforeJson: targetProfile as unknown as Record<string, unknown>,
@@ -67,7 +91,7 @@ Deno.serve(
       return jsonResponse({
         success: true,
         deleted_user_id: payload.user_id,
-        deleted_role: 'candidate',
+        deleted_role: targetProfile.role,
       });
     },
     { auth: 'staff' },

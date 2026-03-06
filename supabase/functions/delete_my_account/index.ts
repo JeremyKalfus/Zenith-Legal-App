@@ -1,7 +1,10 @@
 import { errorResponse, jsonResponse } from '../_shared/http.ts';
 import { createServiceClient } from '../_shared/supabase.ts';
 import { writeAuditEvent } from '../_shared/audit.ts';
-import { clearNonCascadingUserReferences } from '../_shared/user-cleanup.ts';
+import {
+  clearNonCascadingUserReferences,
+  reassignAppointmentsCreatedByUser,
+} from '../_shared/user-cleanup.ts';
 import { createEdgeHandler } from '../_shared/edge-handler.ts';
 
 Deno.serve(
@@ -24,12 +27,29 @@ Deno.serve(
         return errorResponse('User profile not found.', 404, 'user_not_found');
       }
 
-      if (targetProfile.role !== 'candidate') {
-        return errorResponse(
-          'In-app account deletion is only available for candidate accounts.',
-          403,
-          'delete_role_forbidden',
-        );
+      if (targetProfile.role !== 'candidate' && targetProfile.role !== 'staff') {
+        return errorResponse('This account role cannot be deleted in-app.', 403, 'delete_role_forbidden');
+      }
+
+      if (targetProfile.role === 'staff') {
+        const { count: remainingStaffCount, error: countError } = await serviceClient
+          .from('users_profile')
+          .select('id', { count: 'exact', head: true })
+          .eq('role', 'staff');
+
+        if (countError) {
+          return errorResponse(countError.message, 400, 'staff_count_failed');
+        }
+
+        if ((remainingStaffCount ?? 0) <= 1) {
+          return errorResponse(
+            'The last remaining staff account cannot be deleted in-app.',
+            403,
+            'last_staff_delete_forbidden',
+          );
+        }
+
+        await reassignAppointmentsCreatedByUser(serviceClient, resolvedUserId);
       }
 
       await clearNonCascadingUserReferences(serviceClient, resolvedUserId);
@@ -42,7 +62,7 @@ Deno.serve(
       await writeAuditEvent({
         client: serviceClient,
         actorUserId: null,
-        action: 'candidate_delete_own_account',
+        action: targetProfile.role === 'staff' ? 'staff_delete_own_account' : 'candidate_delete_own_account',
         entityType: 'users_profile',
         entityId: resolvedUserId,
         beforeJson: targetProfile as unknown as Record<string, unknown>,
@@ -54,7 +74,7 @@ Deno.serve(
       return jsonResponse({
         success: true,
         deleted_user_id: resolvedUserId,
-        deleted_role: 'candidate',
+        deleted_role: targetProfile.role,
       });
     },
     { auth: 'user' },

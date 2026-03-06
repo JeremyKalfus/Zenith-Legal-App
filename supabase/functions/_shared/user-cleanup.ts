@@ -1,5 +1,32 @@
 import { createServiceClient } from './supabase.ts';
 
+export async function reassignAppointmentsCreatedByUser(
+  serviceClient: ReturnType<typeof createServiceClient>,
+  userId: string,
+) {
+  const { data, error } = await serviceClient
+    .from('appointments')
+    .select('id,candidate_user_id')
+    .eq('created_by_user_id', userId);
+
+  if (error) {
+    throw new Error(`Failed to load appointments created by user: ${error.message}`);
+  }
+
+  const appointments = (data ?? []) as { id: string; candidate_user_id: string }[];
+
+  for (const appointment of appointments) {
+    const { error: updateError } = await serviceClient
+      .from('appointments')
+      .update({ created_by_user_id: appointment.candidate_user_id })
+      .eq('id', appointment.id);
+
+    if (updateError) {
+      throw new Error(`Failed to reassign appointment creator: ${updateError.message}`);
+    }
+  }
+}
+
 export async function clearNonCascadingUserReferences(
   serviceClient: ReturnType<typeof createServiceClient>,
   userId: string,

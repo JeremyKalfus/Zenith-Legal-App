@@ -110,7 +110,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Candidates update email, password, and intake fields (including JD year).
 - Profile data stored in `users_profile` and `candidate_preferences` tables.
 - Candidate Profile settings are organized into collapsible sections: `Change Profile Details`, `Calendar Sync`, and `Change Email or Password`.
-- Candidates can delete their account in-app from Profile (self-service deletion flow with confirmation).
+- Candidates and staff can delete their own account in-app from Profile (self-service deletion flow with confirmation).
 - Candidate and staff Profile tabs include a Calendar Sync settings card with provider status and connect actions.
 
 ### Notifications
@@ -127,8 +127,10 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Staff login via Supabase auth.
 - Operations dashboard with candidate management.
 - Staff Messages page with inbox-first candidate DM channels (Stream Chat web thread view + reply).
-- Candidate management includes candidate account hard delete (candidate-only scope).
+- Candidate management includes candidate account hard delete.
 - Candidate management includes role promotion from candidate/user accounts to staff accounts.
+- Staff Account Manager page includes staff account hard delete for other recruiter users.
+- Staff account deletion blocks admin self-delete and protects the last remaining staff account from deletion.
 - Candidate-firm assignment manager.
 - Bulk firm ingest via paste.
 
