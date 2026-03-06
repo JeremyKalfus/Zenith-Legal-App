@@ -703,7 +703,11 @@ function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
         name="acceptedPrivacyPolicy"
         render={({ field }) => (
           <View style={styles.checkboxRow}>
-            <Pressable style={styles.checkboxToggle} onPress={() => field.onChange(!field.value)}>
+            <Pressable
+              style={styles.checkboxToggle}
+              hitSlop={8}
+              onPress={() => field.onChange(!field.value)}
+            >
               <Text style={styles.checkboxSymbol}>{field.value ? '☑' : '☐'}</Text>
             </Pressable>
             <Text style={styles.checkboxLabel}>
@@ -729,7 +733,11 @@ function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
         name="acceptedJobOpportunityPushNotifications"
         render={({ field }) => (
           <View style={styles.checkboxRow}>
-            <Pressable style={styles.checkboxToggle} onPress={() => field.onChange(!field.value)}>
+            <Pressable
+              style={styles.checkboxToggle}
+              hitSlop={8}
+              onPress={() => field.onChange(!field.value)}
+            >
               <Text style={styles.checkboxSymbol}>{field.value ? '☑' : '☐'}</Text>
             </Pressable>
             <Text style={styles.checkboxLabel}>Notify me about new job opportunities</Text>
@@ -1013,15 +1021,12 @@ const styles = StyleSheet.create({
   },
   checkboxSymbol: {
     color: uiColors.textPrimary,
-    fontSize: 20,
-    lineHeight: 22,
+    fontSize: 15,
+    includeFontPadding: false,
+    lineHeight: 15,
   },
   checkboxToggle: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-    minHeight: 28,
-    minWidth: 28,
+    marginRight: 4,
   },
   error: {
     color: uiColors.error,
