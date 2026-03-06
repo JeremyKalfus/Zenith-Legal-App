@@ -132,9 +132,6 @@ function DeleteAccountOverlay({ h }: { h: StaffProfileHook }) {
               <Text style={styles.helper}>
                 Permanently delete your recruiter account and sign-in information from the app.
               </Text>
-              <Text style={styles.helper}>
-                If this is the last remaining staff account, deletion will be blocked.
-              </Text>
               <Text style={styles.label}>Type DELETE to confirm</Text>
               <TextInput
                 autoCapitalize="characters"
