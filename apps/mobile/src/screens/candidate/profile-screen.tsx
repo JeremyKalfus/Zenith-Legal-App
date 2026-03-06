@@ -708,7 +708,9 @@ function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
               hitSlop={8}
               onPress={() => field.onChange(!field.value)}
             >
-              <Text style={styles.checkboxSymbol}>{field.value ? '☑' : '☐'}</Text>
+              <View style={[styles.checkboxBox, field.value ? styles.checkboxBoxChecked : null]}>
+                {field.value ? <Text style={styles.checkboxCheck}>✓</Text> : null}
+              </View>
             </Pressable>
             <View style={styles.checkboxLabelContainer}>
               <Text style={styles.checkboxLabel}>
@@ -740,7 +742,9 @@ function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
               hitSlop={8}
               onPress={() => field.onChange(!field.value)}
             >
-              <Text style={styles.checkboxSymbol}>{field.value ? '☑' : '☐'}</Text>
+              <View style={[styles.checkboxBox, field.value ? styles.checkboxBoxChecked : null]}>
+                {field.value ? <Text style={styles.checkboxCheck}>✓</Text> : null}
+              </View>
             </Pressable>
             <View style={styles.checkboxLabelContainer}>
               <Text style={styles.checkboxLabel}>Notify me about new job opportunities</Text>
@@ -1012,35 +1016,47 @@ const styles = StyleSheet.create({
   checkboxLabel: {
     color: uiColors.textPrimary,
     fontSize: 14,
-    includeFontPadding: false,
-    lineHeight: 18,
+    lineHeight: 20,
   },
   checkboxLabelContainer: {
     flex: 1,
     justifyContent: 'center',
     minHeight: 28,
   },
+  checkboxBox: {
+    alignItems: 'center',
+    borderColor: uiColors.textPrimary,
+    borderRadius: 3,
+    borderWidth: 2,
+    height: 20,
+    justifyContent: 'center',
+    width: 20,
+  },
+  checkboxBoxChecked: {
+    backgroundColor: uiColors.primary,
+    borderColor: uiColors.primary,
+  },
+  checkboxCheck: {
+    color: uiColors.primaryText,
+    fontSize: 14,
+    fontWeight: '700',
+    includeFontPadding: false,
+    lineHeight: 14,
+  },
   checkboxLink: {
     color: uiColors.link,
     fontWeight: '600',
-    textDecorationLine: 'underline',
   },
   checkboxRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  checkboxSymbol: {
-    color: uiColors.textPrimary,
-    fontSize: 28,
-    includeFontPadding: false,
-    lineHeight: 28,
+    flexWrap: 'nowrap',
   },
   checkboxToggle: {
     alignItems: 'center',
     height: 28,
     justifyContent: 'center',
-    marginRight: 0,
+    marginRight: 8,
     width: 28,
   },
   error: {
