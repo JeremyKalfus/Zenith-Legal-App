@@ -710,17 +710,19 @@ function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
             >
               <Text style={styles.checkboxSymbol}>{field.value ? '☑' : '☐'}</Text>
             </Pressable>
-            <Text style={styles.checkboxLabel}>
-              I accept the{' '}
-              <Text
-                accessibilityRole="link"
-                onPress={openPrivacyPolicy}
-                style={styles.checkboxLink}
-              >
-                Privacy Policy
-              </Text>{' '}
-              (required)
-            </Text>
+            <View style={styles.checkboxLabelContainer}>
+              <Text style={styles.checkboxLabel}>
+                I accept the{' '}
+                <Text
+                  accessibilityRole="link"
+                  onPress={openPrivacyPolicy}
+                  style={styles.checkboxLink}
+                >
+                  Privacy Policy
+                </Text>{' '}
+                (required)
+              </Text>
+            </View>
           </View>
         )}
       />
@@ -740,7 +742,9 @@ function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
             >
               <Text style={styles.checkboxSymbol}>{field.value ? '☑' : '☐'}</Text>
             </Pressable>
-            <Text style={styles.checkboxLabel}>Notify me about new job opportunities</Text>
+            <View style={styles.checkboxLabelContainer}>
+              <Text style={styles.checkboxLabel}>Notify me about new job opportunities</Text>
+            </View>
           </View>
         )}
       />
@@ -1008,6 +1012,13 @@ const styles = StyleSheet.create({
   checkboxLabel: {
     color: uiColors.textPrimary,
     fontSize: 14,
+    includeFontPadding: false,
+    lineHeight: 18,
+  },
+  checkboxLabelContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 28,
   },
   checkboxLink: {
     color: uiColors.link,
@@ -1021,16 +1032,16 @@ const styles = StyleSheet.create({
   },
   checkboxSymbol: {
     color: uiColors.textPrimary,
-    fontSize: 32,
+    fontSize: 28,
     includeFontPadding: false,
-    lineHeight: 32,
+    lineHeight: 28,
   },
   checkboxToggle: {
     alignItems: 'center',
-    height: 32,
+    height: 28,
     justifyContent: 'center',
-    marginRight: 6,
-    width: 32,
+    marginRight: 0,
+    width: 28,
   },
   error: {
     color: uiColors.error,
