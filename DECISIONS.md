@@ -626,3 +626,15 @@ Superseded in part by the 2026-03-06 staff-account deletion decision below.
 **Rationale:** The recruiter push-send feature showed that schema parity alone is insufficient: code and config can reference a function that is absent remotely. Users then hit runtime function-not-found failures despite green migration state.
 
 **Consequences:** Operational readiness and docs now call out migration parity and function parity separately. Any backend feature touching edge functions should include `supabase functions list` comparison before close-out.
+
+### [2026-03-06] Format recruiter banner phones for readability and enlarge consent toggles
+
+**Decision:** Display recruiter banner phones in a human-readable US format when applicable, and increase consent checkbox symbol/tap-target size while shortening push-consent copy to `Notify me about new job opportunities`.
+
+**Options considered:**
+1. Keep raw E.164 banner display and current small checkbox treatment -- technically valid, but harder to scan and tap.
+2. Apply localized display formatting in banner UI and increase checkbox affordance size without changing stored data (chosen).
+
+**Rationale:** Candidate-facing banner contact should be readable at a glance, and consent toggles are primary interaction controls in onboarding/profile flows that benefit from clearer visual affordance and simpler copy.
+
+**Consequences:** Banner rendering now formats display text from phone input while preserving `tel:` dialing behavior, and intake/profile consent rows now use larger checkbox symbols/pressables with updated push-consent wording.

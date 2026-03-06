@@ -40,6 +40,32 @@ export function sanitizePhoneInput(value: string): string {
   return result;
 }
 
+export function formatPhoneForDisplay(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  if (/[()\-.\s]/.test(trimmed)) {
+    return trimmed;
+  }
+
+  const normalized = normalizePhoneNumber(trimmed);
+  if (!normalized.ok) {
+    return trimmed;
+  }
+
+  const e164 = normalized.e164;
+  if (!e164.startsWith('+1') || e164.length !== 12) {
+    return e164;
+  }
+
+  const areaCode = e164.slice(2, 5);
+  const prefix = e164.slice(5, 8);
+  const lineNumber = e164.slice(8, 12);
+  return `(${areaCode}) ${prefix}-${lineNumber}`;
+}
+
 export function normalizePhoneNumber(
   input: string,
   options?: NormalizePhoneOptions,

@@ -704,9 +704,9 @@ function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
         render={({ field }) => (
           <View style={styles.checkboxRow}>
             <Pressable style={styles.checkboxToggle} onPress={() => field.onChange(!field.value)}>
-              <Text style={styles.checkbox}>{field.value ? '☑' : '☐'}</Text>
+              <Text style={styles.checkboxSymbol}>{field.value ? '☑' : '☐'}</Text>
             </Pressable>
-            <Text style={styles.checkbox}>
+            <Text style={styles.checkboxLabel}>
               I accept the{' '}
               <Text
                 accessibilityRole="link"
@@ -730,11 +730,9 @@ function ProfileDetailsCard({ h }: { h: ProfileScreenHook }) {
         render={({ field }) => (
           <View style={styles.checkboxRow}>
             <Pressable style={styles.checkboxToggle} onPress={() => field.onChange(!field.value)}>
-              <Text style={styles.checkbox}>{field.value ? '☑' : '☐'}</Text>
+              <Text style={styles.checkboxSymbol}>{field.value ? '☑' : '☐'}</Text>
             </Pressable>
-            <Text style={styles.checkbox}>
-              Accept push notifications about new job opportunities
-            </Text>
+            <Text style={styles.checkboxLabel}>Notify me about new job opportunities</Text>
           </View>
         )}
       />
@@ -999,7 +997,7 @@ const styles = StyleSheet.create({
     color: uiColors.dangerText,
     fontWeight: '700',
   },
-  checkbox: {
+  checkboxLabel: {
     color: uiColors.textPrimary,
     fontSize: 14,
   },
@@ -1013,8 +1011,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
   },
+  checkboxSymbol: {
+    color: uiColors.textPrimary,
+    fontSize: 20,
+    lineHeight: 22,
+  },
   checkboxToggle: {
-    marginRight: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+    minHeight: 28,
+    minWidth: 28,
   },
   error: {
     color: uiColors.error,

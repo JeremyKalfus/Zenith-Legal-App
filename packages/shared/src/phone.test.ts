@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizePhoneNumber } from './phone';
+import { formatPhoneForDisplay, normalizePhoneNumber } from './phone';
 
 describe('normalizePhoneNumber', () => {
   it('defaults US 10-digit numbers to +1', () => {
@@ -40,5 +40,19 @@ describe('normalizePhoneNumber', () => {
 
   it('rejects malformed plus usage', () => {
     expect(normalizePhoneNumber('++1202')).toMatchObject({ ok: false });
+  });
+});
+
+describe('formatPhoneForDisplay', () => {
+  it('formats US E.164 numbers to local display format', () => {
+    expect(formatPhoneForDisplay('+12024868858')).toBe('(202) 486-8858');
+  });
+
+  it('passes through already formatted numbers', () => {
+    expect(formatPhoneForDisplay('(202) 486-3535')).toBe('(202) 486-3535');
+  });
+
+  it('falls back to canonical non-US international number format', () => {
+    expect(formatPhoneForDisplay('+442079460958')).toBe('+442079460958');
   });
 });

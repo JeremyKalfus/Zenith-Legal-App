@@ -1,4 +1,5 @@
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { formatPhoneForDisplay } from '@zenith/shared';
 import { useRecruiterContact } from '../context/recruiter-contact-context';
 import { uiColors } from '../theme/colors';
 
@@ -24,8 +25,9 @@ function toDialablePhone(phone: string): string {
 
 export function GlobalRecruiterBanner() {
   const { contact } = useRecruiterContact();
-  const displayPhone = contact.phone.trim();
-  const dialablePhone = toDialablePhone(displayPhone);
+  const rawPhone = contact.phone.trim();
+  const displayPhone = formatPhoneForDisplay(rawPhone) || rawPhone;
+  const dialablePhone = toDialablePhone(rawPhone);
   const email = contact.email.trim();
 
   return (
