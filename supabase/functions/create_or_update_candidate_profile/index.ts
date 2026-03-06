@@ -10,6 +10,16 @@ import {
 } from '../_shared/candidate-intake.ts';
 import { createEdgeHandler } from '../_shared/edge-handler.ts';
 
+function formatValidationErrors(flattened: {
+  formErrors: string[];
+  fieldErrors: Record<string, string[] | undefined>;
+}): string {
+  const fieldErrors = Object.values(flattened.fieldErrors).flatMap((messages) =>
+    Array.isArray(messages) ? messages : [],
+  );
+  return [...flattened.formErrors, ...fieldErrors].join(', ');
+}
+
 function mapPersistenceFailureToResponse(message: string): Response | null {
   if (message.startsWith('consent_lookup_failed:')) {
     return errorResponse(message.slice('consent_lookup_failed:'.length), 400);
@@ -36,7 +46,7 @@ Deno.serve(
       const payload = await request.json();
       const parsed = candidateIntakeSchema.safeParse(payload);
       if (!parsed.success) {
-        return errorResponse(parsed.error.flatten().formErrors.join(', ') || 'Invalid payload', 422);
+        return errorResponse(formatValidationErrors(parsed.error.flatten()) || 'Invalid payload', 422);
       }
 
       const intake = parsed.data;

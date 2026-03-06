@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
-import { Platform, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 import {
   Channel,
   Chat,
@@ -31,6 +31,33 @@ export function StaffMessageThreadScreen({
   const client = getChatClient();
   const channel = useMemo(() => client.channel('messaging', channelId), [channelId, client]);
   const isFocused = useIsFocused();
+  const [isChannelReady, setIsChannelReady] = useState(false);
+  const [channelErrorMessage, setChannelErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    setIsChannelReady(false);
+    setChannelErrorMessage(null);
+
+    void channel
+      .watch()
+      .then(() => {
+        if (!isMounted) {
+          return;
+        }
+        setIsChannelReady(true);
+      })
+      .catch(() => {
+        if (!isMounted) {
+          return;
+        }
+        setChannelErrorMessage('Unable to load messages for this channel. Please try again.');
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [channel]);
 
   const markChannelRead = useCallback(async () => {
     try {
@@ -77,6 +104,26 @@ export function StaffMessageThreadScreen({
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.center}>
           <Text style={styles.error}>Chat connection unavailable. Return to inbox and retry.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (channelErrorMessage) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.center}>
+          <Text style={styles.error}>{channelErrorMessage}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!isChannelReady) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.center}>
+          <ActivityIndicator />
         </View>
       </SafeAreaView>
     );

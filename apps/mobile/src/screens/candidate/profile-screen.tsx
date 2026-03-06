@@ -228,7 +228,10 @@ function useProfileScreen() {
     clearAuthNotice();
     try {
       const parsed = candidateIntakeSchema.parse(values);
-      await updateCandidateProfileIntake(parsed);
+      await updateCandidateProfileIntake({
+        ...parsed,
+        acceptedCommunicationConsent: true,
+      });
       let nextMessage = 'Profile updated.';
       const shouldRequestPushPermission =
         parsed.acceptedJobOpportunityPushNotifications &&

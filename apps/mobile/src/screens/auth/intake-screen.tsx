@@ -510,7 +510,10 @@ export function IntakeScreen({
               try {
                 if (isFinishProfile) {
                   const parsed = candidateIntakeSchema.parse(values);
-                  await updateCandidateProfileIntake(parsed);
+                  await updateCandidateProfileIntake({
+                    ...parsed,
+                    acceptedCommunicationConsent: true,
+                  });
                   let nextMessage = 'Profile saved.';
                   const shouldRequestPushPermission =
                     parsed.acceptedJobOpportunityPushNotifications &&
