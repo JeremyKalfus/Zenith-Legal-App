@@ -4,6 +4,8 @@ import { normalizeUsPhoneForAuth } from './phone.ts';
 export const PRIVACY_POLICY_VERSION = Deno.env.get('CONSENT_PRIVACY_POLICY_VERSION') ?? 'v1';
 export const COMMUNICATION_CONSENT_VERSION =
   Deno.env.get('CONSENT_COMMUNICATION_CONSENT_VERSION') ?? 'v1';
+export const JOB_OPPORTUNITY_PUSH_CONSENT_VERSION =
+  Deno.env.get('CONSENT_JOB_OPPORTUNITY_PUSH_VERSION') ?? 'v1';
 
 export const cityOptions = [
   'DC',
@@ -153,6 +155,7 @@ export const candidateIntakeSchema = z
     jdDegreeDate: optionalJdDegreeYearString(),
     acceptedPrivacyPolicy: z.boolean(),
     acceptedCommunicationConsent: z.boolean(),
+    acceptedJobOpportunityPushNotifications: z.boolean().default(false),
   })
   .superRefine((value, ctx) => {
     if (!value.acceptedPrivacyPolicy) {
@@ -284,7 +287,7 @@ export async function persistCandidateIntakeData({
     const { data: existingConsents, error: existingConsentsError } = await client
       .from('candidate_consents')
       .select(
-        'privacy_policy_accepted,privacy_policy_version,communication_consent_accepted,communication_consent_version',
+        'privacy_policy_accepted,privacy_policy_version,communication_consent_accepted,communication_consent_version,job_opportunity_push_accepted,job_opportunity_push_version',
       )
       .eq('user_id', userId)
       .maybeSingle();
@@ -297,8 +300,10 @@ export async function persistCandidateIntakeData({
       !existingConsents ||
       existingConsents.privacy_policy_accepted !== intake.acceptedPrivacyPolicy ||
       existingConsents.communication_consent_accepted !== intake.acceptedCommunicationConsent ||
+      existingConsents.job_opportunity_push_accepted !== intake.acceptedJobOpportunityPushNotifications ||
       (intake.acceptedPrivacyPolicy && !existingConsents.privacy_policy_version) ||
-      (intake.acceptedCommunicationConsent && !existingConsents.communication_consent_version);
+      (intake.acceptedCommunicationConsent && !existingConsents.communication_consent_version) ||
+      (intake.acceptedJobOpportunityPushNotifications && !existingConsents.job_opportunity_push_version);
 
     if (!shouldUpsertConsents) {
       return;
@@ -316,6 +321,11 @@ export async function persistCandidateIntakeData({
       communication_consent_accepted_at: intake.acceptedCommunicationConsent ? consentAcceptedAt : null,
       communication_consent_version: intake.acceptedCommunicationConsent
         ? COMMUNICATION_CONSENT_VERSION
+        : null,
+      job_opportunity_push_accepted: intake.acceptedJobOpportunityPushNotifications,
+      job_opportunity_push_accepted_at: intake.acceptedJobOpportunityPushNotifications ? consentAcceptedAt : null,
+      job_opportunity_push_version: intake.acceptedJobOpportunityPushNotifications
+        ? JOB_OPPORTUNITY_PUSH_CONSENT_VERSION
         : null,
       source,
     },

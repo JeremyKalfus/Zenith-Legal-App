@@ -1,4 +1,4 @@
-import { FIRM_STATUSES, type CityOption, type FirmStatus, type PracticeArea } from '@zenith/shared';
+import { filterStaffCandidates, FIRM_STATUSES } from '@zenith/shared';
 import { useMemo, useState } from 'react';
 import {
   Modal,
@@ -12,38 +12,21 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ScreenShell } from '../../components/screen-shell';
 import { StaffPageTitle } from '../../components/staff-page-title';
+import { sendJobOpportunityNotificationToCandidates } from '../../features/staff-candidate-management';
+import { ensureValidSession } from '../../lib/supabase';
 import { uiColors } from '../../theme/colors';
-import type { StaffCandidatesStackParamList } from '../../navigation/staff-candidates-stack';
+import type { StaffCandidatesStackParamList } from '../../navigation/staff-candidates-types';
+import {
+  DEFAULT_STAFF_CANDIDATE_FILTERS,
+  type StaffCandidateFilters,
+} from './staff-candidate-filtering';
 
-export type StaffCandidateFilters = {
-  assignedRecruiter: 'any' | 'none' | string;
-  currentStatus: 'any' | FirmStatus;
-  practices: PracticeArea[];
-  assignedFirmIds: string[];
-  preferredCities: CityOption[];
-  jdYears: string[];
-};
-
-export const DEFAULT_STAFF_CANDIDATE_FILTERS: StaffCandidateFilters = {
-  assignedRecruiter: 'any',
-  currentStatus: 'any',
-  practices: [],
-  assignedFirmIds: [],
-  preferredCities: [],
-  jdYears: [],
-};
-
-export type StaffCandidateFilterOptions = {
-  recruiterOptions: readonly { id: string; label: string }[];
-  practiceOptions: readonly PracticeArea[];
-  assignedFirmOptions: readonly { id: string; label: string }[];
-  preferredCityOptions: readonly CityOption[];
-  jdYearOptions: readonly string[];
-};
 type Props = NativeStackScreenProps<StaffCandidatesStackParamList, 'StaffCandidateFilters'>;
+
 type ModalMode =
   | 'assignedRecruiter'
   | 'currentStatus'
+  | 'jobOpportunityPushConsent'
   | 'practices'
   | 'assignedFirmIds'
   | 'preferredCities'
@@ -85,6 +68,11 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
   const [jdYearRangeStart, setJdYearRangeStart] = useState('');
   const [jdYearRangeEnd, setJdYearRangeEnd] = useState('');
   const [jdYearInputError, setJdYearInputError] = useState<string | null>(null);
+  const [showNotificationComposer, setShowNotificationComposer] = useState(false);
+  const [notificationTitle, setNotificationTitle] = useState('');
+  const [notificationBody, setNotificationBody] = useState('');
+  const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
+  const [isSendingNotification, setIsSendingNotification] = useState(false);
 
   const recruiterLabelById = useMemo(
     () => new Map(route.params.options.recruiterOptions.map((option) => [option.id, option.label])),
@@ -100,8 +88,12 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
     : draftFilters.assignedRecruiter === 'none'
       ? 'None'
       : recruiterLabelById.get(draftFilters.assignedRecruiter) ?? 'Any';
-
   const currentStatusLabel = draftFilters.currentStatus === 'any' ? 'Any' : draftFilters.currentStatus;
+  const pushNotificationsLabel = draftFilters.jobOpportunityPushConsent === 'any'
+    ? 'Any'
+    : draftFilters.jobOpportunityPushConsent === 'accepted'
+      ? 'Accepted'
+      : 'Not accepted';
   const practicesLabel = formatMultiValue(draftFilters.practices);
   const assignedFirmsLabel = formatMultiValue(
     draftFilters.assignedFirmIds
@@ -110,6 +102,7 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
   );
   const preferredCitiesLabel = formatMultiValue(draftFilters.preferredCities);
   const jdYearsLabel = formatMultiValue(draftFilters.jdYears);
+
   const filteredAssignedFirmOptions = useMemo(() => {
     const normalizedQuery = assignedFirmQuery.trim().toLowerCase();
     if (!normalizedQuery) {
@@ -120,6 +113,26 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
       option.label.toLowerCase().includes(normalizedQuery),
     );
   }, [assignedFirmQuery, route.params.options.assignedFirmOptions]);
+
+  const matchingCandidates = useMemo(
+    () =>
+      filterStaffCandidates(route.params.candidates, {
+        query: route.params.query,
+        assignedRecruiter: draftFilters.assignedRecruiter,
+        currentStatus: draftFilters.currentStatus,
+        jobOpportunityPushConsent: draftFilters.jobOpportunityPushConsent,
+        practices: draftFilters.practices,
+        assignedFirmIds: draftFilters.assignedFirmIds,
+        preferredCities: draftFilters.preferredCities,
+        jdYears: draftFilters.jdYears,
+      }),
+    [draftFilters, route.params.candidates, route.params.query],
+  );
+
+  const consentedRecipients = useMemo(
+    () => matchingCandidates.filter((candidate) => candidate.acceptedJobOpportunityPushNotifications),
+    [matchingCandidates],
+  );
 
   function appendJdYears(yearsToAdd: readonly string[]): void {
     setDraftFilters((current) => {
@@ -177,6 +190,49 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
     setJdYearInputError(null);
   }
 
+  async function handleSendNotification(): Promise<void> {
+    const trimmedTitle = notificationTitle.trim();
+    const trimmedBody = notificationBody.trim();
+    if (!trimmedTitle || !trimmedBody) {
+      setNotificationMessage('Enter both a title and a message.');
+      return;
+    }
+
+    if (consentedRecipients.length === 0) {
+      setNotificationMessage('No consented candidates match the current filters.');
+      return;
+    }
+
+    setIsSendingNotification(true);
+    setNotificationMessage(null);
+
+    try {
+      await ensureValidSession();
+      const response = await sendJobOpportunityNotificationToCandidates({
+        candidateIds: consentedRecipients.map((candidate) => candidate.id),
+        title: trimmedTitle,
+        body: trimmedBody,
+        filterSnapshot: {
+          query: route.params.query,
+          filters: draftFilters,
+          matching_candidate_count: matchingCandidates.length,
+          consented_candidate_count: consentedRecipients.length,
+        },
+      });
+
+      const summary =
+        `Queued ${response.queued_count} notification${response.queued_count === 1 ? '' : 's'} and skipped ${response.skipped_count}.`;
+      setShowNotificationComposer(false);
+      setNotificationTitle('');
+      setNotificationBody('');
+      setNotificationMessage(summary);
+    } catch (error) {
+      setNotificationMessage((error as Error).message);
+    } finally {
+      setIsSendingNotification(false);
+    }
+  }
+
   return (
     <ScreenShell showBanner={false}>
       <StaffPageTitle title="Filter Search" />
@@ -195,6 +251,14 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
           <Text style={styles.filterLabel}>Current status</Text>
           <View style={styles.filterValueRow}>
             <Text style={styles.filterValue}>{currentStatusLabel}</Text>
+            <Text style={styles.chevron}>⌄</Text>
+          </View>
+        </Pressable>
+
+        <Pressable style={styles.filterField} onPress={() => setModalMode('jobOpportunityPushConsent')}>
+          <Text style={styles.filterLabel}>Push notifications</Text>
+          <View style={styles.filterValueRow}>
+            <Text style={styles.filterValue}>{pushNotificationsLabel}</Text>
             <Text style={styles.chevron}>⌄</Text>
           </View>
         </Pressable>
@@ -246,11 +310,28 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
           </View>
         </Pressable>
 
+        <Pressable
+          style={[
+            styles.sendNotificationButton,
+            consentedRecipients.length === 0 ? styles.sendNotificationButtonDisabled : null,
+          ]}
+          disabled={consentedRecipients.length === 0}
+          onPress={() => {
+            setNotificationMessage(null);
+            setShowNotificationComposer(true);
+          }}
+        >
+          <Text style={styles.sendNotificationButtonText}>
+            Send Notification ({consentedRecipients.length})
+          </Text>
+        </Pressable>
+
         <View style={styles.footerActions}>
           <Pressable
             style={styles.clearButton}
             onPress={() => {
               setDraftFilters(DEFAULT_STAFF_CANDIDATE_FILTERS);
+              setNotificationMessage(null);
             }}
           >
             <Text style={styles.clearButtonText}>Clear</Text>
@@ -258,12 +339,18 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
           <Pressable
             style={styles.applyButton}
             onPress={() => {
+              setNotificationMessage(null);
               navigation.navigate('StaffCandidatesList', { appliedFilters: draftFilters });
             }}
           >
             <Text style={styles.applyButtonText}>Apply</Text>
           </Pressable>
         </View>
+
+        <Text style={styles.resultSummaryText}>
+          {matchingCandidates.length} matching candidates. {consentedRecipients.length} have accepted job-opportunity push notifications.
+        </Text>
+        {notificationMessage ? <Text style={styles.notificationMessageText}>{notificationMessage}</Text> : null}
       </View>
 
       <Modal
@@ -332,6 +419,35 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
                 </>
               ) : null}
 
+              {modalMode === 'jobOpportunityPushConsent' ? (
+                <>
+                  <ToggleRow
+                    label="Any"
+                    selected={draftFilters.jobOpportunityPushConsent === 'any'}
+                    onPress={() => {
+                      setDraftFilters((current) => ({ ...current, jobOpportunityPushConsent: 'any' }));
+                      setModalMode(null);
+                    }}
+                  />
+                  <ToggleRow
+                    label="Accepted"
+                    selected={draftFilters.jobOpportunityPushConsent === 'accepted'}
+                    onPress={() => {
+                      setDraftFilters((current) => ({ ...current, jobOpportunityPushConsent: 'accepted' }));
+                      setModalMode(null);
+                    }}
+                  />
+                  <ToggleRow
+                    label="Not accepted"
+                    selected={draftFilters.jobOpportunityPushConsent === 'not_accepted'}
+                    onPress={() => {
+                      setDraftFilters((current) => ({ ...current, jobOpportunityPushConsent: 'not_accepted' }));
+                      setModalMode(null);
+                    }}
+                  />
+                </>
+              ) : null}
+
               {modalMode === 'practices' ? (
                 <>
                   <ToggleRow
@@ -362,7 +478,7 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
               {modalMode === 'assignedFirmIds' ? (
                 <>
                   <TextInput
-                    style={styles.modalSearchInput}
+                    style={styles.modalInput}
                     placeholder="Search firms"
                     placeholderTextColor={uiColors.textPlaceholder}
                     value={assignedFirmQuery}
@@ -434,7 +550,7 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
                   <View style={styles.jdYearInputRow}>
                     <TextInput
                       style={styles.jdYearInput}
-                      placeholder="Add year (e.g. 2024)"
+                      placeholder="Add year"
                       placeholderTextColor={uiColors.textPlaceholder}
                       value={jdYearInput}
                       keyboardType="number-pad"
@@ -446,8 +562,8 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
                         }
                       }}
                     />
-                    <Pressable style={styles.addYearButton} onPress={handleAddJdYear}>
-                      <Text style={styles.addYearButtonText}>Add year</Text>
+                    <Pressable style={styles.inlineActionButton} onPress={handleAddJdYear}>
+                      <Text style={styles.inlineActionButtonText}>Add year</Text>
                     </Pressable>
                   </View>
                   <View style={styles.jdYearRangeRow}>
@@ -479,8 +595,8 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
                         }
                       }}
                     />
-                    <Pressable style={styles.addYearButton} onPress={handleAddJdYearRange}>
-                      <Text style={styles.addYearButtonText}>Add range</Text>
+                    <Pressable style={styles.inlineActionButton} onPress={handleAddJdYearRange}>
+                      <Text style={styles.inlineActionButtonText}>Add range</Text>
                     </Pressable>
                   </View>
                   {jdYearInputError ? <Text style={styles.fieldErrorText}>{jdYearInputError}</Text> : null}
@@ -528,47 +644,137 @@ export function StaffCandidateFiltersScreen({ navigation, route }: Props) {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        transparent
+        visible={showNotificationComposer}
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isSendingNotification) {
+            setShowNotificationComposer(false);
+          }
+        }}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Send Notification</Text>
+            <Text style={styles.composerSummaryText}>
+              {matchingCandidates.length} candidate matches. {consentedRecipients.length} consented recipients will be submitted for push delivery.
+            </Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Notification title"
+              placeholderTextColor={uiColors.textPlaceholder}
+              value={notificationTitle}
+              onChangeText={setNotificationTitle}
+              maxLength={120}
+            />
+            <TextInput
+              style={[styles.modalInput, styles.composerBodyInput]}
+              placeholder="Write a short notification message"
+              placeholderTextColor={uiColors.textPlaceholder}
+              value={notificationBody}
+              onChangeText={setNotificationBody}
+              multiline
+              textAlignVertical="top"
+              maxLength={400}
+            />
+            {notificationMessage ? <Text style={styles.notificationMessageText}>{notificationMessage}</Text> : null}
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.modalCancelButton}
+                onPress={() => {
+                  if (!isSendingNotification) {
+                    setShowNotificationComposer(false);
+                  }
+                }}
+              >
+                <Text style={styles.modalCancelButtonText}>Close</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.modalDoneButton,
+                  (isSendingNotification || consentedRecipients.length === 0) ? styles.sendNotificationButtonDisabled : null,
+                ]}
+                disabled={isSendingNotification || consentedRecipients.length === 0}
+                onPress={() => {
+                  void handleSendNotification();
+                }}
+              >
+                <Text style={styles.modalDoneButtonText}>
+                  {isSendingNotification ? 'Sending...' : 'Send'}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  applyButton: {
+  subtitle: {
+    color: uiColors.textSecondary,
+    fontSize: 15,
+    marginBottom: 12,
+  },
+  panel: {
+    gap: 12,
+  },
+  filterField: {
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 2,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  filterLabel: {
+    color: uiColors.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  filterValueRow: {
     alignItems: 'center',
-    backgroundColor: uiColors.primary,
-    borderRadius: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 24,
+  },
+  filterValue: {
+    color: uiColors.textPrimary,
     flex: 1,
-    justifyContent: 'center',
-    minHeight: 52,
-  },
-  applyButtonText: {
-    color: uiColors.primaryText,
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  addYearButton: {
-    alignItems: 'center',
-    backgroundColor: uiColors.primary,
-    borderRadius: 10,
-    justifyContent: 'center',
-    minHeight: 48,
-    paddingHorizontal: 14,
-  },
-  addYearButtonText: {
-    color: uiColors.primaryText,
     fontSize: 16,
-    fontWeight: '700',
-  },
-  checkmark: {
-    color: uiColors.primary,
-    fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   chevron: {
     color: uiColors.textMuted,
     fontSize: 24,
     marginLeft: 8,
     marginTop: -4,
+  },
+  sendNotificationButton: {
+    alignItems: 'center',
+    backgroundColor: uiColors.primary,
+    borderRadius: 12,
+    justifyContent: 'center',
+    minHeight: 52,
+    paddingHorizontal: 16,
+  },
+  sendNotificationButtonDisabled: {
+    opacity: 0.45,
+  },
+  sendNotificationButtonText: {
+    color: uiColors.primaryText,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  footerActions: {
+    flexDirection: 'row',
+    gap: 12,
   },
   clearButton: {
     alignItems: 'center',
@@ -585,6 +791,217 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
   },
+  applyButton: {
+    alignItems: 'center',
+    backgroundColor: uiColors.primary,
+    borderRadius: 12,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 52,
+  },
+  applyButtonText: {
+    color: uiColors.primaryText,
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  resultSummaryText: {
+    color: uiColors.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  notificationMessageText: {
+    color: uiColors.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  modalBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
+    borderRadius: 20,
+    borderWidth: 1,
+    maxWidth: 560,
+    padding: 18,
+    width: '100%',
+  },
+  modalTitle: {
+    color: uiColors.textPrimary,
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  modalScroll: {
+    maxHeight: 420,
+  },
+  modalScrollContent: {
+    gap: 10,
+    paddingBottom: 8,
+  },
+  modalInput: {
+    backgroundColor: uiColors.backgroundAlt,
+    borderColor: uiColors.borderStrong,
+    borderRadius: 12,
+    borderWidth: 1,
+    color: uiColors.textPrimary,
+    fontSize: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  composerBodyInput: {
+    minHeight: 120,
+    paddingTop: 14,
+  },
+  composerSummaryText: {
+    color: uiColors.textSecondary,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  optionRow: {
+    alignItems: 'center',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 48,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  optionRowSelected: {
+    backgroundColor: uiColors.backgroundAlt,
+    borderColor: uiColors.primary,
+  },
+  optionLabel: {
+    color: uiColors.textPrimary,
+    flex: 1,
+    fontSize: 15,
+  },
+  optionLabelSelected: {
+    fontWeight: '700',
+  },
+  checkmark: {
+    color: uiColors.primary,
+    fontSize: 16,
+    fontWeight: '700',
+    marginLeft: 12,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 14,
+  },
+  modalCancelButton: {
+    alignItems: 'center',
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.borderStrong,
+    borderRadius: 12,
+    borderWidth: 1,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  modalCancelButtonText: {
+    color: uiColors.textSecondary,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  modalDoneButton: {
+    alignItems: 'center',
+    backgroundColor: uiColors.primary,
+    borderRadius: 12,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  modalDoneButtonText: {
+    color: uiColors.primaryText,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  emptySelectionText: {
+    color: uiColors.textMuted,
+    fontSize: 15,
+    marginTop: 8,
+  },
+  jdYearInputRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  jdYearInput: {
+    backgroundColor: uiColors.backgroundAlt,
+    borderColor: uiColors.borderStrong,
+    borderRadius: 12,
+    borderWidth: 1,
+    color: uiColors.textPrimary,
+    flex: 1,
+    fontSize: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  jdYearRangeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  jdYearRangeInput: {
+    backgroundColor: uiColors.backgroundAlt,
+    borderColor: uiColors.borderStrong,
+    borderRadius: 12,
+    borderWidth: 1,
+    color: uiColors.textPrimary,
+    flex: 1,
+    fontSize: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  inlineActionButton: {
+    alignItems: 'center',
+    backgroundColor: uiColors.primary,
+    borderRadius: 10,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: 12,
+  },
+  inlineActionButtonText: {
+    color: uiColors.primaryText,
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  fieldErrorText: {
+    color: uiColors.error,
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 6,
+  },
+  selectedYearRow: {
+    alignItems: 'center',
+    backgroundColor: uiColors.backgroundAlt,
+    borderColor: uiColors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  selectedYearText: {
+    color: uiColors.textPrimary,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  removeYearText: {
+    color: uiColors.link,
+    fontSize: 14,
+    fontWeight: '700',
+  },
   clearYearsButton: {
     alignItems: 'center',
     borderColor: uiColors.borderStrong,
@@ -597,202 +1014,6 @@ const styles = StyleSheet.create({
   clearYearsButtonText: {
     color: uiColors.textSecondary,
     fontSize: 15,
-    fontWeight: '700',
-  },
-  emptySelectionText: {
-    color: uiColors.textMuted,
-    fontSize: 15,
-    marginTop: 8,
-  },
-  fieldErrorText: {
-    color: uiColors.error,
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 6,
-  },
-  filterField: {
-    backgroundColor: uiColors.surface,
-    borderColor: uiColors.borderStrong,
-    borderRadius: 16,
-    borderWidth: 1,
-    gap: 2,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  filterLabel: {
-    color: uiColors.textSecondary,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  filterValue: {
-    color: uiColors.textPrimary,
-    flexShrink: 1,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  filterValueRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  footerActions: {
-    flexDirection: 'row',
-    gap: 14,
-    marginTop: 8,
-  },
-  jdYearInput: {
-    backgroundColor: uiColors.surface,
-    borderColor: uiColors.borderStrong,
-    borderRadius: 10,
-    borderWidth: 1,
-    color: uiColors.textPrimary,
-    flex: 1,
-    fontSize: 16,
-    minHeight: 48,
-    paddingHorizontal: 12,
-  },
-  jdYearInputRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 4,
-  },
-  jdYearRangeInput: {
-    backgroundColor: uiColors.surface,
-    borderColor: uiColors.borderStrong,
-    borderRadius: 10,
-    borderWidth: 1,
-    color: uiColors.textPrimary,
-    flex: 1,
-    fontSize: 16,
-    minHeight: 44,
-    paddingHorizontal: 12,
-  },
-  jdYearRangeRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 4,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 10,
-    justifyContent: 'flex-end',
-    marginTop: 10,
-  },
-  modalBackdrop: {
-    alignItems: 'center',
-    backgroundColor: uiColors.modalOverlay,
-    flex: 1,
-    justifyContent: 'center',
-    padding: 16,
-  },
-  modalCancelButton: {
-    alignItems: 'center',
-    borderColor: uiColors.borderStrong,
-    borderRadius: 10,
-    borderWidth: 1,
-    minWidth: 90,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  modalCancelButtonText: {
-    color: uiColors.textSecondary,
-    fontWeight: '600',
-  },
-  modalCard: {
-    backgroundColor: uiColors.surface,
-    borderRadius: 14,
-    maxHeight: '80%',
-    padding: 14,
-    width: '100%',
-  },
-  modalDoneButton: {
-    alignItems: 'center',
-    backgroundColor: uiColors.primary,
-    borderRadius: 10,
-    minWidth: 90,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  modalDoneButtonText: {
-    color: uiColors.primaryText,
-    fontWeight: '700',
-  },
-  modalScroll: {
-    marginTop: 8,
-  },
-  modalScrollContent: {
-    gap: 8,
-    paddingBottom: 4,
-  },
-  modalTitle: {
-    color: uiColors.textPrimary,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  optionLabel: {
-    color: uiColors.textPrimary,
-    flexShrink: 1,
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  optionLabelSelected: {
-    color: uiColors.primary,
-  },
-  optionRow: {
-    alignItems: 'center',
-    borderColor: uiColors.border,
-    borderRadius: 10,
-    borderWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 44,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  optionRowSelected: {
-    backgroundColor: uiColors.backgroundAlt,
-    borderColor: uiColors.primary,
-  },
-  removeYearText: {
-    color: uiColors.error,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  panel: {
-    backgroundColor: 'transparent',
-    borderWidth: 0,
-    gap: 12,
-    padding: 0,
-  },
-  modalSearchInput: {
-    backgroundColor: uiColors.surface,
-    borderColor: uiColors.borderStrong,
-    borderRadius: 10,
-    borderWidth: 1,
-    color: uiColors.textPrimary,
-    fontSize: 16,
-    minHeight: 44,
-    paddingHorizontal: 12,
-  },
-  subtitle: {
-    color: uiColors.textSecondary,
-    fontSize: 18,
-    marginTop: -4,
-  },
-  selectedYearRow: {
-    alignItems: 'center',
-    borderBottomColor: uiColors.border,
-    borderBottomWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 44,
-    paddingVertical: 4,
-  },
-  selectedYearText: {
-    color: uiColors.textPrimary,
-    fontSize: 16,
     fontWeight: '700',
   },
 });

@@ -14,7 +14,7 @@ import {
 import type { Channel as StreamChannel } from 'stream-chat';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { supabaseClient } from '@/lib/supabase-client';
+import { ensureValidSession, supabaseClient } from '@/lib/supabase-client';
 import { getFunctionErrorMessage } from '@/lib/function-error';
 import {
   ensureChatUserConnected,
@@ -131,12 +131,8 @@ function useStaffMessagesDashboard() {
     }
 
     try {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabaseClient.auth.getSession();
-
-      if (sessionError || !session?.user) {
+      const session = await ensureValidSession();
+      if (!session?.user) {
         throw new Error('Unable to load your staff session. Please sign in again.');
       }
 

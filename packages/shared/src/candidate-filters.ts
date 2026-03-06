@@ -37,12 +37,14 @@ export type StaffCandidateFilterable = CandidateFilterable & {
   assignedRecruiterUserId?: string | null;
   currentStatuses?: readonly FirmStatus[] | null;
   assignedFirmIds?: readonly string[] | null;
+  acceptedJobOpportunityPushNotifications?: boolean | null;
 };
 
 export type StaffCandidateFilterInput = {
   query: string;
   assignedRecruiter: 'any' | 'none' | string;
   currentStatus: 'any' | FirmStatus;
+  jobOpportunityPushConsent: 'any' | 'accepted' | 'not_accepted';
   practices: readonly PracticeArea[];
   assignedFirmIds: readonly string[];
   preferredCities: readonly CityOption[];
@@ -164,6 +166,15 @@ export function filterStaffCandidates<T extends StaffCandidateFilterable>(
       ? true
       : (candidate.currentStatuses ?? []).includes(input.currentStatus);
     if (!currentStatusMatch) {
+      return false;
+    }
+
+    const pushConsentMatch = input.jobOpportunityPushConsent === 'any'
+      ? true
+      : input.jobOpportunityPushConsent === 'accepted'
+        ? candidate.acceptedJobOpportunityPushNotifications === true
+        : candidate.acceptedJobOpportunityPushNotifications !== true;
+    if (!pushConsentMatch) {
       return false;
     }
 

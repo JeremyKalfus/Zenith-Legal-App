@@ -20,6 +20,8 @@ import { PasswordInput } from '../../components/password-input';
 import { PRIVACY_POLICY_URL } from '../../config/legal';
 import { useAuth } from '../../context/auth-context';
 import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
+import { requestPushPermissionAndRegister } from '../../lib/notifications';
+import { ensureValidSession } from '../../lib/supabase';
 import { uiColors } from '../../theme/colors';
 import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
 
@@ -70,6 +72,7 @@ export function IntakeScreen({
     clearAuthNotice,
     profile,
     registerCandidateWithPassword,
+    session,
     updateCandidateProfileIntake,
   } = useAuth();
   const [busy, setBusy] = useState(false);
@@ -98,6 +101,7 @@ export function IntakeScreen({
       jdDegreeDate: '',
       acceptedPrivacyPolicy: isFinishProfile,
       acceptedCommunicationConsent: true,
+      acceptedJobOpportunityPushNotifications: false,
       password: isFinishProfile ? 'profile-complete' : '',
       confirmPassword: isFinishProfile ? 'profile-complete' : '',
     },
@@ -140,6 +144,11 @@ export function IntakeScreen({
     setValue('jdDegreeDate', profile.jd_degree_date ?? '', { shouldValidate: true });
     setValue('acceptedPrivacyPolicy', true, { shouldValidate: true });
     setValue('acceptedCommunicationConsent', true, { shouldValidate: true });
+    setValue(
+      'acceptedJobOpportunityPushNotifications',
+      profile.acceptedJobOpportunityPushNotifications,
+      { shouldValidate: true },
+    );
     setValue('password', 'profile-complete', { shouldValidate: true });
     setValue('confirmPassword', 'profile-complete', { shouldValidate: true });
   }, [isFinishProfile, profile, setValue]);
@@ -462,6 +471,24 @@ export function IntakeScreen({
               {errors.acceptedPrivacyPolicy ? (
                 <Text style={styles.error}>{errors.acceptedPrivacyPolicy.message}</Text>
               ) : null}
+
+              <Controller
+                control={control}
+                name="acceptedJobOpportunityPushNotifications"
+                render={({ field }) => (
+                  <View style={styles.checkboxRow}>
+                    <Pressable style={styles.checkboxToggle} onPress={() => field.onChange(!field.value)}>
+                      <Text style={styles.checkbox}>{field.value ? '☑' : '☐'}</Text>
+                    </Pressable>
+                    <Text style={styles.checkbox}>
+                      Accept push notifications about new job opportunities
+                    </Text>
+                  </View>
+                )}
+              />
+              <Text style={styles.helper}>
+                On iPhone and Android, turning this on will ask your device for notification permission.
+              </Text>
             </>
           ) : null}
 
@@ -484,11 +511,32 @@ export function IntakeScreen({
                 if (isFinishProfile) {
                   const parsed = candidateIntakeSchema.parse(values);
                   await updateCandidateProfileIntake(parsed);
-                  setMessage('Profile saved.');
+                  let nextMessage = 'Profile saved.';
+                  const shouldRequestPushPermission =
+                    parsed.acceptedJobOpportunityPushNotifications &&
+                    profile?.acceptedJobOpportunityPushNotifications !== true;
+                  if (shouldRequestPushPermission) {
+                    const currentSession = session ?? await ensureValidSession();
+                    const registrationResult = await requestPushPermissionAndRegister(currentSession.user.id);
+                    if (registrationResult === 'denied') {
+                      nextMessage =
+                        'Profile saved. Push notifications are still disabled on this device. Enable them in Settings to receive job alerts.';
+                    }
+                  }
+                  setMessage(nextMessage);
                 } else {
                   const parsed = candidateRegistrationSchema.parse(values);
                   await registerCandidateWithPassword(parsed);
-                  setMessage('Account created. Signing you in...');
+                  let nextMessage = 'Account created. Signing you in...';
+                  if (parsed.acceptedJobOpportunityPushNotifications) {
+                    const currentSession = await ensureValidSession();
+                    const registrationResult = await requestPushPermissionAndRegister(currentSession.user.id);
+                    if (registrationResult === 'denied') {
+                      nextMessage =
+                        'Account created. Push notifications are still disabled on this device. Enable them in Settings to receive job alerts.';
+                    }
+                  }
+                  setMessage(nextMessage);
                 }
               } catch (error) {
                 setMessage((error as Error).message);

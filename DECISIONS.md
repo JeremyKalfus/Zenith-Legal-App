@@ -561,3 +561,29 @@ Superseded in part by the 2026-03-06 staff-account deletion decision below.
 **Rationale:** Product scope now requires Apple-only calendar sync. Keeping Google paths created avoidable complexity across mobile settings UI, provider validation, sync execution branches, and database provider values.
 
 **Consequences:** `connect_calendar_provider` now accepts only `apple`; shared calendar sync logic no longer executes Google API branches; mobile Profile Calendar Sync exposes only Apple setup; and schema migration removes Google provider rows while replacing `calendar_provider` enum values with Apple/Microsoft only.
+
+### [2026-03-06] Store recruiter job-opportunity push consent in `candidate_consents`
+
+**Decision:** Persist the recruiter-specific `Accept push notifications about new job opportunities` opt-in on `candidate_consents`, separate from global `notification_preferences.push_enabled`, and require recruiter bulk-send to revalidate that consent server-side before queueing notifications.
+
+**Options considered:**
+1. Store the recruiter-specific opt-in inside `notification_preferences` -- simpler query path, but it conflates a legal/workflow consent with transport-level device preferences.
+2. Store it in `candidate_consents` with acceptance timestamp/version metadata (chosen) -- aligns with other candidate agreements and preserves an auditable source of truth.
+3. Store it only on `users_profile` or `candidate_preferences` -- easiest client hydration, but weak for consent tracking/versioning and not a good backend authority.
+
+**Rationale:** The new checkbox is a candidate consent for recruiter outreach, not merely a transport preference. `candidate_consents` already owns privacy and communication consent state, so extending it keeps consent data coherent and versionable. Global push enablement still belongs in `notification_preferences` because it represents whether the device/app is allowed to receive notifications at all.
+
+**Consequences:** Candidate onboarding/profile writes now persist recruiter push consent with timestamp/version metadata. Staff filtering hydrates that consent for recruiter targeting, while `staff_send_job_opportunity_notification` still rechecks consent, global push enablement, and token availability before inserting `job_opportunity.match` deliveries.
+
+### [2026-03-06] Refresh staff sessions before chat bootstrap on admin and mobile
+
+**Decision:** Require admin and mobile staff messaging/bootstrap entry points to call `ensureValidSession()` before invoking `chat_auth_bootstrap`.
+
+**Options considered:**
+1. Trust stored session state and rely on Supabase auto-refresh only -- lower code overhead, but backgrounded or idle staff sessions can hit chat bootstrap with expired access tokens.
+2. Add an explicit pre-bootstrap refresh step for each staff chat entry point (chosen) -- slightly more session checking, but deterministic token freshness.
+3. Retry only after a bootstrap failure -- reduces some errors, but still sends expired tokens to the backend first and leaves behavior inconsistent across surfaces.
+
+**Rationale:** The intermittent staff-side Messages auth error was caused by paths that reused persisted session state without proactively refreshing near-expiry tokens. Staff messaging is a high-frequency, privileged workflow, so an explicit refresh before bootstrap is the safer contract.
+
+**Consequences:** Admin dashboard guard, admin staff messages dashboard, and mobile staff tab indicators now refresh the session before chat bootstrap. Future staff-only edge-function bootstraps should follow the same pattern.

@@ -70,6 +70,7 @@ const JD_DEGREE_MONTH_OPTIONS: readonly JdDegreeMonthOption[] = [
 ] as const;
 
 export const JD_DEGREE_YEAR_MIN = 2000;
+export const JOB_OPPORTUNITY_PUSH_CONSENT_VERSION = 'v1';
 
 export function getLatestAllowedJdDegreeYear(referenceDate = new Date()): number {
   return referenceDate.getUTCFullYear() - 1;
@@ -273,6 +274,7 @@ export const candidateIntakeSchema = z
     acceptedCommunicationConsent: z.boolean().refine((value) => value, {
       message: 'Communication consent is required',
     }),
+    acceptedJobOpportunityPushNotifications: z.boolean().default(false),
   })
   .superRefine((data, ctx) => {
     const selectedOtherCity = data.preferredCities.includes('Other');
@@ -369,6 +371,7 @@ export const notificationEventSchema = z.enum([
   'appointment.reminder',
   'appointment.cancelled',
   'firm_status.updated',
+  'job_opportunity.match',
 ]);
 
 export type NotificationEvent = z.infer<typeof notificationEventSchema>;
