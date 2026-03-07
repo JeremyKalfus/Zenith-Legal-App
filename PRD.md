@@ -15,6 +15,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Manual Transporter upload delivered the iOS IPA to App Store Connect after EAS submit scheduling did not surface a build in App Store Connect.
 - App Store Connect/TestFlight now shows iOS build `1.0.0 (2)` processed, but runtime sign-in currently fails because EAS production `EXPO_PUBLIC_*` vars were not configured before the build.
 - Latest iOS release run: build `72d675a2-6ca6-49c8-b10e-473de6c0012c` (`1.0.0 (11)`) finished and submitted to App Store Connect via EAS (`d140f9be-d8a4-482e-8839-a964b55c928e`).
+- 2026-03-07 App Store privacy rejection follow-up: unused Expo media modules were removed from the mobile app so the next iOS build no longer declares camera or photo-library permissions with generic purpose strings.
 - Google Play submit credential setup remains pending.
 - Public privacy policy website source now lives at `apps/privacy-policy` as an English-only static page ready for Vercel deployment and store-listing policy URL usage.
 - Supabase migration parity is current in the linked hosted project (`njxgoypivrxyrukpouxb`) through `20260306130500`.

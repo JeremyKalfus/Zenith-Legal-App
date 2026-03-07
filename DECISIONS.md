@@ -224,6 +224,18 @@ Superseded in part by the 2026-03-06 staff-account deletion decision below.
 
 **Consequences:** iOS EAS submit for the `production` profile depends on the configured App Store Connect app ID in repo config. If the App Store Connect app record is recreated under a different Apple app ID, `apps/mobile/eas.json` must be updated.
 
+### [2026-03-07] Remove unused Expo media modules instead of rewriting iOS purpose strings
+
+**Decision:** Remove `expo-image-picker`, `expo-media-library`, `expo-document-picker`, `expo-image-manipulator`, `expo-file-system`, and `expo-sharing` from `apps/mobile/package.json` after confirming there were no active imports in `apps/mobile/src`.
+
+**Options considered:**
+1. Rewrite the iOS camera/photo-library purpose strings only -- would satisfy wording requirements short-term, but still ship protected-resource declarations for features the app does not currently expose
+2. Remove the unused native modules so Expo stops injecting those permissions -- keeps the binary aligned with shipped functionality and avoids future privacy-review drift
+
+**Rationale:** `npx expo config --type introspect` showed Expo was auto-injecting generic `NSCameraUsageDescription` and photo-library keys even though the current app has no image capture/upload flow. Removing the unused modules eliminates the review issue at the source and reduces the app's native permission surface for the next iOS build.
+
+**Consequences:** The next iOS build should no longer declare camera or photo-library access. If resume/photo upload is added later, the feature must reintroduce the required Expo packages and add app-specific, example-based purpose strings before a new App Store submission.
+
 ### [2026-02-25] Manual Transporter upload fallback when EAS submit scheduling does not deliver to Apple
 
 **Decision:** Use Apple Transporter as the fallback upload path when EAS Submit schedules an iOS submission but the build does not appear in App Store Connect within a reasonable window, and verify Apple receipt directly before waiting longer.

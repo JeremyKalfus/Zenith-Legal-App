@@ -46,6 +46,7 @@
 - [ ] Android `eas submit` / Play Console integration credential (Google Play service account)
 - [x] iOS APNs key + App Store Connect API key configured in EAS
 - [x] First store-distribution build artifacts generated successfully (IPA + AAB via EAS production builds)
+- [x] App Store privacy-purpose rejection root cause addressed locally by removing unused camera/photo-library native modules from the mobile build inputs
 - [ ] EAS production runtime env vars configured and validated in TestFlight/Play builds (current iOS build uses placeholder Supabase config)
 
 ## Prioritized Work Queue
@@ -101,8 +102,12 @@
 - 2026-03-03 active run:
   - iOS production build `72d675a2-6ca6-49c8-b10e-473de6c0012c` finished in EAS (`1.0.0 (11)`)
   - iOS submission `d140f9be-d8a4-482e-8839-a964b55c928e` scheduled successfully to App Store Connect/TestFlight
+- 2026-03-07 App Store review compliance fix:
+  - Removed unused Expo media dependencies that were auto-injecting generic iOS camera/photo-library purpose strings
+  - `npx expo config --type introspect` no longer reports `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, or `NSPhotoLibraryAddUsageDescription`
 - Remaining release operations before store submissions:
   - Configure EAS production mobile runtime env vars and rebuild iOS (and later Android) for real sign-in / backend connectivity
+  - Submit a fresh iOS build to App Store Connect so review sees the updated native permission footprint
   - Configure Google Play service account for `eas submit` (or use manual Android upload)
   - Complete store metadata/compliance forms in App Store Connect and Play Console
 

@@ -68,6 +68,7 @@
 - [ ] Store submission path decided/tested: EAS submit credentials configured (App Store Connect API key, Google Play service account) or manual upload procedure documented.
 - [ ] iOS release command path validated from repo scripts (`npm run release:ios -w @zenith/mobile`, `npm run release:ios:status -w @zenith/mobile`).
 - [ ] EAS production mobile runtime vars configured (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_STREAM_API_KEY`) and verified in a store build.
+- [ ] iOS `Info.plist` permission entries match currently shipped features only; any remaining purpose strings are app-specific and example-based.
 - [ ] App Store Connect export compliance + app privacy questionnaires completed and consistent with runtime behavior.
 - [ ] Google Play Data safety / content rating / app content declarations completed and consistent with runtime behavior.
 - [ ] All edge functions deployed to target environment.

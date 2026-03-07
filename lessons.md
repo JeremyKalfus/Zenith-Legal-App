@@ -224,6 +224,16 @@ Append a new entry immediately after incidents and after post-fix verification i
 - **Prevention rule:** If a backend contract requires hidden/defaulted fields, include them explicitly in submit payloads and surface both form-level and field-level validation errors from edge functions.
 - **Follow-up checks:** `npm run lint`, `npm run typecheck`, and `npm run test` passed after the payload/error-message fix.
 
+### 2026-03-07 — Unused Expo Native Modules Can Trigger App Review Privacy Rejections
+
+- **Date:** 2026-03-07
+- **Context:** Apple rejected the iOS build for insufficient camera/photo-library purpose strings under Guideline 5.1.1(ii).
+- **Error:** The mobile app shipped generic `NSCameraUsageDescription` / `NSPhotoLibraryUsageDescription` entries even though no image capture/upload flow was present in `apps/mobile/src`.
+- **Why it happened:** Installed Expo media modules (`expo-image-picker`, `expo-media-library`, and related helpers) were left in `apps/mobile/package.json`, and Expo auto-injected native permission keys during config resolution.
+- **Fix applied:** Removed the unused media-related Expo dependencies, regenerated the lockfile, and confirmed via `npx expo config --type introspect` that the next iOS build no longer declares camera/photo-library permissions.
+- **Prevention rule:** Before each store submission, inspect the resolved Expo config and verify every protected-resource permission maps to a shipped feature; remove unused native modules instead of only rewriting generic purpose strings.
+- **Follow-up checks:** `npm run lint`, `npm run typecheck`, `npm run test`, and `python3 -m desloppify scan --path .`.
+
 ### 2026-03-06 — Schema Parity Alone Is Not Backend Parity
 
 - **Date:** 2026-03-06

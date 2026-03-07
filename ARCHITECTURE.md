@@ -39,7 +39,7 @@
 
 | Workspace | Path | Stack | Purpose |
 |---|---|---|---|
-| Mobile | `apps/mobile/` | Expo SDK 54, React Native 0.81, React Navigation, react-hook-form, Zod, expo-auth-session, expo-web-browser, stream-chat-expo (native), stream-chat-react (web) | Candidate and staff mobile app; web build via Expo web |
+| Mobile | `apps/mobile/` | Expo SDK 54, React Native 0.81, React Navigation, react-hook-form, Zod, expo-auth-session, expo-web-browser, stream-chat-expo (native), stream-chat-react (web) | Candidate and staff mobile app; web build via Expo web. Current shipped build does not include camera or photo-library capture/upload flows. |
 | Admin | `apps/admin/` | Next.js 16, React 19, Tailwind 4, shadcn primitives, Zod | Recruiter web dashboard |
 | Privacy Policy Web | `apps/privacy-policy/` | Static HTML/CSS, Vercel config | Public, English-only privacy policy page for app-store compliance and external policy linking |
 | Shared | `packages/shared/` | TypeScript, Zod | Domain types, validation schemas, phone utilities, staff-messaging helpers, candidate filter/normalization helpers |
@@ -79,6 +79,10 @@ Hosted Supabase deployment snapshot (linked project `njxgoypivrxyrukpouxb`, chec
 - Migration parity is clean: local and hosted both include every migration through `20260306130500`.
 - Edge-function inventory is not fully in parity: 21 function directories exist locally (excluding `_shared`), while 20 are active remotely.
 - Missing remotely: `staff_send_job_opportunity_notification` (local-only until deployed).
+
+Mobile native-permission snapshot (checked 2026-03-07):
+- `apps/mobile/app.json` explicitly configures calendar access only.
+- Removing unused `expo-image-picker` / `expo-media-library` dependencies removed auto-injected iOS `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, and `NSPhotoLibraryAddUsageDescription` entries from the resolved Expo config for the next store build.
 
 ## Database Schema
 
