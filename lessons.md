@@ -244,6 +244,16 @@ Append a new entry immediately after incidents and after post-fix verification i
 - **Prevention rule:** Treat the resolved Expo config as the review artifact of record; before every store build, inspect it and keep plugin config explicit for any protected-resource capability.
 - **Follow-up checks:** `npx expo config --type introspect` and `EAS_BUILD_PROFILE=production npx expo config --type public`.
 
+### 2026-03-07 — Clean App Review Surface Requires Post-Plugin Validation, Not Just App Config Intent
+
+- **Date:** 2026-03-07
+- **Context:** Production `app.config.js` no longer defined ATS exceptions, but `npx expo config --type introspect` still emitted `NSAppTransportSecurity.NSAllowsArbitraryLoads: true`.
+- **Error:** Relying on `ios.infoPlist` intent alone was not enough; Expo/plugin resolution could still widen the final iOS `Info.plist` beyond the plain config output.
+- **Why it happened:** Expo’s resolved native config can differ from the raw app config because plugins and platform transforms run after the initial config object is produced.
+- **Fix applied:** Added a final `withInfoPlist` hardening plugin in `apps/mobile/app.config.js` to delete ATS keys in production after plugin application, then re-ran `EAS_BUILD_PROFILE=production npx expo config --type introspect` to confirm only calendar permissions remained.
+- **Prevention rule:** For App Store review work, trust the resolved introspected config over the raw app config and add a final cleanup plugin when Expo/plugin transforms reintroduce unwanted native keys.
+- **Follow-up checks:** `EAS_BUILD_PROFILE=production npx expo config --type introspect`.
+
 ### 2026-03-06 — Schema Parity Alone Is Not Backend Parity
 
 - **Date:** 2026-03-06

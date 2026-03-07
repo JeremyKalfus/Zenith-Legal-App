@@ -104,6 +104,7 @@
 - [ ] TestFlight runtime sign-in validated (current `1.0.0 (2)` build fails with placeholder Supabase config due missing EAS production env vars).
 - [ ] App Store Connect / Play Console metadata and compliance forms completed.
 - [x] 2026-03-07 Expo config hardening moved native config to `apps/mobile/app.config.js`, disabled unused reminders/Face ID generation, and confirmed `npx expo config --type introspect` now resolves only the shipped calendar permission on iOS.
+- [x] 2026-03-07 follow-up hardening removed the last resolved production ATS override and pruned unused mobile Expo packages (`expo-video`, `expo-image-manipulator`, `expo-web-browser`, `expo-auth-session`).
 
 ### Supabase Backend Parity Snapshot (2026-03-06)
 

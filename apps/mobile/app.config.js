@@ -1,3 +1,5 @@
+const { withInfoPlist } = require('@expo/config-plugins');
+
 const PLACEHOLDER_SUPABASE_URL = 'https://placeholder.supabase.co';
 const PLACEHOLDER_SUPABASE_ANON_KEY = 'public-anon-key';
 const PLACEHOLDER_STREAM_API_KEY = 'placeholder-stream-api-key';
@@ -58,6 +60,28 @@ module.exports = () => {
     };
   }
 
+  const withIosReviewHardening = (config) =>
+    withInfoPlist(config, (nextConfig) => {
+      const infoPlist = nextConfig.modResults ?? {};
+
+      if (isProductionBuild) {
+        if (infoPlist.NSAppTransportSecurity) {
+          delete infoPlist.NSAppTransportSecurity;
+        }
+      } else {
+        infoPlist.NSAppTransportSecurity = {
+          NSExceptionDomains: {
+            localhost: {
+              NSExceptionAllowsInsecureHTTPLoads: true,
+            },
+          },
+        };
+      }
+
+      nextConfig.modResults = infoPlist;
+      return nextConfig;
+    });
+
   return {
     expo: {
       name: 'Zenith Legal',
@@ -103,6 +127,7 @@ module.exports = () => {
             remindersPermission: false,
           },
         ],
+        withIosReviewHardening,
       ],
       extra: {
         eas: {

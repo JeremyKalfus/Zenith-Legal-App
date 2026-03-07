@@ -108,6 +108,7 @@
   - `npx expo config --type introspect` no longer reports `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, or `NSPhotoLibraryAddUsageDescription`
   - Replaced `apps/mobile/app.json` with `apps/mobile/app.config.js` so production builds fail closed on missing/placeholder `EXPO_PUBLIC_*` runtime values
   - Resolved iOS config now drops auto-injected reminders, microphone, Face ID, and permissive ATS entries; only the shipped calendar permission remains
+  - Removed additional unused Expo runtime packages (`expo-video`, `expo-image-manipulator`, `expo-web-browser`, `expo-auth-session`) to reduce future review drift
   - Mobile auth/profile copy now describes optional push/device-calendar permissions more clearly, and the public privacy policy now matches current account/profile/chat/appointment data handling
 - Remaining release operations before store submissions:
   - Configure EAS production mobile runtime env vars and rebuild iOS (and later Android) for real sign-in / backend connectivity

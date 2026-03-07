@@ -84,6 +84,7 @@ Mobile native-permission snapshot (checked 2026-03-07):
 - `apps/mobile/app.config.js` is now the source of truth for Expo native config and validates required production `EXPO_PUBLIC_*` values before release builds proceed.
 - Resolved iOS config now declares only calendar access for the shipped device-calendar sync feature.
 - The 2026-03-07 App Store hardening pass removed auto-injected `NSRemindersUsageDescription`, `NSRemindersFullAccessUsageDescription`, `NSMicrophoneUsageDescription`, `NSFaceIDUsageDescription`, and permissive `NSAppTransportSecurity.NSAllowsArbitraryLoads` entries from the next store build config.
+- Additional unused Expo packages with no active imports (`expo-video`, `expo-image-manipulator`, `expo-web-browser`, `expo-auth-session`) were removed from `apps/mobile/package.json` to keep the native surface smaller and reduce future review drift.
 
 ## Database Schema
 

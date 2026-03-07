@@ -247,7 +247,19 @@ Superseded in part by the 2026-03-06 staff-account deletion decision below.
 
 **Rationale:** App Review risk was coming from both release readiness and config generation: placeholder backend values could make review builds non-functional, and active Expo plugins were still auto-injecting review-sensitive iOS keys unrelated to the shipped feature set. A dynamic config closes both gaps in one place.
 
-**Consequences:** Production builds now stop before shipping if required public runtime vars are missing/placeholder, the resolved iOS native surface is reduced to calendar access for the shipped device-calendar sync flow, and non-production localhost ATS exceptions no longer leak into store builds.
+**Consequences:** Production builds now stop before shipping if required public runtime vars are missing/placeholder, the resolved iOS native surface is reduced to calendar access for the shipped device-calendar sync flow, and non-production localhost ATS exceptions no longer leak into store builds. A final `withInfoPlist` hardening plugin now force-cleans ATS keys after Expo/plugin injection so resolved production config matches intent.
+
+### [2026-03-07] Remove unused Expo runtime packages that are not imported by mobile
+
+**Decision:** Remove `expo-video`, `expo-image-manipulator`, `expo-web-browser`, and `expo-auth-session` from `apps/mobile/package.json` after confirming there were no active imports in mobile/admin/shared/supabase source.
+
+**Options considered:**
+1. Leave unused packages installed because they are not currently injecting visible iOS permission strings -- low immediate risk, but keeps unnecessary native/code surface in the shipping app
+2. Remove the unused packages now (chosen) -- smaller dependency graph, fewer future review surprises, less privacy-manifest and native-module drift
+
+**Rationale:** The App Store hardening pass showed that unused Expo packages can create review problems later even when they do not currently show up as explicit permission strings. Keeping only imported packages makes the review surface more predictable.
+
+**Consequences:** The mobile dependency graph is smaller, future Expo config/plugin changes have fewer unused modules to act on, and reintroducing any of these capabilities later will require an explicit dependency add tied to a real feature.
 
 ### [2026-02-25] Manual Transporter upload fallback when EAS submit scheduling does not deliver to Apple
 
