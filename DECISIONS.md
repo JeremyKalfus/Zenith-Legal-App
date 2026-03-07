@@ -236,6 +236,19 @@ Superseded in part by the 2026-03-06 staff-account deletion decision below.
 
 **Consequences:** The next iOS build should no longer declare camera or photo-library access. If resume/photo upload is added later, the feature must reintroduce the required Expo packages and add app-specific, example-based purpose strings before a new App Store submission.
 
+### [2026-03-07] Use dynamic Expo config to fail closed on release env vars and minimize iOS review surface
+
+**Decision:** Replace `apps/mobile/app.json` with `apps/mobile/app.config.js`, validate required production `EXPO_PUBLIC_*` runtime values during config resolution, disable unneeded Expo-generated permissions (`faceIDPermission: false`, `remindersPermission: false`), and keep ATS exceptions limited to non-production localhost development.
+
+**Options considered:**
+1. Keep static `app.json` and rely on manual release discipline -- smaller config change, but easy to ship placeholder runtime values and extra native permission declarations again
+2. Override individual Info.plist keys only -- reduces some review risk, but leaves permission generation behavior fragmented and easier to regress
+3. Move to dynamic Expo config with release validation and narrower plugin config (chosen)
+
+**Rationale:** App Review risk was coming from both release readiness and config generation: placeholder backend values could make review builds non-functional, and active Expo plugins were still auto-injecting review-sensitive iOS keys unrelated to the shipped feature set. A dynamic config closes both gaps in one place.
+
+**Consequences:** Production builds now stop before shipping if required public runtime vars are missing/placeholder, the resolved iOS native surface is reduced to calendar access for the shipped device-calendar sync flow, and non-production localhost ATS exceptions no longer leak into store builds.
+
 ### [2026-02-25] Manual Transporter upload fallback when EAS submit scheduling does not deliver to Apple
 
 **Decision:** Use Apple Transporter as the fallback upload path when EAS Submit schedules an iOS submission but the build does not appear in App Store Connect within a reasonable window, and verify Apple receipt directly before waiting longer.
@@ -572,7 +585,7 @@ Superseded in part by the 2026-03-06 staff-account deletion decision below.
 
 **Rationale:** Product scope now requires Apple-only calendar sync. Keeping Google paths created avoidable complexity across mobile settings UI, provider validation, sync execution branches, and database provider values.
 
-**Consequences:** `connect_calendar_provider` now accepts only `apple`; shared calendar sync logic no longer executes Google API branches; mobile Profile Calendar Sync exposes only Apple setup; and schema migration removes Google provider rows while replacing `calendar_provider` enum values with Apple/Microsoft only.
+**Consequences:** `connect_calendar_provider` now accepts only `apple`; shared calendar sync logic no longer executes Google API branches; the backend keeps the internal Apple provider label for compatibility while mobile UX is free to describe the feature as device-calendar sync; and schema migration removes Google provider rows while replacing `calendar_provider` enum values with Apple/Microsoft only.
 
 ### [2026-03-06] Store recruiter job-opportunity push consent in `candidate_consents`
 

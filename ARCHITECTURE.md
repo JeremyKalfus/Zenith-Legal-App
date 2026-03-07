@@ -81,8 +81,9 @@ Hosted Supabase deployment snapshot (linked project `njxgoypivrxyrukpouxb`, chec
 - Missing remotely: `staff_send_job_opportunity_notification` (local-only until deployed).
 
 Mobile native-permission snapshot (checked 2026-03-07):
-- `apps/mobile/app.json` explicitly configures calendar access only.
-- Removing unused `expo-image-picker` / `expo-media-library` dependencies removed auto-injected iOS `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, and `NSPhotoLibraryAddUsageDescription` entries from the resolved Expo config for the next store build.
+- `apps/mobile/app.config.js` is now the source of truth for Expo native config and validates required production `EXPO_PUBLIC_*` values before release builds proceed.
+- Resolved iOS config now declares only calendar access for the shipped device-calendar sync feature.
+- The 2026-03-07 App Store hardening pass removed auto-injected `NSRemindersUsageDescription`, `NSRemindersFullAccessUsageDescription`, `NSMicrophoneUsageDescription`, `NSFaceIDUsageDescription`, and permissive `NSAppTransportSecurity.NSAllowsArbitraryLoads` entries from the next store build config.
 
 ## Database Schema
 
@@ -178,10 +179,10 @@ RLS model:
 ## Calendar Connection UX (Mobile)
 
 - `apps/mobile/src/components/calendar-sync-card.tsx` is a shared profile settings card used by both candidate and staff Profile tabs.
-- Apple setup is a one-tap connect path that stores provider state through `connect_calendar_provider`.
+- The user-facing flow is described as device-calendar sync while the backend keeps the internal Apple provider label for compatibility through `connect_calendar_provider`.
 - Connection status is read from `calendar_connections` (`provider`, `sync_state`, `updated_at`) with user-scoped RLS access.
-- Appointment screens run device-native calendar sync via `expo-calendar` (candidate + staff), creating/updating scheduled events and removing declined/cancelled events from device calendars when provider connection is enabled.
-- Candidate Profile renders settings as collapsible cards (`Change Profile Details`, `Calendar Sync`, `Change Email or Password`) with profile details expanded by default.
+- Appointment screens run device-native calendar sync via `expo-calendar` (candidate + staff), creating/updating scheduled events and removing declined/cancelled events from device calendars when device-calendar sync is enabled.
+- Candidate Profile renders settings as collapsible cards (`Change Profile Details`, `Device Calendar Sync`, `Change Email or Password`) with profile details expanded by default.
 
 ## Shared Package (`@zenith/shared`)
 
@@ -308,7 +309,7 @@ Version/build configuration:
 - `apps/mobile/eas.json` uses `cli.appVersionSource = "remote"` so EAS manages production `buildNumber`/`versionCode`
 - `apps/mobile/eas.json` production profile uses `autoIncrement: true`
 - `apps/mobile/eas.json` submit profile includes `ios.ascAppId = "6759677619"` to bypass EAS App Store Connect app auto-lookup during submit
-- `apps/mobile/app.json` includes iOS export-compliance flag `ITSAppUsesNonExemptEncryption = false`
+- `apps/mobile/app.config.js` includes iOS export-compliance flag `ITSAppUsesNonExemptEncryption = false`
 - `apps/mobile/package.json` includes iOS release scripts:
   - `release:ios` -> `npx eas-cli build -p ios --profile production --auto-submit --non-interactive`
   - `release:ios:status` -> latest iOS build output + EAS submissions page link
@@ -321,7 +322,7 @@ Credential state (EAS-managed):
 - **iOS APNs key:** configured in EAS (Apple Push key assigned to `com.zenithlegal.app`)
 - **iOS submit API credentials:** configured in EAS (App Store Connect API key for EAS Submit)
 - **Android submit API credentials:** pending (Google Play service account not configured yet)
-- **EAS production runtime env vars (`EXPO_PUBLIC_*`):** pending (first TestFlight build was created without these and used placeholder config values)
+- **EAS production runtime env vars (`EXPO_PUBLIC_*`):** still must be confirmed in EAS for the next store build; the app now fails production builds closed if these remain missing or placeholder
 
 Build / submission snapshot (2026-03-03):
 

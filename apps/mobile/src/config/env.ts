@@ -3,7 +3,7 @@ export const env = {
     process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://placeholder.supabase.co',
   supabaseAnonKey:
     process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'public-anon-key',
-  streamApiKey: process.env.EXPO_PUBLIC_STREAM_API_KEY ?? 'hcryqds25ctk',
+  streamApiKey: process.env.EXPO_PUBLIC_STREAM_API_KEY ?? 'placeholder-stream-api-key',
   supportPhone: process.env.EXPO_PUBLIC_RECRUITER_PHONE ?? '(202) 486-3535',
   supportEmail: process.env.EXPO_PUBLIC_RECRUITER_EMAIL ?? 'mason@zenithlegal.com',
 };
@@ -12,7 +12,7 @@ export function isSupabaseSecretKey(value: string): boolean {
   return value.startsWith('sb_secret_');
 }
 
-export function getSupabaseClientConfigError(): string | null {
+export function getAppConfigError(): string | null {
   if (isSupabaseSecretKey(env.supabaseAnonKey)) {
     return 'Supabase mobile key is invalid. Use the Publishable/anon key (not sb_secret).';
   }
@@ -24,8 +24,17 @@ export function getSupabaseClientConfigError(): string | null {
     return 'Supabase config is still using placeholder values.';
   }
 
+  if (
+    env.streamApiKey.includes('placeholder-stream-api-key') ||
+    env.streamApiKey.trim() === 'placeholder'
+  ) {
+    return 'Stream Chat config is still using placeholder values.';
+  }
+
   return null;
 }
+
+export const getSupabaseClientConfigError = getAppConfigError;
 
 export function assertRequiredEnv(): void {
   const required = [
@@ -40,7 +49,7 @@ export function assertRequiredEnv(): void {
     console.warn(`Missing required env vars: ${missing.join(', ')}`);
   }
 
-  const configError = getSupabaseClientConfigError();
+  const configError = getAppConfigError();
   if (configError && __DEV__) {
     console.warn(configError);
   }

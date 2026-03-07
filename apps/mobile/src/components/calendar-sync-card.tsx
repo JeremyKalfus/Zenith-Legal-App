@@ -17,26 +17,26 @@ type CalendarConnectionRow = {
 
 function getProviderStateLabel(connection: CalendarConnectionRow | null): string {
   if (!connection) {
-    return 'Not connected';
+    return 'Not enabled';
   }
 
   const stateValue = connection.sync_state?.state;
   const state = typeof stateValue === 'string' ? stateValue : '';
 
   if (state === 'synced' || state === 'connected') {
-    return 'Connected';
+    return 'Enabled';
   }
   if (state === 'connected_pending_exchange') {
-    return 'Connected (pending token exchange)';
+    return 'Enabled (sync pending)';
   }
   if (state === 'connected_missing_access_token') {
-    return 'Connected (limited mode)';
+    return 'Enabled (limited mode)';
   }
   if (state === 'sync_failed') {
     return 'Sync issue (reconnect recommended)';
   }
   if (!state) {
-    return 'Connected';
+    return 'Enabled';
   }
 
   return state.replace(/_/g, ' ');
@@ -108,12 +108,12 @@ export function CalendarSyncCard({
       }
 
       setMessageTone('success');
-      setMessage('Apple Calendar connected.');
+      setMessage('Device calendar sync enabled.');
       await refreshConnections();
     } catch (error) {
       const readable = await getFunctionErrorMessage(
         error,
-        'Unable to connect Apple Calendar.',
+        'Unable to enable device calendar sync.',
       );
       setMessageTone('error');
       setMessage(readable);
@@ -124,16 +124,17 @@ export function CalendarSyncCard({
 
   return (
     <View style={embedded ? styles.embeddedContent : styles.card}>
-      {!hideHeader ? <Text style={styles.sectionTitle}>Calendar Sync</Text> : null}
+      {!hideHeader ? <Text style={styles.sectionTitle}>Device Calendar Sync</Text> : null}
       {!hideHeader ? (
         <Text style={styles.helper}>
-          Connect Apple calendar to sync scheduled appointments and updates.
+          Optionally add scheduled appointments to the calendar on this device. This does not
+          connect an external calendar account.
         </Text>
       ) : null}
 
       <View style={styles.providerRow}>
         <View style={styles.providerCopy}>
-          <Text style={styles.providerTitle}>Apple Calendar</Text>
+          <Text style={styles.providerTitle}>Calendar on this device</Text>
           <Text style={styles.providerStatus}>
             Status: {getProviderStateLabel(connection)}
           </Text>
@@ -153,7 +154,7 @@ export function CalendarSyncCard({
           disabled={busy}
         >
           <Text style={styles.secondaryButtonText}>
-            {busy ? 'Connecting...' : 'Connect'}
+            {busy ? 'Enabling...' : 'Enable sync'}
           </Text>
         </Pressable>
       </View>
@@ -173,7 +174,7 @@ export function CalendarSyncCard({
         disabled={loading}
       >
         <Text style={styles.refreshButtonText}>
-          {loading ? 'Refreshing...' : 'Refresh calendar status'}
+          {loading ? 'Refreshing...' : 'Refresh sync status'}
         </Text>
       </Pressable>
 

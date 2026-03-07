@@ -67,9 +67,10 @@
 - [ ] iOS APNs key configured in EAS credentials if standalone/TestFlight push notifications are required.
 - [ ] Store submission path decided/tested: EAS submit credentials configured (App Store Connect API key, Google Play service account) or manual upload procedure documented.
 - [ ] iOS release command path validated from repo scripts (`npm run release:ios -w @zenith/mobile`, `npm run release:ios:status -w @zenith/mobile`).
-- [ ] EAS production mobile runtime vars configured (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_STREAM_API_KEY`) and verified in a store build.
-- [ ] iOS `Info.plist` permission entries match currently shipped features only; any remaining purpose strings are app-specific and example-based.
+- [ ] EAS production mobile runtime vars configured (`EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_STREAM_API_KEY`) and verified in a store build (`EAS_BUILD_PROFILE=production npx expo config --type public` resolves without placeholder values).
+- [ ] iOS `Info.plist` permission entries match currently shipped features only; verify with `npx expo config --type introspect` before each submission and keep remaining purpose strings app-specific and example-based.
 - [ ] App Store Connect export compliance + app privacy questionnaires completed and consistent with runtime behavior.
+- [ ] App Store Connect review notes updated from `APP_REVIEW_NOTES.md` with current candidate/staff credentials and permission explanations.
 - [ ] Google Play Data safety / content rating / app content declarations completed and consistent with runtime behavior.
 - [ ] All edge functions deployed to target environment.
 - [ ] Local-vs-hosted function inventory parity checked (no missing deployed slugs).
@@ -83,7 +84,7 @@
 
 ### Release Snapshot (2026-03-03)
 
-- [x] Production app identifiers set to `com.zenithlegal.app` in `apps/mobile/app.json`.
+- [x] Production app identifiers set to `com.zenithlegal.app` in `apps/mobile/app.config.js`.
 - [x] Apple Developer App ID created (`com.zenithlegal.app`) with Push Notifications enabled.
 - [x] App Store Connect app record created (`Zenith Legal`, bundle ID `com.zenithlegal.app`).
 - [x] Expo EAS project linked (`@jeremykalfus/zenith-legal-mobile`, project ID `38f93994-daaa-4c85-a092-a70ac12f0c06`).
@@ -102,6 +103,7 @@
 - [x] 2026-03-03 iOS production build `72d675a2-6ca6-49c8-b10e-473de6c0012c` (`1.0.0 (11)`) finished and submitted via EAS (`d140f9be-d8a4-482e-8839-a964b55c928e`).
 - [ ] TestFlight runtime sign-in validated (current `1.0.0 (2)` build fails with placeholder Supabase config due missing EAS production env vars).
 - [ ] App Store Connect / Play Console metadata and compliance forms completed.
+- [x] 2026-03-07 Expo config hardening moved native config to `apps/mobile/app.config.js`, disabled unused reminders/Face ID generation, and confirmed `npx expo config --type introspect` now resolves only the shipped calendar permission on iOS.
 
 ### Supabase Backend Parity Snapshot (2026-03-06)
 

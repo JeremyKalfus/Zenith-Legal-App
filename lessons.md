@@ -234,6 +234,16 @@ Append a new entry immediately after incidents and after post-fix verification i
 - **Prevention rule:** Before each store submission, inspect the resolved Expo config and verify every protected-resource permission maps to a shipped feature; remove unused native modules instead of only rewriting generic purpose strings.
 - **Follow-up checks:** `npm run lint`, `npm run typecheck`, `npm run test`, and `python3 -m desloppify scan --path .`.
 
+### 2026-03-07 — Expo Plugin Defaults Can Reintroduce Review-Sensitive iOS Permissions
+
+- **Date:** 2026-03-07
+- **Context:** After camera/photo cleanup, the resolved iOS config still carried reminders, microphone, Face ID, and permissive ATS entries that were not part of the shipped feature set.
+- **Error:** Static Expo config left plugin defaults enabled, so `npx expo config --type introspect` continued to emit review-sensitive iOS keys even though the app only needed device-calendar access.
+- **Why it happened:** Keeping `app.json` static and relying on plugin defaults made it easy for Expo modules to widen the native permission surface without any active product requirement.
+- **Fix applied:** Replaced `apps/mobile/app.json` with `apps/mobile/app.config.js`, disabled `faceIDPermission` and `remindersPermission`, removed unused active plugins, limited ATS exceptions to non-production localhost development, and added production env validation for required `EXPO_PUBLIC_*` values.
+- **Prevention rule:** Treat the resolved Expo config as the review artifact of record; before every store build, inspect it and keep plugin config explicit for any protected-resource capability.
+- **Follow-up checks:** `npx expo config --type introspect` and `EAS_BUILD_PROFILE=production npx expo config --type public`.
+
 ### 2026-03-06 — Schema Parity Alone Is Not Backend Parity
 
 - **Date:** 2026-03-06

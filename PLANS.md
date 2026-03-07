@@ -38,6 +38,7 @@
 - [x] Staff messages auth hardening on admin/mobile bootstrap paths (`ensureValidSession()` before staff chat bootstrap)
 - [x] Stream channel readiness gating on candidate/staff thread screens (`channel.watch()` required before render)
 - [x] Candidate profile/intake payload hardening (explicit required consent booleans + field-level validation error surfacing)
+- [x] App Store review hardening pass (dynamic Expo config, reduced iOS permission surface, privacy-policy alignment, auth/empty-state clarity, device-calendar wording, outgoing appointment requests visible again)
 - [x] Mobile icon/logo mark scaled +14% across app icon assets (`icon`, `adaptive-icon`, `splash-icon`, `favicon`)
 - [x] Candidate signup/profile JD year contract + wheel UX (`2000..current year - 1`) with DB date compatibility mapping (`YYYY` ↔ `YYYY-01-01`)
 - [x] Candidate dashboard status-update CTA removal + deletion of automated message draft plumbing in candidate messaging navigation/screens
@@ -105,6 +106,9 @@
 - 2026-03-07 App Store review compliance fix:
   - Removed unused Expo media dependencies that were auto-injecting generic iOS camera/photo-library purpose strings
   - `npx expo config --type introspect` no longer reports `NSCameraUsageDescription`, `NSPhotoLibraryUsageDescription`, or `NSPhotoLibraryAddUsageDescription`
+  - Replaced `apps/mobile/app.json` with `apps/mobile/app.config.js` so production builds fail closed on missing/placeholder `EXPO_PUBLIC_*` runtime values
+  - Resolved iOS config now drops auto-injected reminders, microphone, Face ID, and permissive ATS entries; only the shipped calendar permission remains
+  - Mobile auth/profile copy now describes optional push/device-calendar permissions more clearly, and the public privacy policy now matches current account/profile/chat/appointment data handling
 - Remaining release operations before store submissions:
   - Configure EAS production mobile runtime env vars and rebuild iOS (and later Android) for real sign-in / backend connectivity
   - Submit a fresh iOS build to App Store Connect so review sees the updated native permission footprint
@@ -135,7 +139,7 @@
 
 ### 3. Harden calendar sync rollout
 
-**Scope:** Complete production credential rollout and provider-path hardening for the implemented calendar sync foundation (`connect_calendar_provider`, per-user event links, Apple ICS-link path).
+**Scope:** Complete production credential rollout and provider-path hardening for the implemented device-calendar sync foundation (`connect_calendar_provider`, per-user event links, Apple ICS-link path).
 
 **Verification:**
 - Calendar connection persists provider tokens/connection data.

@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { GlobalRecruiterBanner } from '../../components/global-recruiter-banner';
 import { PasswordInput } from '../../components/password-input';
+import { PRIVACY_POLICY_URL } from '../../config/legal';
 import { useAuth } from '../../context/auth-context';
 import { uiColors } from '../../theme/colors';
 import { interactivePressableStyle, sharedPressableFeedback } from '../../theme/pressable';
@@ -186,6 +187,23 @@ export function AuthMenuScreen({
             </Pressable>
             <Text style={styles.title}>Zenith Legal</Text>
             <Text style={styles.subtitle}>A HIGHER LEVEL OF LEGAL SEARCH</Text>
+            <Text style={styles.summary}>
+              Candidates track firm submissions, see scheduled appointments, and message Zenith
+              recruiters. Recruiter staff sign in with an assigned staff account.
+            </Text>
+
+            <View style={styles.infoCard}>
+              <Text style={styles.infoCardTitle}>What this app does</Text>
+              <Text style={styles.infoCardBody}>
+                Candidate accounts can review recruiter-assigned firms, authorize submissions, and
+                receive recruiter updates. Staff accounts manage candidates, messaging, and
+                appointments.
+              </Text>
+              <Text style={styles.infoCardFootnote}>
+                Optional permissions like device-calendar sync and job-alert notifications can be
+                denied without blocking sign-in or core app use.
+              </Text>
+            </View>
 
             <View style={styles.card}>
               <View style={styles.tabRow}>
@@ -322,6 +340,19 @@ export function AuthMenuScreen({
               {authConfigError ? <Text style={styles.error}>{authConfigError}</Text> : null}
               {authNotice ? <Text style={styles.error}>{authNotice}</Text> : null}
               {message ? <Text style={styles.message}>{message}</Text> : null}
+              <Text style={styles.legalNote}>
+                Continuing means you agree to the{' '}
+                <Text
+                  accessibilityRole="link"
+                  onPress={() => {
+                    void Linking.openURL(PRIVACY_POLICY_URL);
+                  }}
+                  style={styles.legalLink}
+                >
+                  Privacy Policy
+                </Text>
+                .
+              </Text>
             </View>
           </View>
       </ScrollView>
@@ -368,6 +399,31 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
   },
+  infoCard: {
+    backgroundColor: uiColors.surface,
+    borderColor: uiColors.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 6,
+    marginTop: 16,
+    padding: 14,
+    width: '100%',
+  },
+  infoCardBody: {
+    color: uiColors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  infoCardFootnote: {
+    color: uiColors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  infoCardTitle: {
+    color: uiColors.textPrimary,
+    fontSize: 14,
+    fontWeight: '700',
+  },
   forgotButton: {
     marginTop: -4,
   },
@@ -394,6 +450,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  legalLink: {
+    color: uiColors.link,
+    fontWeight: '700',
+  },
+  legalNote: {
+    color: uiColors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
+  },
   safeArea: {
     backgroundColor: '#EFF1F4',
     flex: 1,
@@ -408,6 +474,14 @@ const styles = StyleSheet.create({
     fontSize: 24 / 1.6,
     fontWeight: '700',
     letterSpacing: 1,
+  },
+  summary: {
+    color: uiColors.textSecondary,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 8,
+    maxWidth: 420,
+    textAlign: 'center',
   },
   tabButton: {
     alignItems: 'center',

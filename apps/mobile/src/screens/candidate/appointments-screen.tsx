@@ -36,7 +36,7 @@ type AppointmentRecord = {
   created_by_user_id: string;
 };
 
-type AppointmentAction = 'ignore_overdue' | 'cancel_upcoming';
+type AppointmentAction = 'ignore_overdue' | 'cancel_outgoing_request' | 'cancel_upcoming';
 
 type CardTone = 'overdue' | 'outgoing' | 'upcoming';
 
@@ -334,12 +334,13 @@ export function AppointmentsScreen() {
   const screen = useAppointmentsScreen();
   const hasSections =
     screen.sections.overdueConfirmed.length > 0 ||
+    screen.sections.outgoingRequests.length > 0 ||
     screen.sections.upcomingAppointments.length > 0;
 
   return (
     <ScreenShell>
       <CandidatePageTitle title="Appointments" />
-      <Text style={styles.body}>View your appointments and interview schedule.</Text>
+      <Text style={styles.body}>View your pending requests and scheduled appointments.</Text>
 
       {screen.serverMessage ? (
         <Text style={styles.serverMessage}>{screen.serverMessage}</Text>
@@ -354,6 +355,22 @@ export function AppointmentsScreen() {
         actingAppointmentId={screen.actingAppointmentId}
         onAction={(appointmentId) =>
           void screen.runLifecycleAction(appointmentId, 'ignore_overdue', 'Overdue appointment ignored.')
+        }
+      />
+
+      <AppointmentSection
+        title="Outgoing Requests"
+        appointments={screen.sections.outgoingRequests}
+        tone="outgoing"
+        actionLabel="Cancel request"
+        actionBusyLabel="Canceling..."
+        actingAppointmentId={screen.actingAppointmentId}
+        onAction={(appointmentId) =>
+          void screen.runLifecycleAction(
+            appointmentId,
+            'cancel_outgoing_request',
+            'Appointment request canceled.',
+          )
         }
       />
 
@@ -374,7 +391,10 @@ export function AppointmentsScreen() {
       />
 
       {!hasSections ? (
-        <Text style={styles.emptyState}>No appointments yet.</Text>
+        <Text style={styles.emptyState}>
+          No scheduled appointments yet. Upcoming appointments will appear here after Zenith
+          confirms them.
+        </Text>
       ) : null}
     </ScreenShell>
   );

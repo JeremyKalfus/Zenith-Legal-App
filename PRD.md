@@ -4,7 +4,7 @@
 
 Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (candidates) with law firms through a recruiter-mediated workflow. The platform consists of a mobile app for candidates and staff, a web admin dashboard for recruiter operations, and a public privacy policy webpage for compliance and user reference.
 
-### Distribution Readiness (Store/Ops Snapshot: 2026-03-06)
+### Distribution Readiness (Store/Ops Snapshot: 2026-03-07)
 
 - Mobile production identifiers are set to `com.zenithlegal.app` for both iOS and Android.
 - Apple Developer App ID and App Store Connect app record (`Zenith Legal`) are created for the production iOS app.
@@ -13,11 +13,12 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Default iOS release path is EAS cloud build + auto-submit (`npm run release:ios -w @zenith/mobile`) with `release:ios:status` and `release:ios:submit-latest` scripts for operations/fallback.
 - Initial production EAS builds have completed for iOS/TestFlight and Android/Play internal testing artifacts (IPA + AAB).
 - Manual Transporter upload delivered the iOS IPA to App Store Connect after EAS submit scheduling did not surface a build in App Store Connect.
-- App Store Connect/TestFlight now shows iOS build `1.0.0 (2)` processed, but runtime sign-in currently fails because EAS production `EXPO_PUBLIC_*` vars were not configured before the build.
+- The active mobile Expo config now lives in `apps/mobile/app.config.js` and fails production builds closed if required `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, or `EXPO_PUBLIC_STREAM_API_KEY` values are missing or still on placeholders.
+- App Store Connect/TestFlight now shows iOS build `1.0.0 (2)` processed, but that older build remains review-blocked because EAS production `EXPO_PUBLIC_*` vars were not configured before it was created.
 - Latest iOS release run: build `72d675a2-6ca6-49c8-b10e-473de6c0012c` (`1.0.0 (11)`) finished and submitted to App Store Connect via EAS (`d140f9be-d8a4-482e-8839-a964b55c928e`).
-- 2026-03-07 App Store privacy rejection follow-up: unused Expo media modules were removed from the mobile app so the next iOS build no longer declares camera or photo-library permissions with generic purpose strings.
+- 2026-03-07 App Store review hardening follow-up: the resolved iOS permission surface now only declares calendar access for the shipped device-calendar sync feature; generic camera/photo-library, reminders, microphone, Face ID, and permissive ATS entries were removed from the next store build config.
 - Google Play submit credential setup remains pending.
-- Public privacy policy website source now lives at `apps/privacy-policy` as an English-only static page ready for Vercel deployment and store-listing policy URL usage.
+- Public privacy policy website source now lives at `apps/privacy-policy` as an English-only static page, and its content was revised on 2026-03-07 to match the actual mobile data model (account/profile, messaging, appointments, optional push, and optional device-calendar sync).
 - Supabase migration parity is current in the linked hosted project (`njxgoypivrxyrukpouxb`) through `20260306130500`.
 - Supabase edge-function parity is not fully complete yet: `staff_send_job_opportunity_notification` exists in repo/config but is not active in the linked hosted function list as of 2026-03-06.
 
@@ -29,6 +30,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Authorizes or declines firm submissions (recruiter submitting their resume to a firm).
 - Messages the recruiter team via real-time chat.
 - Requests and views appointments with the recruiter.
+- Can optionally sync scheduled appointments to the device calendar without connecting an external calendar account.
 - Manages their profile (email, password, intake fields).
 
 ### Staff (recruiter)
@@ -53,6 +55,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 - Password reset flow.
 - Invalid or revoked persisted sessions are cleared on app startup (users are returned to sign-in instead of hitting a startup auth refresh error loop).
 - Role-based routing: candidate tabs vs staff tabs after sign-in.
+- The unauthenticated auth screen explains the candidate/staff split and that push notifications and calendar access are optional for core use.
 
 ### Candidate Intake and Onboarding
 - Multi-field intake form: name, email, mobile, JD year, preferred cities (14 options + Other), practice areas (0–3 of 17 options + Other, including `Media/Ent`), privacy policy consent, communication consent, and optional `Accept push notifications about new job opportunities`.
@@ -115,9 +118,9 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ### Profile Management
 - Candidates update email, password, and intake fields (including JD year and the optional job-opportunity push opt-in).
 - Profile data stored in `users_profile` and `candidate_preferences` tables.
-- Candidate Profile settings are organized into collapsible sections: `Change Profile Details`, `Calendar Sync`, and `Change Email or Password`.
+- Candidate Profile settings are organized into collapsible sections: `Change Profile Details`, `Device Calendar Sync`, and `Change Email or Password`.
 - Candidates and staff can delete their own account in-app from Profile (self-service deletion flow with confirmation).
-- Candidate and staff Profile tabs include a Calendar Sync settings card with provider status and connect actions.
+- Candidate and staff Profile tabs include a device-calendar sync settings card with provider status and connect actions.
 - Profile/intake validation failures now return field-level messages (422) from `create_or_update_candidate_profile` instead of only a generic `Invalid payload`.
 
 ### Notifications
@@ -154,7 +157,7 @@ Zenith Legal is a legal recruiting platform connecting job-seeking lawyers (cand
 ### Calendar Integration
 - `connect_calendar_provider` edge function (Apple).
 - Mobile app exposes user-facing setup in Profile:
-  - Apple Calendar: one-tap connect path for provider-enabled sync.
+  - Device calendar sync: optional enablement path that writes scheduled appointments into the local calendar app on the current device.
 - Appointment writes/reviews trigger per-user calendar sync for candidate + staff participants:
   - Mobile app: device-native `expo-calendar` event sync for connected users (scheduled upsert, declined/cancelled delete).
 - `calendar_connections` and `calendar_event_links` tables persist provider connection state and synced event links.

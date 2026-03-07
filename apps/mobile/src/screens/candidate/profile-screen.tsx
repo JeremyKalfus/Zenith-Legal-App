@@ -785,7 +785,7 @@ function CalendarSyncDropdownCard() {
         accessibilityState={{ expanded }}
         onPress={() => setExpanded((value) => !value)}
       >
-        <Text style={styles.sectionTitle}>Calendar Sync</Text>
+        <Text style={styles.sectionTitle}>Device Calendar Sync</Text>
         <Text
           style={[
             styles.dropdownHeaderAction,

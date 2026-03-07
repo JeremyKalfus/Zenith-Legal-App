@@ -214,7 +214,7 @@ export function DashboardScreen({
     <ScreenShell>
       <CandidatePageTitle title="Zenith Legal" />
       <Text style={styles.body}>
-        Track your submissions at a high level
+        Review recruiter-assigned firms, authorize submissions, and message the Zenith team.
       </Text>
 
       <Pressable
@@ -234,7 +234,10 @@ export function DashboardScreen({
       {sortedAssignments.length === 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>No firms yet</Text>
-          <Text style={styles.body}>Your recruiter will assign firms soon.</Text>
+          <Text style={styles.body}>
+            Your recruiter has not assigned any firms yet. Once firms are added for you, they will
+            appear here with clear status updates and actions when needed.
+          </Text>
         </View>
       ) : (
         sortedAssignments.map((assignment) => {
